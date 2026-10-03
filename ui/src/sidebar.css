@@ -193,4 +193,4 @@
 
 /* Carte flottante au-dessus de la page : la vue a exactement sa taille, la page reste visible tout autour. */
 .sidebar-body.floating .sidebar-card { margin: 0; height: 100%; }
-.sidebar-body.floating { background-color: var(--page-bg); }
+.sidebar-body.floating { background-color: var(--page-real, var(--page-bg)); }

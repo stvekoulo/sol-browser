@@ -91,6 +91,20 @@ public sealed class UiBridge(WebView2 view, string page = "index.html", WebView2
     /// <summary>Réglages lus pour savoir où la couleur du site doit teinter l'interface.</summary>
     public static Settings? Settings { get; set; }
 
+    // Thème de Windows, lu par l'hôte : une vue d'interface masquée ne le suit pas de façon fiable par elle-même.
+    private static readonly Windows.UI.ViewManagement.UISettings s_system = new();
+
+    private static bool IsSystemDark()
+    {
+        var c = s_system.GetColorValue(Windows.UI.ViewManagement.UIColorType.Background);
+        return c.R + c.G + c.B < 384;
+    }
+
+    /// <summary>Prévient quand Windows change de thème ou de couleurs (appelé hors du fil de l'interface).</summary>
+    public static event Action? SystemColorsChanged;
+
+    static UiBridge() => s_system.ColorValuesChanged += (_, _) => SystemColorsChanged?.Invoke();
+
     /// <summary>Envoie les couleurs de la page active à toutes les vues d'interface, avec les réglages de teinte.</summary>
     public void BroadcastTheme()
     {
@@ -98,7 +112,7 @@ public sealed class UiBridge(WebView2 view, string page = "index.html", WebView2
         var on = Settings;
         s_lastThemeMsg = JsonSerializer.Serialize(new
         {
-            @event = "theme", bg, dark, accent,
+            @event = "theme", bg, dark, accent, mode = on?.Theme ?? "page", systemDark = IsSystemDark(),
             tint = new { topbar = on?.TintTopbar ?? true, sidebar = on?.TintSidebar ?? true, menus = on?.TintMenus ?? true, background = on?.TintBackground ?? true },
         });
         view.CoreWebView2?.PostWebMessageAsJson(s_lastThemeMsg);

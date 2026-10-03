@@ -10,6 +10,11 @@ public sealed class Settings
     public bool HideScrollbars { get; set; } = true;
     /// <summary>Affiche les téléchargements en cours dans un encart en bas à droite. Désactivé : seulement le panneau de la barre.</summary>
     public bool FloatingDownloads { get; set; } = true;
+    /// <summary>
+    /// Thème de l'interface : "page" (suit la page visitée, clair ou sombre comme elle), "light", "dark",
+    /// ou "system" (suit Windows). La couleur du site s'applique dans tous les cas.
+    /// </summary>
+    public string Theme { get; set; } = "page";
     /// <summary>Où la couleur du site visité teinte l'interface. Tout coupé : l'interface reste neutre.</summary>
     public bool TintTopbar { get; set; } = true;
     public bool TintSidebar { get; set; } = true;

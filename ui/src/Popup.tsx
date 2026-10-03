@@ -9,7 +9,7 @@ type Content =
   | { popup: 'library'; bookmarks: Item[]; history: Item[] }
   | { popup: 'menu'; items: string[] }
   | { popup: 'downloads'; items: Download[] }
-  | { popup: 'settings'; zoom: number; tint: Setting[]; items: Setting[] }
+  | { popup: 'settings'; zoom: number; theme: number; tint: Setting[]; items: Setting[] }
   | { popup: 'profiles'; items: Profile[] }
   | { popup: 'profile-new' };
 
@@ -161,6 +161,23 @@ export default function Popup() {
             </button>
             <button aria-label="Agrandir" onClick={() => send({ type: 'zoom.in' })}>+</button>
           </span>
+        </div>
+        <div className="theme-row">
+          <span className="row-title">Thème</span>
+          <div className="popup-segment" role="radiogroup" aria-label="Thème">
+            {['Par défaut', 'Clair', 'Sombre', 'Système'].map((label, index) => (
+              <button
+                key={label}
+                role="radio"
+                aria-checked={content.theme === index}
+                className={`popup-seg-btn${content.theme === index ? ' active' : ''}`}
+                title={index === 0 ? "L'interface suit la page visitée" : index === 3 ? 'Suit le réglage clair ou sombre de Windows' : undefined}
+                onClick={() => send({ type: 'settings.set', id: 'theme', index })}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
         <TintSettings items={content.tint} />
         <div className="popup-list">

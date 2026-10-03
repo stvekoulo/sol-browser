@@ -78,6 +78,7 @@ public sealed partial class MainWindow : Window
         var pages = new PageHost(Pages, PrimaryColumn, DividerColumn, SecondaryColumn, blur, settings);
         var bridge = new UiBridge(Ui, "index.html", Sidebar, SidebarColumn, pages);
         _bridge = bridge;
+        UiBridge.SystemColorsChanged += () => DispatcherQueue.TryEnqueue(bridge.BroadcastTheme);
         _sidebar = new SidebarHost(Sidebar, SidebarColumn, bridge.Post);
         bridge.SidebarHost = _sidebar;
         bridge.PageColorChanged += (r, g, b) =>
@@ -85,6 +86,7 @@ public sealed partial class MainWindow : Window
         var popupBridge = new UiBridge(Popup, "index.html#popup");
         bridge.AttachPopup(popupBridge);
         var popup = new PopupHost(PopupFrame, Popup, popupBridge);
+        popup.PageLeft = () => SidebarColumn.ActualWidth;
         var dockBridge = new UiBridge(Dock, "index.html#dock");
         bridge.AttachPopup(dockBridge);
         var dock = new DockHost(DockFrame, dockBridge);

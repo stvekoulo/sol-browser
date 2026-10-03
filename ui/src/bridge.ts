@@ -57,25 +57,39 @@ export type HostEvent = {
   bg?: string;
   dark?: boolean;
   accent?: string | null;
+  mode?: 'page' | 'light' | 'dark' | 'system';
+  systemDark?: boolean; // thème de Windows, lu par l'hôte
   tint?: { topbar: boolean; sidebar: boolean; menus: boolean; background: boolean };
 };
+
+// Fonds neutres des thèmes imposés. En thème par défaut, le fond de l'interface est celui de la page.
+const NEUTRAL = { light: 'rgb(243, 243, 246)', dark: 'rgb(30, 30, 33)' };
+
+function applyTheme(ev: HostEvent) {
+  const root = document.documentElement.style;
+  const mode = ev.mode ?? 'page';
+  const dark = mode === 'page' ? !!ev.dark : mode === 'system' ? !!ev.systemDark : mode === 'dark';
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  root.setProperty('--page-bg', mode === 'page' ? ev.bg! : dark ? NEUTRAL.dark : NEUTRAL.light);
+  // Couleur réelle de la page, quel que soit le thème : c'est elle que prennent les coins des vues flottantes,
+  // pour se fondre dans la page qu'elles recouvrent.
+  root.setProperty('--page-real', ev.bg!);
+
+  // Couleur d'accent du site. Chaque vue ne la prend que si les réglages l'autorisent pour sa zone ;
+  // sans elle, ses surfaces gardent la couleur du fond.
+  const zone = location.hash === '#sidebar' ? 'sidebar' : location.hash ? 'menus' : 'topbar';
+  if (ev.accent && (ev.tint?.[zone] ?? true)) root.setProperty('--site-accent', ev.accent);
+  else root.removeProperty('--site-accent');
+  // Arrière-plan : le fond de la barre et de la colonne se teinte légèrement (jamais celui des menus).
+  if (ev.accent && zone !== 'menus' && (ev.tint?.background ?? true)) root.setProperty('--site-chrome-accent', ev.accent);
+  else root.removeProperty('--site-chrome-accent');
+}
 
 export function onMessage(callback: (data: unknown) => void) {
   const handler = (e: MessageEvent) => {
     const ev = e.data as HostEvent | null;
     if (ev && ev.event === 'theme' && ev.bg) {
-      document.documentElement.style.setProperty('--page-bg', ev.bg);
-      document.documentElement.dataset.theme = ev.dark ? 'dark' : 'light';
-      // Couleur d'accent du site. Chaque vue ne la prend que si les réglages l'autorisent pour sa zone ;
-      // sans elle, ses surfaces gardent la couleur du fond.
-      const zone = location.hash === '#sidebar' ? 'sidebar' : location.hash ? 'menus' : 'topbar';
-      const root = document.documentElement.style;
-      if (ev.accent && (ev.tint?.[zone] ?? true)) root.setProperty('--site-accent', ev.accent);
-      else root.removeProperty('--site-accent');
-      // Arrière-plan : le fond de la barre et de la colonne se teinte légèrement (pas celui des menus, qui
-      // doit rester celui de la page pour que leurs coins s'y fondent).
-      if (ev.accent && zone !== 'menus' && (ev.tint?.background ?? true)) root.setProperty('--site-chrome-accent', ev.accent);
-      else root.removeProperty('--site-chrome-accent');
+      applyTheme(ev);
       return;
     }
     callback(e.data);

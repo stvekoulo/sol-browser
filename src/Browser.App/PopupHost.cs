@@ -32,6 +32,17 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge)
         bridge.Post(contentJson);
     }
 
+    /// <summary>Bord gauche de la zone des pages : un menu centré l'est sur cette zone, pas sur la carte latérale.</summary>
+    public Func<double>? PageLeft { get; set; }
+
+    /// <summary>Fenêtre de saisie, au milieu de la zone des pages.</summary>
+    public void ShowCentered(double width, string contentJson)
+    {
+        var window = (FrameworkElement)frame.Parent;
+        var left = PageLeft?.Invoke() ?? 0;
+        Show(left + Math.Max(0, (window.ActualWidth - left - width) / 2), Math.Max(90, window.ActualHeight / 2 - 150), width, contentJson, focus: true);
+    }
+
     public void Post(string json) => bridge.Post(json);
 
     public void SetHeight(double height)

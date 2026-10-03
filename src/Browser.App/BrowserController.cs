@@ -86,7 +86,10 @@ public sealed class BrowserController
                 return;
             case "menu.pick": PickMenuItem(c.Index!.Value); return;
             case "settings.open": OpenSettings(c.X!.Value, c.Y!.Value); return;
-            case "settings.set": SetSetting(id, c.Index != 0); return;
+            case "settings.set":
+                if (id == "theme") SetTheme(c.Index!.Value);
+                else SetSetting(id, c.Index != 0);
+                return;
             case "dock.size": if (_dockShown) _dock.SetSize(c.Width!.Value, c.Height!.Value); return;
             case "tab.menu": OpenTabMenu(id, c.X!.Value, c.Y!.Value); return;
             case "profile.menu": OpenProfileMenu(c.X!.Value, c.Y!.Value); return;
@@ -220,6 +223,7 @@ public sealed class BrowserController
     {
         popup = "settings",
         zoom = _tabs.ActiveId is { } activeId ? (int)Math.Round(_pages.ZoomOf(activeId) * 100) : 100,
+        theme = Math.Max(0, Array.IndexOf(Themes, _settings.Theme)),
         // Sous-menu : où la couleur du site teinte l'interface.
         tint = new[]
         {
@@ -245,6 +249,18 @@ public sealed class BrowserController
         HidePopup();
         _settingsOpen = true;
         _popup.Show(x - width, y, width, SettingsJson(), focus: true);
+    }
+
+    private static readonly string[] Themes = ["page", "light", "dark", "system"];
+
+    private void SetTheme(int index)
+    {
+        if (index < 0 || index >= Themes.Length) return;
+        _settings.Theme = Themes[index];
+        JsonFileStore.Save(AppPaths.Settings, _settings);
+        _pages.ApplySettings(); // les sites reçoivent aussi la préférence clair ou sombre
+        _bridge.BroadcastTheme();
+        if (_settingsOpen) _popup.Post(SettingsJson());
     }
 
     private void SetSetting(string key, bool on)
@@ -518,10 +534,7 @@ public sealed class BrowserController
     private void AskProfileName()
     {
         HidePopup();
-        const double width = 340;
-        var window = (FrameworkElement)_window.Content;
-        _popup.Show((window.ActualWidth - width) / 2, Math.Max(90, window.ActualHeight / 2 - 140), width,
-            """{"popup":"profile-new"}""", focus: true);
+        _popup.ShowCentered(340, """{"popup":"profile-new"}""");
     }
 
     private void DeleteProfile(string id)

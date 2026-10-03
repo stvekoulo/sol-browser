@@ -77,6 +77,13 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
     private async Task ApplySettingsAsync(string id, CoreWebView2 core)
     {
         core.Settings.IsPasswordAutosaveEnabled = settings.SavePasswords;
+        // Thème clair ou sombre imposé : les sites qui proposent les deux versions suivent le même choix.
+        core.Profile.PreferredColorScheme = settings.Theme switch
+        {
+            "light" => CoreWebView2PreferredColorScheme.Light,
+            "dark" => CoreWebView2PreferredColorScheme.Dark,
+            _ => CoreWebView2PreferredColorScheme.Auto,
+        };
 
         // Barres de défilement : réglage du moteur, pas une feuille de style injectée, donc valable sur toutes les pages
         // quelle que soit leur politique de sécurité. Affichées, elles sont fines et n'apparaissent qu'au défilement.
