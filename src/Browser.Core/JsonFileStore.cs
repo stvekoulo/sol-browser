@@ -6,6 +6,8 @@ public sealed class Settings
 {
     public string SearchUrlTemplate { get; set; } = "https://www.google.com/search?q={0}";
     public bool BlurEnabled { get; set; } = true;
+    /// <summary>Masque les barres de défilement des pages ; le défilement à la molette, au clavier et au toucher reste actif.</summary>
+    public bool HideScrollbars { get; set; } = true;
     /// <summary>Propose d'enregistrer les mots de passe et les remplit ; le stockage chiffré est celui du moteur.</summary>
     public bool SavePasswords { get; set; } = true;
     /// <summary>Envoie la saisie de la barre d'adresse au moteur de recherche pour obtenir des complétions.</summary>

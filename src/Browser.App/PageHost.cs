@@ -6,7 +6,7 @@ using Microsoft.Web.WebView2.Core;
 namespace Browser.App;
 
 /// <summary>Une WebView2 par onglet. Aucun canal vers l'hôte n'est ouvert sur ces vues.</summary>
-public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDefinition divider, ColumnDefinition secondary, string? injectedScript, bool savePasswords)
+public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDefinition divider, ColumnDefinition secondary, string? injectedScript, Settings settings)
 {
     private readonly Dictionary<string, WebView2> _views = new();
     private readonly HashSet<string> _loading = new();
@@ -34,6 +34,8 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
         var core = view.CoreWebView2;
         Harden(core);
         if (injectedScript is not null) await core.AddScriptToExecuteOnDocumentCreatedAsync(injectedScript);
+        // Réglage du moteur, pas une feuille de style injectée : il vaut pour toutes les pages de la vue, quelle que soit leur politique de sécurité.
+        if (settings.HideScrollbars) await core.CallDevToolsProtocolMethodAsync("Emulation.setScrollbarsHidden", """{"hidden":true}""");
         if (!_views.ContainsKey(tab.Id)) return;
 
         core.SourceChanged += (_, _) => PageChanged?.Invoke(tab.Id, core.Source, null);
@@ -82,7 +84,7 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
         s.AreHostObjectsAllowed = false;
         s.IsWebMessageEnabled = false;
         // Mots de passe : gestionnaire du moteur (proposition d'enregistrement, stockage chiffré, remplissage).
-        s.IsPasswordAutosaveEnabled = savePasswords;
+        s.IsPasswordAutosaveEnabled = settings.SavePasswords;
         s.IsGeneralAutofillEnabled = false;
         s.IsReputationCheckingRequired = true; // SmartScreen
         // ponytail: tout est refusé tant qu'il n'y a pas d'invite ; à remplacer par une demande à l'utilisateur
