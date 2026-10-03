@@ -9,7 +9,7 @@ type Content =
   | { popup: 'library'; bookmarks: Item[]; history: Item[] }
   | { popup: 'menu'; items: string[] }
   | { popup: 'downloads'; items: Download[] }
-  | { popup: 'settings'; zoom: number; items: Setting[] }
+  | { popup: 'settings'; zoom: number; tint: Setting[]; items: Setting[] }
   | { popup: 'profiles'; items: Profile[] }
   | { popup: 'profile-new' };
 
@@ -162,6 +162,7 @@ export default function Popup() {
             <button aria-label="Agrandir" onClick={() => send({ type: 'zoom.in' })}>+</button>
           </span>
         </div>
+        <TintSettings items={content.tint} />
         <div className="popup-list">
           {content.items.map(s => (
             <button
@@ -240,6 +241,38 @@ export default function Popup() {
         )}
       </div>
     </div>
+  );
+}
+
+// Sous-menu des réglages : où la couleur du site visité teinte l'interface.
+function TintSettings({ items }: { items: Setting[] }) {
+  const [open, setOpen] = useState(false);
+  const active = items.filter(s => s.on).length;
+  return (
+    <>
+      <button className="setting-row" aria-expanded={open} onClick={() => setOpen(o => !o)}>
+        <span className="setting-text">
+          <span className="row-title">Couleurs du site</span>
+          <span className="row-sub">{active === 0 ? "Désactivées : l'interface reste neutre" : `Actives sur ${active} zone${active > 1 ? 's' : ''} sur ${items.length}`}</span>
+        </span>
+        <span className={`chevron${open ? ' open' : ''}`} aria-hidden>
+          <Icon d="M6 4l4 4-4 4" size={13} />
+        </span>
+      </button>
+      {open && (
+        <div className="setting-sub">
+          {items.map(s => (
+            <button key={s.key} className="setting-row" role="switch" aria-checked={s.on} onClick={() => send({ type: 'settings.set', id: s.key, index: s.on ? 0 : 1 })}>
+              <span className="setting-text">
+                <span className="row-title">{s.label}</span>
+                {s.hint && <span className="row-sub">{s.hint}</span>}
+              </span>
+              <span className={`switch${s.on ? ' on' : ''}`} aria-hidden />
+            </button>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 

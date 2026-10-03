@@ -10,6 +10,11 @@ public sealed class Settings
     public bool HideScrollbars { get; set; } = true;
     /// <summary>Affiche les téléchargements en cours dans un encart en bas à droite. Désactivé : seulement le panneau de la barre.</summary>
     public bool FloatingDownloads { get; set; } = true;
+    /// <summary>Où la couleur du site visité teinte l'interface. Tout coupé : l'interface reste neutre.</summary>
+    public bool TintTopbar { get; set; } = true;
+    public bool TintSidebar { get; set; } = true;
+    public bool TintMenus { get; set; } = true;
+    public bool TintBackground { get; set; } = true;
     /// <summary>Propose d'enregistrer les mots de passe et les remplit ; le stockage chiffré est celui du moteur.</summary>
     public bool SavePasswords { get; set; } = true;
     /// <summary>Envoie la saisie de la barre d'adresse au moteur de recherche pour obtenir des complétions.</summary>

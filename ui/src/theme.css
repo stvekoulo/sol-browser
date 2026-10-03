@@ -15,8 +15,16 @@
 
   /* Teinte des surfaces : le fond de la page, coloré par l'accent du site (bleu d'un réseau social, rouge
      d'un site vidéo…). Sans accent, c'est simplement le fond de la page. */
+  /* La couleur brute du site (--site-accent, posée par bridge.ts) est adoucie avant usage : une teinte pastel,
+     claire, jamais vive. Sans couleur de site, ces variables n'existent pas et chaque surface garde son repli. */
+  --page-accent: color-mix(in oklab, var(--site-accent) 52%, #ffffff);
+  --chrome-accent: color-mix(in oklab, var(--site-chrome-accent) 52%, #ffffff);
+
   --tint: color-mix(in srgb, var(--page-bg) 78%, var(--page-accent, var(--page-bg)) 22%);
-  --tint-soft: color-mix(in srgb, var(--page-bg) 88%, var(--page-accent, var(--page-bg)) 12%);
+  --tint-pill: color-mix(in srgb, var(--page-bg) 62%, var(--page-accent, var(--page-bg)) 38%);
+
+  /* Arrière-plan de l'interface (barre du haut, colonne de la carte) : le fond de la page, légèrement teinté. */
+  --chrome-bg: color-mix(in srgb, var(--page-bg) 90%, var(--chrome-accent, var(--page-bg)) 10%);
 
   /* Surface de la carte latérale : fusionne la teinte de la page avec un voile givré */
   --bg-sidebar-card: linear-gradient(
@@ -36,13 +44,13 @@
   /* Capsules translucides de la barre supérieure */
   --bg-glass-pill: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--tint-soft) 28%, rgba(255, 255, 255, 0.88)) 0%,
-    color-mix(in srgb, var(--tint-soft) 48%, rgba(255, 255, 255, 0.68)) 100%
+    color-mix(in srgb, var(--tint-pill) 62%, rgba(255, 255, 255, 0.88)) 0%,
+    color-mix(in srgb, var(--tint-pill) 78%, rgba(255, 255, 255, 0.68)) 100%
   );
   --bg-glass-pill-hover: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--tint-soft) 16%, rgba(255, 255, 255, 0.96)) 0%,
-    color-mix(in srgb, var(--tint-soft) 32%, rgba(255, 255, 255, 0.82)) 100%
+    color-mix(in srgb, var(--tint-pill) 46%, rgba(255, 255, 255, 0.96)) 0%,
+    color-mix(in srgb, var(--tint-pill) 62%, rgba(255, 255, 255, 0.82)) 100%
   );
 
   /* Pilules flottantes surélevées (URL sidebar, favoris G/X/Youtube, onglet actif) */
@@ -54,7 +62,8 @@
   --text-dim: rgba(24, 24, 27, 0.58);
   --border: rgba(0, 0, 0, 0.07);
   --border-strong: rgba(0, 0, 0, 0.12);
-  --accent: var(--page-accent, #0a84ff);
+  /* Interrupteurs et barres de progression : la couleur du site, un peu éclaircie mais encore lisible. */
+  --accent: color-mix(in oklab, var(--site-accent, #0a84ff) 80%, #ffffff);
 
   --shadow-glass-pill:
     inset 0 1px 0 rgba(255, 255, 255, 0.92),
@@ -94,13 +103,13 @@
 
   --bg-glass-pill: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.14) 0%,
-    rgba(255, 255, 255, 0.08) 100%
+    color-mix(in srgb, var(--page-accent, #ffffff) 26%, rgba(255, 255, 255, 0.05)) 0%,
+    color-mix(in srgb, var(--page-accent, #ffffff) 16%, rgba(255, 255, 255, 0.03)) 100%
   );
   --bg-glass-pill-hover: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.2) 0%,
-    rgba(255, 255, 255, 0.12) 100%
+    color-mix(in srgb, var(--page-accent, #ffffff) 34%, rgba(255, 255, 255, 0.08)) 0%,
+    color-mix(in srgb, var(--page-accent, #ffffff) 22%, rgba(255, 255, 255, 0.05)) 100%
   );
 
   --bg-pill-solid: rgba(255, 255, 255, 0.13);
@@ -111,7 +120,11 @@
   --text-dim: rgba(244, 244, 246, 0.6);
   --border: rgba(255, 255, 255, 0.09);
   --border-strong: rgba(255, 255, 255, 0.16);
-  --accent: var(--page-accent, #409cff);
+  --accent: color-mix(in oklab, var(--site-accent, #409cff) 82%, #ffffff);
+
+  /* En sombre, la couleur du site est adoucie vers un gris moyen plutôt que vers le blanc. */
+  --page-accent: color-mix(in oklab, var(--site-accent) 55%, #6b6b76);
+  --chrome-accent: color-mix(in oklab, var(--site-chrome-accent) 55%, #6b6b76);
 
   --shadow-glass-pill:
     inset 0 1px 0 rgba(255, 255, 255, 0.18),

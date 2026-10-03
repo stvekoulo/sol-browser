@@ -1,6 +1,6 @@
 /* Carte latérale flottante (#sidebar) : aucun cadre externe, tout flotte sur --page-bg. */
 .sidebar-body {
-  background-color: var(--page-bg);
+  background-color: var(--chrome-bg);
   transition: background-color 220ms var(--ease-out);
 }
 
@@ -193,3 +193,4 @@
 
 /* Carte flottante au-dessus de la page : la vue a exactement sa taille, la page reste visible tout autour. */
 .sidebar-body.floating .sidebar-card { margin: 0; height: 100%; }
+.sidebar-body.floating { background-color: var(--page-bg); }

@@ -74,6 +74,7 @@ public sealed partial class MainWindow : Window
         var settings = JsonFileStore.Load<Settings>(AppPaths.Settings);
         var blur = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "blur.js"));
 
+        UiBridge.Settings = settings;
         var pages = new PageHost(Pages, PrimaryColumn, DividerColumn, SecondaryColumn, blur, settings);
         var bridge = new UiBridge(Ui, "index.html", Sidebar, SidebarColumn, pages);
         _bridge = bridge;

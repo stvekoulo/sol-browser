@@ -3,7 +3,9 @@
    Ses quatre coins, hors de la carte arrondie, prennent donc la couleur de la page pour se fondre dedans. */
 .popup-body {
   background: var(--page-bg);
-  overflow: hidden;
+  /* Un panneau plus haut que la place disponible défile, sans barre visible. */
+  overflow: hidden auto;
+  scrollbar-width: none;
 }
 
 .popup {
@@ -365,3 +367,8 @@
 .name-form-actions { display: flex; justify-content: flex-end; gap: 6px; }
 .name-form-actions .pill-action { height: 30px; padding: 0 14px; }
 .pill-action:disabled { opacity: 0.45; }
+
+/* Sous-menu des réglages */
+.chevron { flex: none; color: var(--text-dim); transition: transform var(--fast) var(--ease-out); }
+.chevron.open { transform: rotate(90deg); }
+.setting-sub { margin: 0 0 4px 12px; padding-left: 8px; border-left: 1px solid var(--border); display: flex; flex-direction: column; gap: 3px; }

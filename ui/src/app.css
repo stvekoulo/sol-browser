@@ -5,7 +5,7 @@ body {
   font: var(--font-size) / 1.25 var(--font);
   letter-spacing: -0.008em;
   color: var(--text);
-  background-color: var(--page-bg);
+  background-color: var(--chrome-bg);
   transition: background-color 220ms var(--ease-out), color 180ms var(--ease-out);
   overflow: hidden;
   user-select: none;

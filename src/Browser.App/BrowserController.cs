@@ -220,6 +220,14 @@ public sealed class BrowserController
     {
         popup = "settings",
         zoom = _tabs.ActiveId is { } activeId ? (int)Math.Round(_pages.ZoomOf(activeId) * 100) : 100,
+        // Sous-menu : où la couleur du site teinte l'interface.
+        tint = new[]
+        {
+            new { key = "tint.topbar", label = "Barre du haut et boutons", hint = "", on = _settings.TintTopbar },
+            new { key = "tint.sidebar", label = "Carte latérale", hint = "", on = _settings.TintSidebar },
+            new { key = "tint.menus", label = "Menus et panneaux", hint = "", on = _settings.TintMenus },
+            new { key = "tint.background", label = "Arrière-plan de l'interface", hint = "Le fond de la barre et de la colonne prend une teinte légère", on = _settings.TintBackground },
+        },
         items = new[]
         {
             new { key = "scrollbars", label = "Barre de défilement fine", hint = "Apparaît seulement pendant le défilement", on = !_settings.HideScrollbars },
@@ -248,10 +256,15 @@ public sealed class BrowserController
             case "floatingDownloads": _settings.FloatingDownloads = on; break;
             case "onlineSuggestions": _settings.OnlineSuggestions = on; break;
             case "passwords": _settings.SavePasswords = on; break;
+            case "tint.topbar": _settings.TintTopbar = on; break;
+            case "tint.sidebar": _settings.TintSidebar = on; break;
+            case "tint.menus": _settings.TintMenus = on; break;
+            case "tint.background": _settings.TintBackground = on; break;
             default: return;
         }
         JsonFileStore.Save(AppPaths.Settings, _settings);
         _pages.ApplySettings();
+        _bridge.BroadcastTheme();
         UpdateDock();
         Refresh();
         if (_settingsOpen) _popup.Post(SettingsJson());

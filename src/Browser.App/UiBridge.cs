@@ -86,6 +86,25 @@ public sealed class UiBridge(WebView2 view, string page = "index.html", WebView2
         """;
 
     private static string? s_lastThemeMsg;
+    private static (string Bg, bool Dark, string? Accent)? s_lastProbe;
+
+    /// <summary>Réglages lus pour savoir où la couleur du site doit teinter l'interface.</summary>
+    public static Settings? Settings { get; set; }
+
+    /// <summary>Envoie les couleurs de la page active à toutes les vues d'interface, avec les réglages de teinte.</summary>
+    public void BroadcastTheme()
+    {
+        if (s_lastProbe is not var (bg, dark, accent)) return;
+        var on = Settings;
+        s_lastThemeMsg = JsonSerializer.Serialize(new
+        {
+            @event = "theme", bg, dark, accent,
+            tint = new { topbar = on?.TintTopbar ?? true, sidebar = on?.TintSidebar ?? true, menus = on?.TintMenus ?? true, background = on?.TintBackground ?? true },
+        });
+        view.CoreWebView2?.PostWebMessageAsJson(s_lastThemeMsg);
+        sidebar?.CoreWebView2?.PostWebMessageAsJson(s_lastThemeMsg);
+        foreach (var floating in _floating) floating.Post(s_lastThemeMsg);
+    }
     private string? _activeId;
     private readonly List<UiBridge> _floating = new(); // vues flottantes qui suivent la couleur de la page : menus, encart
 
@@ -194,10 +213,8 @@ public sealed class UiBridge(WebView2 view, string page = "index.html", WebView2
             if (System.Text.RegularExpressions.Regex.Match(bg, @"rgb\((\d+), (\d+), (\d+)\)") is { Success: true } m)
                 PageColorChanged?.Invoke(byte.Parse(m.Groups[1].Value), byte.Parse(m.Groups[2].Value), byte.Parse(m.Groups[3].Value));
             var accent = doc.RootElement.TryGetProperty("accent", out var accentValue) && accentValue.ValueKind == JsonValueKind.String ? accentValue.GetString() : null;
-            s_lastThemeMsg = JsonSerializer.Serialize(new { @event = "theme", bg, dark, accent });
-            view.CoreWebView2?.PostWebMessageAsJson(s_lastThemeMsg);
-            sidebar?.CoreWebView2?.PostWebMessageAsJson(s_lastThemeMsg);
-            foreach (var floating in _floating) floating.Post(s_lastThemeMsg);
+            s_lastProbe = (bg, dark, accent);
+            BroadcastTheme();
         }
         catch (Exception) { }
     }

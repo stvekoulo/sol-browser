@@ -37,10 +37,12 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge)
     public void SetHeight(double height)
     {
         if (!_pending && frame.Visibility == Visibility.Collapsed) return;
-        frame.Height = Math.Clamp(height, 1, 520);
+
 
         // La vue reste entière dans la fenêtre : elle se décale si elle dépasserait à droite ou en bas.
         var window = (FrameworkElement)frame.Parent;
+        // Jamais plus haut que la fenêtre : au-delà, le contenu du panneau défile.
+        frame.Height = Math.Clamp(height, 1, Math.Max(160, window.ActualHeight - 2 * Edge - 48));
         var x = Math.Max(Edge, Math.Min(_x, window.ActualWidth - frame.Width - Edge));
         var y = Math.Max(Edge, Math.Min(_y, window.ActualHeight - frame.Height - Edge));
         frame.Margin = new Thickness(x, y, 0, 0);
