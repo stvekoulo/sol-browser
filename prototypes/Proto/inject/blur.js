@@ -1,7 +1,7 @@
 (() => {
   if (window.top !== window || window.__navBlur) return;
   window.__navBlur = true;
-  const HEIGHT = 72, STEPS = window.__navBlurSteps || [1, 2, 4, 8];
+  const HEIGHT = 44, STEPS = window.__navBlurSteps || [1, 2, 3, 5];
   const build = () => {
     const host = document.createElement('div');
     const root = host.attachShadow({ mode: 'closed' });
