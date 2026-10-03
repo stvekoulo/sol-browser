@@ -55,7 +55,7 @@ public sealed partial class MainWindow : Window
             Root.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, r, g, b));
         var popupBridge = new UiBridge(Popup, "index.html#popup");
         bridge.AttachPopup(popupBridge);
-        var popup = new PopupHost(PopupFrame, Popup, popupBridge);
+        var popup = new PopupHost(PopupFrame, Popup, popupBridge, Pages);
         var dockBridge = new UiBridge(Dock, "index.html#dock");
         bridge.AttachPopup(dockBridge);
         var dock = new DockHost(DockFrame, Dock, dockBridge);
@@ -86,6 +86,11 @@ public sealed partial class MainWindow : Window
             DebugLog.Write($"pression x={p.Position.X:0} y={p.Position.Y:0} source={e.OriginalSource?.GetType().Name}:{(e.OriginalSource as FrameworkElement)?.Name} gauche={p.Properties.IsLeftButtonPressed} x1={p.Properties.IsXButton1Pressed} x2={p.Properties.IsXButton2Pressed}");
             if (p.Properties.IsXButton1Pressed) _controller?.Shortcut("nav.back");
             else if (p.Properties.IsXButton2Pressed) _controller?.Shortcut("nav.forward");
+
+            // Un clic hors du menu le referme. Les clics dans la barre du haut passent par leurs propres commandes
+            // (recliquer l'icône d'un panneau le ferme, cliquer une autre icône ouvre l'autre panneau).
+            if (PopupFrame.Visibility == Visibility.Visible && e.OriginalSource is not Microsoft.UI.Xaml.Controls.WebView2 { Name: "Popup" or "Ui" })
+                _controller?.Execute(new Command("popup.close"));
         }), true);
 
         // Diagnostic temporaire : quelle vue reçoit le survol, notée à chaque changement.

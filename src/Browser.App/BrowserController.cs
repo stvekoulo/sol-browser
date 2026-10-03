@@ -73,7 +73,10 @@ public sealed class BrowserController
                 }
                 HidePopup();
                 return;
-            case "popup.size": _popup.SetHeight(c.Height!.Value); return;
+            case "popup.size":
+                _popup.SetHeight(c.Height!.Value);
+                if (_panelNext is not null) (_panel, _panelNext) = (_panelNext, null); // le panneau demandé est maintenant affiché
+                return;
             case "popup.close":
                 if (!_suggesting) _libraryClosedAt = DateTime.UtcNow;
                 HidePopup();
@@ -197,7 +200,7 @@ public sealed class BrowserController
 
     private void OpenDownloads(double x, double y)
     {
-        if (DateTime.UtcNow - _libraryClosedAt < TimeSpan.FromMilliseconds(350)) return; // reclic sur l'icône : reste fermé
+        if (ClosesPanel("downloads")) return;
         const double width = 340;
         HidePopup();
         _downloadsOpen = true;
@@ -222,7 +225,7 @@ public sealed class BrowserController
 
     private void OpenSettings(double x, double y)
     {
-        if (DateTime.UtcNow - _libraryClosedAt < TimeSpan.FromMilliseconds(350)) return; // reclic sur l'icône : reste fermé
+        if (ClosesPanel("settings")) return;
         const double width = 340;
         HidePopup();
         _settingsOpen = true;
@@ -247,8 +250,24 @@ public sealed class BrowserController
         if (_settingsOpen) _popup.Post(SettingsJson());
     }
 
+    // Panneau ouvert par un bouton de la barre : recliquer ce bouton le referme.
+    private string? _panel, _panelNext, _panelLast;
+
+    private bool ClosesPanel(string name)
+    {
+        // Ouvert : on le ferme. Ou bien ce même clic vient de le fermer en lui faisant perdre le curseur : on ne le rouvre pas.
+        var open = _panel == name && _popup.IsOpen;
+        var justClosed = _panelLast == name && DateTime.UtcNow - _libraryClosedAt < TimeSpan.FromMilliseconds(350);
+        if (open) HidePopup();
+        if (open || justClosed) return true;
+        _panelNext = name;
+        return false;
+    }
+
     private void HidePopup()
     {
+        if (_panel is not null) _panelLast = _panel;
+        _panel = null;
         _suggesting = false;
         _downloadsOpen = false;
         _settingsOpen = false;
@@ -422,7 +441,7 @@ public sealed class BrowserController
     // Bouton de capture d'écran de la barre d'outils.
     private void OpenCaptureMenu(double x, double y)
     {
-        if (DateTime.UtcNow - _libraryClosedAt < TimeSpan.FromMilliseconds(350)) return; // reclic sur l'icône : reste fermé
+        if (ClosesPanel("capture")) return;
         ShowMenu(x - 260, y,
         [
             ("Capturer une zone", () => Capture("region")),
@@ -480,7 +499,7 @@ public sealed class BrowserController
     {
         // Recliquer l'icône referme le panneau : le clic lui fait d'abord perdre le curseur, donc il vient de se fermer.
         // ponytail: seuil de temps ; à remplacer par un état explicite si d'autres menus s'ajoutent.
-        if (DateTime.UtcNow - _libraryClosedAt < TimeSpan.FromMilliseconds(350)) return;
+        if (ClosesPanel("library")) return;
         const double width = 340;
         _suggesting = false;
         _popup.Show(x - width, y, width, JsonSerializer.Serialize(new

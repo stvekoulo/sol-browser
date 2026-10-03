@@ -8,7 +8,8 @@ namespace Browser.App;
 /// <summary>Découpe arrondie d'une vue flottante (menu, encart) : le cadre XAML et la vue web qu'il contient.</summary>
 public static class RoundedClip
 {
-    public static void Apply(Grid frame, WebView2 view, float radius)
+    /// <param name="view">Vue web à découper aussi, ou null pour ne découper que le cadre.</param>
+    public static void Apply(Grid frame, WebView2? view, float radius)
     {
         if (frame.Visibility != Visibility.Visible) return;
         var w = (float)(frame.ActualWidth > 1 ? frame.ActualWidth : frame.Width);
@@ -21,6 +22,7 @@ public static class RoundedClip
         geometry.CornerRadius = new Vector2(radius, radius);
         var clip = visual.Compositor.CreateGeometricClip(geometry);
         visual.Clip = clip;
+        if (view is null) return;
         ElementCompositionPreview.GetElementVisual(view).Clip = clip;
         if (ElementCompositionPreview.GetElementChildVisual(view) is { } child) child.Clip = clip;
     }
