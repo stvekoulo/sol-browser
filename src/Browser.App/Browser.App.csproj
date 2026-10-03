@@ -21,6 +21,7 @@
   </ItemGroup>
   <ItemGroup>
     <!-- Interface React compilée (npm run build dans ui/) -->
+    <Content Include="inject\**" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\ui\dist\**" Link="ui\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

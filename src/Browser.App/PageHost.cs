@@ -1,17 +1,19 @@
 using Browser.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.Web.WebView2.Core;
 
 namespace Browser.App;
 
 /// <summary>Une WebView2 par onglet. Aucun canal vers l'hôte n'est ouvert sur ces vues.</summary>
-public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDefinition secondary)
+public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDefinition secondary, string? injectedScript)
 {
     private readonly Dictionary<string, WebView2> _views = new();
     private readonly HashSet<string> _loading = new();
 
     public event Action<string, string?, string?>? PageChanged; // id, url, titre
     public event Action? RuntimeChanged;                         // chargement, historique
+    public event Action<string>? Loaded;                         // id, page chargée avec succès
     public event Action<string>? NewTabRequested;
 
     public bool IsLoading(string id) => _loading.Contains(id);
@@ -27,13 +29,36 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
         if (!_views.ContainsKey(tab.Id)) return; // fermé pendant l'initialisation
 
         var core = view.CoreWebView2;
+        Harden(core);
+        if (injectedScript is not null) await core.AddScriptToExecuteOnDocumentCreatedAsync(injectedScript);
+        if (!_views.ContainsKey(tab.Id)) return;
+
         core.SourceChanged += (_, _) => PageChanged?.Invoke(tab.Id, core.Source, null);
         core.DocumentTitleChanged += (_, _) => PageChanged?.Invoke(tab.Id, null, core.DocumentTitle);
         core.HistoryChanged += (_, _) => RuntimeChanged?.Invoke();
         core.NavigationStarting += (_, _) => { _loading.Add(tab.Id); RuntimeChanged?.Invoke(); };
-        core.NavigationCompleted += (_, _) => { _loading.Remove(tab.Id); RuntimeChanged?.Invoke(); };
+        core.NavigationCompleted += (_, e) =>
+        {
+            _loading.Remove(tab.Id);
+            RuntimeChanged?.Invoke();
+            if (e.IsSuccess) Loaded?.Invoke(tab.Id);
+        };
         core.NewWindowRequested += (_, e) => { e.Handled = true; NewTabRequested?.Invoke(e.Uri); };
         Navigate(tab.Id, tab.Url);
+    }
+
+    // Une page web est du contenu non fiable : aucun pont vers l'hôte, aucune permission accordée d'office.
+    private static void Harden(CoreWebView2 core)
+    {
+        var s = core.Settings;
+        s.AreHostObjectsAllowed = false;
+        s.IsWebMessageEnabled = false;
+        s.IsPasswordAutosaveEnabled = false;
+        s.IsGeneralAutofillEnabled = false;
+        s.IsReputationCheckingRequired = true; // SmartScreen
+        // ponytail: tout est refusé tant qu'il n'y a pas d'invite ; à remplacer par une demande à l'utilisateur
+        // (caméra, micro, position, notifications, presse-papiers) quand l'interface des permissions existera.
+        core.PermissionRequested += (_, e) => e.State = CoreWebView2PermissionState.Deny;
     }
 
     public void Remove(string id)
@@ -67,6 +92,6 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
         }
     }
 
-    private Microsoft.Web.WebView2.Core.CoreWebView2? Core(string id) =>
+    private CoreWebView2? Core(string id) =>
         _views.TryGetValue(id, out var view) ? view.CoreWebView2 : null;
 }

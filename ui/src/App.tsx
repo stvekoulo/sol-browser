@@ -5,18 +5,22 @@ export default function App() {
   const [state, setState] = useState<State | null>(null);
 
   useEffect(() => {
-    const off = onState(setState);
+    const off = onState(setState, event => {
+      if (event === 'focus-address') document.querySelector<HTMLInputElement>('.address input')?.focus();
+    });
     send({ type: 'ui.ready' });
     return off;
   }, []);
 
   if (!state) return null;
-  const active = state.tabs.find(t => t.id === state.activeId);
+  const index = state.tabs.findIndex(t => t.id === state.activeId);
+  // La vue scindée place l'onglet voisin à droite de l'onglet actif.
+  const neighbour = state.tabs[index + 1] ?? state.tabs[index - 1];
 
   return (
     <>
       <TitleBar state={state} />
-      <Toolbar tab={active} split={state.split.secondaryId !== null} />
+      <Toolbar tab={state.tabs[index]} split={state.split.secondaryId !== null} neighbourId={neighbour?.id} />
     </>
   );
 }
@@ -85,7 +89,7 @@ function TabItem({ tab, active, secondary }: { tab: Tab; active: boolean; second
   );
 }
 
-function Toolbar({ tab, split }: { tab: Tab | undefined; split: boolean }) {
+function Toolbar({ tab, split, neighbourId }: { tab: Tab | undefined; split: boolean; neighbourId: string | undefined }) {
   const url = !tab || tab.url === 'about:blank' ? '' : tab.url;
   const [text, setText] = useState(url);
   const [editing, setEditing] = useState(false);
@@ -134,11 +138,16 @@ function Toolbar({ tab, split }: { tab: Tab | undefined; split: boolean }) {
           onBlur={() => setEditing(false)}
         />
       </form>
-      {split && (
-        <button className="icon" aria-label="Fermer la vue scindée" onClick={() => send({ type: 'split.close' })}>
-          <Icon d="M2 3h12v10H2zM8 3v10" />
-        </button>
-      )}
+      <button
+        className={`icon${split ? ' on' : ''}`}
+        aria-label={split ? 'Fermer la vue scindée' : 'Afficher deux pages côte à côte'}
+        aria-pressed={split}
+        title={split ? 'Fermer la vue scindée' : 'Afficher deux pages côte à côte'}
+        disabled={!split && !neighbourId}
+        onClick={() => send(split ? { type: 'split.close' } : { type: 'split.open', id: neighbourId })}
+      >
+        <Icon d="M2 3h12v10H2zM8 3v10" />
+      </button>
     </nav>
   );
 }

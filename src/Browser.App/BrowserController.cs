@@ -12,17 +12,23 @@ public sealed class BrowserController
     private readonly Window _window;
     private readonly PageHost _pages;
     private readonly UiBridge _bridge;
+    private readonly Settings _settings;
+    private readonly BrowserDb _db;
     private readonly TabManager _tabs = new();
     private readonly SplitLayout _split = new();
-    private readonly Settings _settings = JsonFileStore.Load<Settings>(AppPaths.Settings);
 
-    public BrowserController(Window window, PageHost pages, UiBridge bridge)
+    public BrowserController(Window window, PageHost pages, UiBridge bridge, Settings settings)
     {
-        (_window, _pages, _bridge) = (window, pages, bridge);
+        (_window, _pages, _bridge, _settings) = (window, pages, bridge, settings);
+        Directory.CreateDirectory(AppPaths.DataDir);
+        _db = new BrowserDb(AppPaths.Database);
+
         _pages.PageChanged += (id, url, title) => { _tabs.Update(id, url, title); Refresh(); };
         _pages.RuntimeChanged += Refresh;
         _pages.NewTabRequested += url => { Open(url); Refresh(); };
+        _pages.Loaded += RecordVisit;
         _window.AppWindow.Changed += (_, e) => { if (e.DidPresenterChange || e.DidSizeChange) Refresh(); };
+        _window.Closed += (_, _) => { SaveSession(); _db.Dispose(); };
     }
 
     public void Execute(Command c)
@@ -30,7 +36,7 @@ public sealed class BrowserController
         var id = c.Id ?? "";
         switch (c.Type)
         {
-            case "ui.ready": if (_tabs.Tabs.Count == 0) Open(_settings.HomeUrl); break;
+            case "ui.ready": if (_tabs.Tabs.Count == 0) RestoreSession(); break;
             case "tab.open": Open(c.Url is null ? _settings.HomeUrl : Resolve(c.Url)); break;
             case "tab.close": Close(id); break;
             case "tab.activate":
@@ -56,10 +62,32 @@ public sealed class BrowserController
         Refresh();
     }
 
+    /// <summary>Raccourci clavier : agit sur l'onglet actif.</summary>
+    public void Shortcut(string action)
+    {
+        var active = _tabs.ActiveId;
+        var index = _tabs.Tabs.ToList().FindIndex(t => t.Id == active);
+        switch (action)
+        {
+            case "tab.next" or "tab.previous" when _tabs.Tabs.Count > 0:
+                var step = action == "tab.next" ? 1 : _tabs.Tabs.Count - 1;
+                Execute(new Command("tab.activate", Id: _tabs.Tabs[(index + step) % _tabs.Tabs.Count].Id));
+                break;
+            case "address.focus": _bridge.Post("""{"event":"focus-address"}"""); break;
+            case "tab.open" or "tab.reopen": Execute(new Command(action)); break;
+            default: if (active is not null) Execute(new Command(action, Id: active)); break;
+        }
+    }
+
     private OverlappedPresenter? Presenter => _window.AppWindow.Presenter as OverlappedPresenter;
     private string Resolve(string input) => AddressInput.Resolve(input, _settings.SearchUrlTemplate);
 
-    private void Open(string url) => _pages.Add(_tabs.Open(url));
+    private Tab Open(string url, bool activate = true)
+    {
+        var tab = _tabs.Open(url, activate);
+        _pages.Add(tab);
+        return tab;
+    }
 
     private void Close(string id)
     {
@@ -68,6 +96,38 @@ public sealed class BrowserController
         _split.OnTabClosed(id);
         if (_split.SecondaryId == _tabs.ActiveId) _split.Close();
         if (_tabs.Tabs.Count == 0) _window.Close();
+    }
+
+    private void RecordVisit(string id)
+    {
+        if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { } tab
+            && (tab.Url.StartsWith("https://", StringComparison.Ordinal) || tab.Url.StartsWith("http://", StringComparison.Ordinal)))
+            _db.RecordVisit(tab.Url, tab.Title, DateTimeOffset.UtcNow);
+    }
+
+    // ponytail: tous les onglets restaurés chargent leur page tout de suite ; le chargement paresseux vient au chantier légèreté.
+    private void RestoreSession()
+    {
+        var session = JsonFileStore.Load<Session>(AppPaths.Session);
+        var tabs = session.Urls.Select(url => Open(url, activate: false)).ToList();
+        if (tabs.Count == 0) { Open(_settings.HomeUrl); return; }
+
+        _tabs.Activate(tabs[Math.Clamp(session.ActiveIndex, 0, tabs.Count - 1)].Id);
+        if (session.SecondaryIndex is { } s && s >= 0 && s < tabs.Count && _split.Open(tabs[s].Id, _tabs.ActiveId))
+            _split.Resize(session.Ratio);
+    }
+
+    private void SaveSession()
+    {
+        var tabs = _tabs.Tabs.ToList();
+        var secondary = tabs.FindIndex(t => t.Id == _split.SecondaryId);
+        JsonFileStore.Save(AppPaths.Session, new Session
+        {
+            Urls = tabs.Select(t => t.Url).ToList(),
+            ActiveIndex = Math.Max(0, tabs.FindIndex(t => t.Id == _tabs.ActiveId)),
+            SecondaryIndex = secondary < 0 ? null : secondary,
+            Ratio = _split.Ratio,
+        });
     }
 
     private void Refresh()

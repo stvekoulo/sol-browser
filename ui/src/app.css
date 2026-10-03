@@ -78,6 +78,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   transition: background var(--fast) var(--ease);
 }
 .icon:hover:not(:disabled) { background: var(--bg-tab-hover); }
+.icon.on { color: var(--accent); }
 .icon:disabled { color: var(--text-dim); opacity: 0.45; }
 .tab .icon { width: 20px; height: 20px; border-radius: 6px; }
 

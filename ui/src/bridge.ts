@@ -36,8 +36,12 @@ const webview = (window as unknown as { chrome?: { webview?: WebView } }).chrome
 
 export const send = (command: Command) => webview?.postMessage(JSON.stringify(command));
 
-export function onState(callback: (state: State) => void) {
-  const handler = (e: MessageEvent) => callback(e.data as State);
+// L'hôte envoie soit l'état complet, soit un événement ponctuel { event: "…" }.
+export function onState(callback: (state: State) => void, onEvent?: (name: string) => void) {
+  const handler = (e: MessageEvent) => {
+    if (typeof e.data?.event === 'string') onEvent?.(e.data.event);
+    else callback(e.data as State);
+  };
   webview?.addEventListener('message', handler);
   return () => webview?.removeEventListener('message', handler);
 }
