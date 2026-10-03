@@ -13,6 +13,7 @@ public sealed class Session
 {
     public List<string> Urls { get; set; } = new();
     public int ActiveIndex { get; set; }
+    public int? PrimaryIndex { get; set; }
     public int? SecondaryIndex { get; set; }
     public double Ratio { get; set; } = 0.5;
 }

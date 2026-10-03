@@ -13,7 +13,7 @@ public static class CommandParser
         ["tab.move"] = ["id", "index"], ["tab.reopen"] = [],
         ["nav.go"] = ["id", "input"], ["nav.back"] = ["id"], ["nav.forward"] = ["id"],
         ["nav.reload"] = ["id"], ["nav.stop"] = ["id"],
-        ["split.open"] = ["id"], ["split.close"] = [], ["split.resize"] = ["ratio"],
+        ["split.open"] = [], ["split.close"] = [], ["split.resize"] = ["ratio"],
         ["bookmark.add"] = ["url", "title"], ["bookmark.remove"] = ["url"],
         ["history.search"] = ["query"],
         ["download.cancel"] = ["id"], ["download.open"] = ["id"],

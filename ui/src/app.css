@@ -46,7 +46,23 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 }
 .tab:hover { background: var(--bg-tab-hover); }
 .tab.active { background: var(--bg-tab-active); color: var(--text); box-shadow: 0 0 0 0.5px var(--border); }
-.tab.secondary { box-shadow: inset 0 -2px 0 var(--accent); }
+
+/* Vue scindée : les deux onglets forment un seul onglet en deux moitiés */
+.tab-group {
+  flex: 0 1 320px;
+  min-width: 96px;
+  height: 30px;
+  display: flex;
+  border-radius: var(--radius-tab);
+  box-shadow: 0 0 0 0.5px var(--border);
+}
+.tab-group.active { background: var(--bg-tab-active); }
+.tab-group .tab { flex: 1 1 0; min-width: 0; background: none; box-shadow: none; }
+.tab-group .tab + .tab { border-left: 0.5px solid var(--border); border-radius: 0 var(--radius-tab) var(--radius-tab) 0; }
+.tab-group .tab:first-child { border-radius: var(--radius-tab) 0 0 var(--radius-tab); }
+.tab-group .tab:hover { background: var(--bg-tab-hover); }
+.tab-group.active .tab.active { color: var(--text); }
+.tab-group.active .tab:not(.active) { color: var(--text-dim); }
 .tab-title { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .tab-close { opacity: 0; }
 .tab:hover .tab-close, .tab.active .tab-close { opacity: 1; }
@@ -82,6 +98,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .icon:disabled { color: var(--text-dim); opacity: 0.45; }
 .tab .icon { width: 20px; height: 20px; border-radius: 6px; }
 
+.pane { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: var(--gap); }
 .address { flex: 1; min-width: 0; }
 .address input {
   width: 100%;

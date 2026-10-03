@@ -11,7 +11,8 @@ export type Tab = {
 export type State = {
   tabs: Tab[];
   activeId: string | null;
-  split: { secondaryId: string | null; ratio: number };
+  // Paire d'onglets scindés ; visible quand l'onglet actif est l'un des deux.
+  split: { primaryId: string | null; secondaryId: string | null; ratio: number; visible: boolean };
   maximized: boolean;
 };
 

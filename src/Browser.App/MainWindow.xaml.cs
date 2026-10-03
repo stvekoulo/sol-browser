@@ -1,13 +1,29 @@
+using System.Runtime.InteropServices;
 using Browser.Core;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Input;
-using Windows.System;
 
 namespace Browser.App;
 
 public sealed partial class MainWindow : Window
 {
+    // Touche (code virtuel), modificateurs (Alt 1, Ctrl 2, Maj 4), action.
+    private static readonly (uint Key, uint Modifiers, string Action)[] Shortcuts =
+    [
+        (0x54, 2, "tab.open"),        // Ctrl+T
+        (0x57, 2, "tab.close"),       // Ctrl+W
+        (0x54, 2 | 4, "tab.reopen"),  // Ctrl+Maj+T
+        (0x4C, 2, "address.focus"),   // Ctrl+L
+        (0x52, 2, "nav.reload"),      // Ctrl+R
+        (0x74, 0, "nav.reload"),      // F5
+        (0x09, 2, "tab.next"),        // Ctrl+Tab
+        (0x09, 2 | 4, "tab.previous"),// Ctrl+Maj+Tab
+        (0x25, 1, "nav.back"),        // Alt+Gauche
+        (0x27, 1, "nav.forward"),     // Alt+Droite
+    ];
+
+    private readonly nint _hwnd;
+    private readonly SubclassProc _wndProc; // gardé en champ : le délégué ne doit pas être libéré
     private BrowserController? _controller;
 
     public MainWindow()
@@ -16,6 +32,15 @@ public sealed partial class MainWindow : Window
         Title = "Navigateur";
         // Pas de barre de titre système : l'interface dessine la sienne. La bordure reste, pour le redimensionnement.
         if (AppWindow.Presenter is OverlappedPresenter presenter) presenter.SetBorderAndTitleBar(true, false);
+
+        // Les touches tapées dans une page partent dans le processus du moteur et n'atteignent pas la fenêtre.
+        // Les raccourcis sont donc enregistrés auprès de Windows, uniquement tant que la fenêtre est active.
+        _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        _wndProc = WndProc;
+        SetWindowSubclass(_hwnd, _wndProc, 1, 0);
+        Activated += (_, e) => SetShortcuts(e.WindowActivationState != WindowActivationState.Deactivated);
+        Closed += (_, _) => SetShortcuts(false);
+
         _ = InitAsync();
     }
 
@@ -29,34 +54,33 @@ public sealed partial class MainWindow : Window
         var pages = new PageHost(Pages, PrimaryColumn, SecondaryColumn, blur);
         var bridge = new UiBridge(Ui);
         _controller = new BrowserController(this, pages, bridge, settings);
-        AddShortcuts();
         await bridge.InitAsync(Path.Combine(AppContext.BaseDirectory, "ui"), _controller.Execute);
     }
 
-    private void AddShortcuts()
+    private void SetShortcuts(bool active)
     {
-        const VirtualKeyModifiers ctrl = VirtualKeyModifiers.Control, shift = VirtualKeyModifiers.Shift, alt = VirtualKeyModifiers.Menu;
-        Shortcut(VirtualKey.T, ctrl, "tab.open");
-        Shortcut(VirtualKey.W, ctrl, "tab.close");
-        Shortcut(VirtualKey.T, ctrl | shift, "tab.reopen");
-        Shortcut(VirtualKey.L, ctrl, "address.focus");
-        Shortcut(VirtualKey.R, ctrl, "nav.reload");
-        Shortcut(VirtualKey.F5, VirtualKeyModifiers.None, "nav.reload");
-        Shortcut(VirtualKey.Tab, ctrl, "tab.next");
-        Shortcut(VirtualKey.Tab, ctrl | shift, "tab.previous");
-        Shortcut(VirtualKey.Left, alt, "nav.back");
-        Shortcut(VirtualKey.Right, alt, "nav.forward");
+        for (var i = 0; i < Shortcuts.Length; i++)
+        {
+            UnregisterHotKey(_hwnd, i);
+            if (active) RegisterHotKey(_hwnd, i, Shortcuts[i].Modifiers | 0x4000 /* MOD_NOREPEAT */, Shortcuts[i].Key);
+        }
     }
 
-    private void Shortcut(VirtualKey key, VirtualKeyModifiers modifiers, string action)
+    private nint WndProc(nint hwnd, uint msg, nint wParam, nint lParam, nuint id, nuint data)
     {
-        var accelerator = new KeyboardAccelerator { Key = key, Modifiers = modifiers };
-        accelerator.Invoked += (_, e) =>
+        if (msg == 0x0312 /* WM_HOTKEY */ && wParam >= 0 && wParam < Shortcuts.Length)
         {
-            e.Handled = true;
+            var action = Shortcuts[(int)wParam].Action;
             if (action == "address.focus") Ui.Focus(FocusState.Programmatic);
             _controller?.Shortcut(action);
-        };
-        Root.KeyboardAccelerators.Add(accelerator);
+            return 0;
+        }
+        return DefSubclassProc(hwnd, msg, wParam, lParam);
     }
+
+    private delegate nint SubclassProc(nint hwnd, uint msg, nint wParam, nint lParam, nuint id, nuint data);
+    [DllImport("comctl32.dll")] private static extern bool SetWindowSubclass(nint hwnd, SubclassProc proc, nuint id, nuint data);
+    [DllImport("comctl32.dll")] private static extern nint DefSubclassProc(nint hwnd, uint msg, nint wParam, nint lParam);
+    [DllImport("user32.dll")] private static extern bool RegisterHotKey(nint hwnd, int id, uint modifiers, uint key);
+    [DllImport("user32.dll")] private static extern bool UnregisterHotKey(nint hwnd, int id);
 }

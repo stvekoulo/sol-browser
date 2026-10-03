@@ -39,9 +39,7 @@ public sealed class BrowserController
             case "ui.ready": if (_tabs.Tabs.Count == 0) RestoreSession(); break;
             case "tab.open": Open(c.Url is null ? _settings.HomeUrl : Resolve(c.Url)); break;
             case "tab.close": Close(id); break;
-            case "tab.activate":
-                if (_tabs.Activate(id) && _split.SecondaryId == id) _split.Close();
-                break;
+            case "tab.activate": _tabs.Activate(id); break;
             case "tab.move": _tabs.Move(id, c.Index!.Value); break;
             case "tab.reopen": if (_tabs.ReopenClosed() is { } reopened) _pages.Add(reopened); break;
             case "nav.go": _pages.Navigate(id, Resolve(c.Input!)); break;
@@ -49,7 +47,7 @@ public sealed class BrowserController
             case "nav.forward": _pages.Forward(id); break;
             case "nav.reload": _pages.Reload(id); break;
             case "nav.stop": _pages.Stop(id); break;
-            case "split.open": if (_tabs.Tabs.Any(t => t.Id == id)) _split.Open(id, _tabs.ActiveId); break;
+            case "split.open": Split(c.Id); break;
             case "split.close": _split.Close(); break;
             case "split.resize": _split.Resize(c.Ratio!.Value); break;
             case "window.minimize": Presenter?.Minimize(); break;
@@ -94,8 +92,21 @@ public sealed class BrowserController
         if (!_tabs.Close(id)) return;
         _pages.Remove(id);
         _split.OnTabClosed(id);
-        if (_split.SecondaryId == _tabs.ActiveId) _split.Close();
         if (_tabs.Tabs.Count == 0) _window.Close();
+    }
+
+    // Scinde l'onglet actif avec l'onglet donné, ou avec un nouvel onglet si aucun n'est donné.
+    private void Split(string? otherId)
+    {
+        if (_tabs.ActiveId is not { } active) return;
+        if (otherId is not null && (otherId == active || _tabs.Tabs.All(t => t.Id != otherId))) return;
+        var other = otherId ?? Open(_settings.HomeUrl, activate: false).Id;
+
+        // Les deux onglets de la paire restent voisins dans la barre d'onglets.
+        var tabs = _tabs.Tabs.ToList();
+        int a = tabs.FindIndex(t => t.Id == active), o = tabs.FindIndex(t => t.Id == other);
+        _tabs.Move(other, o > a ? a + 1 : a);
+        _split.Open(active, other);
     }
 
     private void RecordVisit(string id)
@@ -113,26 +124,30 @@ public sealed class BrowserController
         if (tabs.Count == 0) { Open(_settings.HomeUrl); return; }
 
         _tabs.Activate(tabs[Math.Clamp(session.ActiveIndex, 0, tabs.Count - 1)].Id);
-        if (session.SecondaryIndex is { } s && s >= 0 && s < tabs.Count && _split.Open(tabs[s].Id, _tabs.ActiveId))
+        bool Valid(int? i) => i is >= 0 && i < tabs.Count;
+        if (Valid(session.PrimaryIndex) && Valid(session.SecondaryIndex)
+            && _split.Open(tabs[session.PrimaryIndex!.Value].Id, tabs[session.SecondaryIndex!.Value].Id))
             _split.Resize(session.Ratio);
     }
 
     private void SaveSession()
     {
         var tabs = _tabs.Tabs.ToList();
-        var secondary = tabs.FindIndex(t => t.Id == _split.SecondaryId);
+        int? IndexOf(string? id) => tabs.FindIndex(t => t.Id == id) is >= 0 and var i ? i : null;
         JsonFileStore.Save(AppPaths.Session, new Session
         {
             Urls = tabs.Select(t => t.Url).ToList(),
-            ActiveIndex = Math.Max(0, tabs.FindIndex(t => t.Id == _tabs.ActiveId)),
-            SecondaryIndex = secondary < 0 ? null : secondary,
+            ActiveIndex = IndexOf(_tabs.ActiveId) ?? 0,
+            PrimaryIndex = IndexOf(_split.PrimaryId),
+            SecondaryIndex = IndexOf(_split.SecondaryId),
             Ratio = _split.Ratio,
         });
     }
 
     private void Refresh()
     {
-        _pages.ApplyLayout(_tabs.ActiveId, _split.SecondaryId, _split.Ratio);
+        var showSplit = _split.Contains(_tabs.ActiveId);
+        _pages.ApplyLayout(showSplit ? _split.PrimaryId : _tabs.ActiveId, showSplit ? _split.SecondaryId : null, _split.Ratio);
         _bridge.Post(JsonSerializer.Serialize(new
         {
             tabs = _tabs.Tabs.Select(t => new
@@ -143,7 +158,7 @@ public sealed class BrowserController
                 canGoForward = _pages.CanGoForward(t.Id),
             }),
             activeId = _tabs.ActiveId,
-            split = new { secondaryId = _split.SecondaryId, ratio = _split.Ratio },
+            split = new { primaryId = _split.PrimaryId, secondaryId = _split.SecondaryId, ratio = _split.Ratio, visible = showSplit },
             maximized = Presenter?.State == OverlappedPresenterState.Maximized,
         }));
     }

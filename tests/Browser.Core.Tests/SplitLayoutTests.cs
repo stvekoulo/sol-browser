@@ -3,13 +3,25 @@ using Browser.Core;
 public class SplitLayoutTests
 {
     [Fact]
-    public void Open_sets_secondary_unless_it_is_the_active_tab()
+    public void Open_pairs_two_distinct_tabs()
     {
         var s = new SplitLayout();
-        Assert.False(s.Open("t1", activeId: "t1"));
+        Assert.False(s.Open("t1", "t1"));
         Assert.False(s.IsSplit);
-        Assert.True(s.Open("t2", activeId: "t1"));
-        Assert.Equal("t2", s.SecondaryId);
+        Assert.True(s.Open("t1", "t2"));
+        Assert.Equal(("t1", "t2"), (s.PrimaryId, s.SecondaryId));
+    }
+
+    [Fact]
+    public void Contains_is_true_only_for_the_pair()
+    {
+        var s = new SplitLayout();
+        Assert.False(s.Contains("t1"));
+        s.Open("t1", "t2");
+        Assert.True(s.Contains("t1"));
+        Assert.True(s.Contains("t2"));
+        Assert.False(s.Contains("t3"));
+        Assert.False(s.Contains(null));
     }
 
     [Fact]
@@ -22,11 +34,13 @@ public class SplitLayoutTests
     }
 
     [Fact]
-    public void Closing_the_secondary_tab_ends_the_split()
+    public void Closing_either_tab_of_the_pair_ends_the_split()
     {
         var s = new SplitLayout();
-        s.Open("t2", "t1");
+        s.Open("t1", "t2");
         s.OnTabClosed("t9"); Assert.True(s.IsSplit);
+        s.OnTabClosed("t1"); Assert.False(s.IsSplit);
+        s.Open("t1", "t2");
         s.OnTabClosed("t2"); Assert.False(s.IsSplit);
     }
 }

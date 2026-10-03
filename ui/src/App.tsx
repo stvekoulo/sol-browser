@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from 'react';
+import { useEffect, useState, type MouseEvent, type ReactNode } from 'react';
 import { onState, send, type State, type Tab } from './bridge';
 
 export default function App() {
@@ -6,21 +6,39 @@ export default function App() {
 
   useEffect(() => {
     const off = onState(setState, event => {
-      if (event === 'focus-address') document.querySelector<HTMLInputElement>('.address input')?.focus();
+      if (event === 'focus-address') document.querySelector<HTMLInputElement>('.pane.focused input, .pane input')?.focus();
     });
     send({ type: 'ui.ready' });
     return off;
   }, []);
 
   if (!state) return null;
-  const index = state.tabs.findIndex(t => t.id === state.activeId);
-  // La vue scindée place l'onglet voisin à droite de l'onglet actif.
-  const neighbour = state.tabs[index + 1] ?? state.tabs[index - 1];
+  const byId = (id: string | null) => state.tabs.find(t => t.id === id);
+  const { split } = state;
+  const panes = split.visible ? [byId(split.primaryId), byId(split.secondaryId)] : [byId(state.activeId)];
 
   return (
     <>
       <TitleBar state={state} />
-      <Toolbar tab={state.tabs[index]} split={state.split.secondaryId !== null} neighbourId={neighbour?.id} />
+      <nav className="toolbar">
+        {panes.map((tab, i) => (
+          <Pane
+            key={tab?.id ?? i}
+            tab={tab}
+            focused={tab?.id === state.activeId}
+            grow={!split.visible ? 1 : i === 0 ? split.ratio : 1 - split.ratio}
+          />
+        ))}
+        <button
+          className={`icon${split.visible ? ' on' : ''}`}
+          aria-label={split.visible ? 'Fermer la vue scindée' : 'Afficher deux pages côte à côte'}
+          aria-pressed={split.visible}
+          title={split.visible ? 'Fermer la vue scindée' : 'Afficher deux pages côte à côte'}
+          onClick={() => send({ type: split.visible ? 'split.close' : 'split.open' })}
+        >
+          <Icon d="M2 3h12v10H2zM8 3v10" />
+        </button>
+      </nav>
     </>
   );
 }
@@ -34,6 +52,24 @@ function TitleBar({ state }: { state: State }) {
     if (e.target === e.currentTarget) send({ type: 'window.maximize' });
   };
 
+  const { tabs, split, activeId } = state;
+  const items: ReactNode[] = [];
+  for (let i = 0; i < tabs.length; i++) {
+    const tab = tabs[i], next = tabs[i + 1];
+    // Les deux onglets d'une vue scindée s'affichent comme un seul onglet en deux moitiés.
+    if (next && tab.id === split.primaryId && next.id === split.secondaryId) {
+      items.push(
+        <div key={tab.id} className={`tab-group${split.visible ? ' active' : ''}`}>
+          <TabItem tab={tab} active={tab.id === activeId} />
+          <TabItem tab={next} active={next.id === activeId} />
+        </div>,
+      );
+      i++;
+    } else {
+      items.push(<TabItem key={tab.id} tab={tab} active={tab.id === activeId} />);
+    }
+  }
+
   return (
     <header className="titlebar" onMouseDown={drag} onDoubleClick={maximize}>
       <div className="lights">
@@ -46,14 +82,7 @@ function TitleBar({ state }: { state: State }) {
         />
       </div>
       <div className="tabs" role="tablist" onMouseDown={drag} onDoubleClick={maximize}>
-        {state.tabs.map(tab => (
-          <TabItem
-            key={tab.id}
-            tab={tab}
-            active={tab.id === state.activeId}
-            secondary={tab.id === state.split.secondaryId}
-          />
-        ))}
+        {items}
         <button className="icon new-tab" aria-label="Nouvel onglet" onClick={() => send({ type: 'tab.open' })}>
           <Icon d="M8 3v10M3 8h10" />
         </button>
@@ -62,13 +91,13 @@ function TitleBar({ state }: { state: State }) {
   );
 }
 
-function TabItem({ tab, active, secondary }: { tab: Tab; active: boolean; secondary: boolean }) {
+function TabItem({ tab, active }: { tab: Tab; active: boolean }) {
   const label = tab.title && tab.title !== 'about:blank' ? tab.title : 'Nouvel onglet';
   return (
     <div
       role="tab"
       aria-selected={active}
-      className={`tab${active ? ' active' : ''}${secondary ? ' secondary' : ''}`}
+      className={`tab${active ? ' active' : ''}`}
       title={label}
       onMouseDown={e => {
         if (e.button === 0) send({ type: 'tab.activate', id: tab.id });
@@ -89,7 +118,8 @@ function TabItem({ tab, active, secondary }: { tab: Tab; active: boolean; second
   );
 }
 
-function Toolbar({ tab, split, neighbourId }: { tab: Tab | undefined; split: boolean; neighbourId: string | undefined }) {
+// Navigation et adresse d'une page. En vue scindée, il y en a une par page, alignée au-dessus d'elle.
+function Pane({ tab, focused, grow }: { tab: Tab | undefined; focused: boolean; grow: number }) {
   const url = !tab || tab.url === 'about:blank' ? '' : tab.url;
   const [text, setText] = useState(url);
   const [editing, setEditing] = useState(false);
@@ -97,11 +127,11 @@ function Toolbar({ tab, split, neighbourId }: { tab: Tab | undefined; split: boo
   // L'adresse suit la page tant que l'utilisateur n'est pas en train de taper.
   useEffect(() => {
     if (!editing) setText(url);
-  }, [url, editing, tab?.id]);
+  }, [url, editing]);
 
   const id = tab?.id;
   return (
-    <nav className="toolbar">
+    <div className={`pane${focused ? ' focused' : ''}`} style={{ flexGrow: grow }}>
       <button className="icon" aria-label="Précédent" disabled={!tab?.canGoBack} onClick={() => id && send({ type: 'nav.back', id })}>
         <Icon d="M10 3L5 8l5 5" />
       </button>
@@ -134,21 +164,12 @@ function Toolbar({ tab, split, neighbourId }: { tab: Tab | undefined; split: boo
           onFocus={e => {
             setEditing(true);
             e.target.select();
+            if (id && !focused) send({ type: 'tab.activate', id });
           }}
           onBlur={() => setEditing(false)}
         />
       </form>
-      <button
-        className={`icon${split ? ' on' : ''}`}
-        aria-label={split ? 'Fermer la vue scindée' : 'Afficher deux pages côte à côte'}
-        aria-pressed={split}
-        title={split ? 'Fermer la vue scindée' : 'Afficher deux pages côte à côte'}
-        disabled={!split && !neighbourId}
-        onClick={() => send(split ? { type: 'split.close' } : { type: 'split.open', id: neighbourId })}
-      >
-        <Icon d="M2 3h12v10H2zM8 3v10" />
-      </button>
-    </nav>
+    </div>
   );
 }
 
