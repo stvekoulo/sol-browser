@@ -76,7 +76,9 @@ type Icons = Record<string, string | null | undefined>;
 let drag: { id: string; grab: number; start: number; x: number; pending: number; moved: boolean } | null = null;
 
 const SLIDE = 'transform 160ms cubic-bezier(0.2, 0, 0, 1)';
-const tabElements = () => [...document.querySelectorAll<HTMLElement>('[data-tab-id]')];
+// Une « place » de la barre : un onglet seul, ou les deux onglets d'une vue scindée, qui se déplacent ensemble.
+// data-slot-first / data-slot-last : rangs du premier et du dernier onglet de la place.
+const tabElements = () => [...document.querySelectorAll<HTMLElement>('[data-slot-id]')];
 
 // Fait glisser un onglet jusqu'à sa place, puis rend la main aux transitions de la feuille de style.
 function slideHome(el: HTMLElement) {
@@ -88,7 +90,7 @@ function slideHome(el: HTMLElement) {
 // Place l'onglet saisi sous la souris. Les positions sont celles de la mise en page (offsetLeft),
 // que les transformations en cours ne modifient pas.
 function followMouse() {
-  const mine = drag && tabElements().find(el => el.dataset.tabId === drag!.id);
+  const mine = drag && tabElements().find(el => el.dataset.slotId === drag!.id);
   const strip = mine?.offsetParent as HTMLElement | null;
   if (!drag || !mine || !strip) return null;
   const left = Math.max(0, Math.min(drag.x - drag.grab - strip.getBoundingClientRect().left, strip.clientWidth - mine.offsetWidth));
@@ -111,7 +113,7 @@ function TitleBar({ state, icons }: { state: State; icons: Icons }) {
   // centre dépasse le milieu d'un voisin. (Le glisser-déposer HTML ne fonctionne pas dans ce type de vue.)
   useEffect(() => {
     const stop = () => {
-      const mine = drag && tabElements().find(el => el.dataset.tabId === drag!.id);
+      const mine = drag && tabElements().find(el => el.dataset.slotId === drag!.id);
       drag = null;
       if (!mine) return;
       slideHome(mine);
@@ -128,16 +130,18 @@ function TitleBar({ state, icons }: { state: State; icons: Icons }) {
       if (!placed) return void (drag = null);
 
       const { mine, left } = placed;
-      const from = Number(mine.dataset.tabIndex);
+      const from = Number(mine.dataset.slotFirst);
       if (drag.pending !== -1) return; // une demande est en route : on attend la réponse de l'hôte
       const center = left + mine.offsetWidth / 2;
+      // Rang visé : après le dernier onglet d'une place dépassée vers la droite, avant le premier vers la gauche.
+      // Pour une vue scindée, l'hôte déplace le premier onglet puis ramène le second à sa suite.
       let target = from;
       for (const el of tabElements()) {
         if (el === mine) continue;
-        const to = Number(el.dataset.tabIndex);
+        const first = Number(el.dataset.slotFirst), last = Number(el.dataset.slotLast);
         const middle = el.offsetLeft + el.offsetWidth / 2;
-        if (to > from && center > middle) target = Math.max(target, to);
-        if (to < from && center < middle) target = Math.min(target, to);
+        if (first > from && center > middle) target = Math.max(target, last);
+        if (first < from && center < middle) target = Math.min(target, first);
       }
       if (target !== from) {
         drag.pending = target;
@@ -164,7 +168,7 @@ function TitleBar({ state, icons }: { state: State; icons: Icons }) {
     if (drag) drag.pending = -1;
     const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
     for (const el of tabElements()) {
-      const id = el.dataset.tabId!;
+      const id = el.dataset.slotId!;
       const before = lefts.current.get(id);
       const now = el.offsetLeft;
       lefts.current.set(id, now);
@@ -185,9 +189,9 @@ function TitleBar({ state, icons }: { state: State; icons: Icons }) {
     // Les deux onglets d'une vue scindée s'affichent comme un seul onglet en deux moitiés.
     if (next && tab.id === split.primaryId && next.id === split.secondaryId) {
       items.push(
-        <div key={tab.id} className={`tab-group${split.visible ? ' active' : ''}`}>
-          <TabItem tab={tab} index={i} icon={icons[tab.id]} active={tab.id === activeId} />
-          <TabItem tab={next} index={i + 1} icon={icons[next.id]} active={next.id === activeId} />
+        <div key={tab.id} className={`tab-group${split.visible ? ' active' : ''}`} data-slot-id={tab.id} data-slot-first={i} data-slot-last={i + 1}>
+          <TabItem tab={tab} index={i} icon={icons[tab.id]} active={tab.id === activeId} grouped />
+          <TabItem tab={next} index={i + 1} icon={icons[next.id]} active={next.id === activeId} grouped />
         </div>,
       );
       i++;
@@ -217,24 +221,23 @@ function TitleBar({ state, icons }: { state: State; icons: Icons }) {
   );
 }
 
-function TabItem({ tab, index, icon, active }: { tab: Tab; index: number; icon: string | null | undefined; active: boolean }) {
+function TabItem({ tab, index, icon, active, grouped = false }: { tab: Tab; index: number; icon: string | null | undefined; active: boolean; grouped?: boolean }) {
   const label = tab.title && tab.title !== 'about:blank' ? tab.title : 'Nouvel onglet';
+  // Un onglet seul est une place à lui seul ; dans une vue scindée, la place est le groupe qui l'entoure.
+  const slot = grouped ? {} : { 'data-slot-id': tab.id, 'data-slot-first': index, 'data-slot-last': index };
   return (
     <div
       role="tab"
       aria-selected={active}
       className={`tab${active ? ' active' : ''}`}
       title={label}
-      data-tab-id={tab.id}
-      data-tab-index={index}
+      {...slot}
       onMouseDown={e => {
         if (e.button === 0) {
           send({ type: 'tab.activate', id: tab.id });
-          // Le glisser est suivi dans TitleBar. Les deux moitiés d'une vue scindée ne se déplacent pas seules.
-          const el = e.currentTarget;
-          drag = el.closest('.tab-group')
-            ? null
-            : { id: tab.id, grab: e.clientX - el.getBoundingClientRect().left, start: e.clientX, x: e.clientX, pending: -1, moved: false };
+          // Le glisser est suivi dans TitleBar ; saisir une moitié de vue scindée saisit les deux.
+          const el = e.currentTarget.closest<HTMLElement>('[data-slot-id]');
+          drag = el && { id: el.dataset.slotId!, grab: e.clientX - el.getBoundingClientRect().left, start: e.clientX, x: e.clientX, pending: -1, moved: false };
         }
         if (e.button === 1) send({ type: 'tab.close', id: tab.id });
       }}
