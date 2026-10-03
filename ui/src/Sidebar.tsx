@@ -13,6 +13,7 @@ export default function Sidebar() {
   const [state, setState] = useState<State | null>(null);
   const [icons, setIcons] = useState<Icons>({});
   const [copied, setCopied] = useState(false);
+  const [status, setStatus] = useState(''); // adresse du lien survolé dans la page
   const [urlText, setUrlText] = useState('');
   const [editingUrl, setEditingUrl] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -20,6 +21,7 @@ export default function Sidebar() {
   useEffect(() => {
     const off = onState(setState, e => {
       if (e.event === 'favicon' && e.id) setIcons(all => ({ ...all, [e.id!]: e.data }));
+      if (e.event === 'status') setStatus(e.text ?? '');
     });
     send({ type: 'ui.ready' });
     return off;
@@ -125,6 +127,12 @@ export default function Sidebar() {
           <Icon d="M8 3.5v9M3.5 8h9" size={14} />
           <span>Nouvel onglet</span>
         </button>
+      </div>
+
+      {/* Où mène le lien survolé : repère contre l'hameçonnage, à la place de la bulle noire du moteur. */}
+      <div className={`sidebar-status${status ? ' shown' : ''}`} aria-live="off" title={status}>
+        <Icon d="M6.5 9.5l3-3M7 4.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1M9 11.5l-1 1A2.5 2.5 0 0 1 4.5 9l1-1" size={12} />
+        <span>{status.replace(/^https?:\/\/(www\.)?/, '')}</span>
       </div>
     </aside>
   );

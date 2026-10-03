@@ -40,6 +40,11 @@ public sealed class BrowserController
         _pages.Loaded += RecordVisit;
         _pages.FaviconChanged += (id, data) => { _favicons[id] = data; PostFavicon(id); };
         _pages.ContextMenuRequested += OpenContextMenu;
+        _pages.StatusChanged += (id, text) =>
+        {
+            if (id == _tabs.ActiveId || _split.Contains(id))
+                _bridge.Post(JsonSerializer.Serialize(new { @event = "status", text }));
+        };
         _pages.DownloadStarting += OnDownloadStarting;
         _window.AppWindow.Changed += (_, e) => { if (e.DidPresenterChange || e.DidSizeChange) Refresh(); };
         _window.Closed += (_, _) => { SaveSession(); _db.Dispose(); };
@@ -169,9 +174,11 @@ public sealed class BrowserController
             ? _downloads.Where(d => d.Op.State == Microsoft.Web.WebView2.Core.CoreWebView2DownloadState.InProgress
                 || (_finishedAt.TryGetValue(d.Id, out var at) && DateTime.UtcNow - at < DockLinger)).ToList()
             : [];
+        var changed = _dockShown != shown.Count > 0;
         _dockShown = shown.Count > 0;
         if (_dockShown) _dock.Post(DownloadsJson(shown)); // l'encart répond par sa taille, ce qui l'affiche
         else _dock.Hide();
+        if (changed) Refresh(); // le bouton de la barre apparaît quand l'encart disparaît, et inversement
     }
 
     private static string DownloadsJson(IEnumerable<(string Id, Microsoft.Web.WebView2.Core.CoreWebView2DownloadOperation Op)> downloads) => JsonSerializer.Serialize(new
@@ -319,7 +326,19 @@ public sealed class BrowserController
         IReadOnlyList<Visit> history = q.Length == 0 ? [] : _db.Suggest(q, 3);
 
         // Une requête vide (champ vidé ou quitté) ne referme que les suggestions, pas un autre panneau ouvert entre-temps.
-        if (q.Length == 0) { if (_suggesting) HidePopup(); return; }
+        // Pas tout de suite : cliquer une suggestion fait d'abord perdre le curseur à la barre d'adresse, et une
+        // fermeture immédiate avalerait ce clic. Si rien n'est venu entre-temps, les suggestions se referment.
+        if (q.Length == 0)
+        {
+            if (_suggesting) _ = CloseSuggestionsSoonAsync();
+            return;
+
+            async Task CloseSuggestionsSoonAsync()
+            {
+                await Task.Delay(180);
+                if (seq == _suggestSeq && _suggesting) HidePopup();
+            }
+        }
         ShowSuggestions(Suggestions.Build(q, history, _settings.SearchUrlTemplate));
 
         // Les résultats locaux s'affichent tout de suite ; les complétions du moteur de recherche s'y ajoutent à leur arrivée.
@@ -529,6 +548,7 @@ public sealed class BrowserController
             downloads = new
             {
                 count = _downloads.Count,
+                docked = _dockShown, // l'encart en bas à droite les affiche : le bouton de la barre fait double emploi
                 active = _downloads.Count(d => d.Op.State == Microsoft.Web.WebView2.Core.CoreWebView2DownloadState.InProgress),
             },
         }));

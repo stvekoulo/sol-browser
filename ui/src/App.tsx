@@ -87,7 +87,7 @@ export default function App() {
       </div>
 
       <div className="topbar-right" onMouseDown={dragWindow}>
-        {state.downloads.count > 0 && (
+        {state.downloads.count > 0 && !state.downloads.docked && (
           <button
             className={`pill-icon-btn${state.downloads.active > 0 ? ' on' : ''}`}
             aria-label={state.downloads.active > 0 ? 'Téléchargements (en cours)' : 'Téléchargements'}

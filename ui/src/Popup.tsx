@@ -49,18 +49,34 @@ export default function Popup() {
       setContent(next);
     });
     const close = () => send({ type: 'popup.close' });
-    window.addEventListener('blur', close);
+    // Perdre le curseur referme la vue, mais pas tout de suite : un clic dans la vue lui fait perdre puis
+    // reprendre le curseur, et une fermeture immédiate avalerait ce clic.
+    let leaving = 0;
+    const blurred = () => {
+      window.clearTimeout(leaving);
+      leaving = window.setTimeout(() => !document.hasFocus() && close(), 150);
+    };
+    window.addEventListener('blur', blurred);
     const key = (e: KeyboardEvent) => e.key === 'Escape' && close();
     window.addEventListener('keydown', key);
     return () => {
       off();
-      window.removeEventListener('blur', close);
+      window.clearTimeout(leaving);
+      window.removeEventListener('blur', blurred);
       window.removeEventListener('keydown', key);
     };
   }, []);
 
+  // La vue annonce sa hauteur à chaque changement, y compris quand l'hôte vient de changer sa largeur :
+  // le contenu se remet alors en page et sa hauteur n'est plus celle du premier rendu.
   useLayoutEffect(() => {
-    if (content && root.current) send({ type: 'popup.size', height: root.current.offsetHeight });
+    const el = root.current;
+    if (!content || !el) return;
+    const report = () => send({ type: 'popup.size', height: el.offsetHeight });
+    report();
+    const observer = new ResizeObserver(report);
+    observer.observe(el);
+    return () => observer.disconnect();
   }, [content, libTab]);
 
   if (!content) return null;

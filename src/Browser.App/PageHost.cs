@@ -18,6 +18,7 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
     public event Action<string>? NewTabRequested;
     public event Action<double, double, CoreWebView2ContextMenuRequestedEventArgs>? ContextMenuRequested; // x, y dans la fenêtre
     public event Action<string, CoreWebView2DownloadStartingEventArgs>? DownloadStarting; // onglet d'origine
+    public event Action<string, string>? StatusChanged;         // id, adresse du lien survolé (vide = aucun)
     public event Action<string, string?>? FaviconChanged;        // id, icône en data: (ou null)
 
     public bool IsLoading(string id) => _loading.Contains(id);
@@ -55,6 +56,9 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
             ContextMenuRequested?.Invoke(point.X, point.Y, e);
         };
         core.DownloadStarting += (_, e) => DownloadStarting?.Invoke(tab.Id, e);
+        // Adresse du lien survolé : la bulle du moteur est coupée, le navigateur l'affiche dans son propre design.
+        core.Settings.IsStatusBarEnabled = false;
+        core.StatusBarTextChanged += (_, _) => StatusChanged?.Invoke(tab.Id, core.StatusBarText);
         core.FaviconChanged += async (_, _) => FaviconChanged?.Invoke(tab.Id, await ReadFaviconAsync(core));
         Navigate(tab.Id, tab.Url);
     }

@@ -16,7 +16,7 @@ export type State = {
   // Paire d'onglets scindés ; visible quand l'onglet actif est l'un des deux.
   split: { primaryId: string | null; secondaryId: string | null; ratio: number; visible: boolean };
   maximized: boolean;
-  downloads: { count: number; active: number };
+  downloads: { count: number; active: number; docked: boolean };
 };
 
 export type Command = {
@@ -49,6 +49,7 @@ export type HostEvent = {
   event: string;
   id?: string;
   data?: string | null;
+  text?: string;
   count?: number;
   open?: boolean;
   bg?: string;

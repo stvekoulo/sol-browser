@@ -170,3 +170,23 @@
   font-size: 12.5px;
 }
 .sidebar-new-tab:hover { background: var(--bg-tab-hover); color: var(--text); }
+
+/* Adresse du lien survolé dans la page, au pied de la carte */
+.sidebar-status {
+  flex: none;
+  height: 26px;
+  margin-top: 8px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-tab-hover);
+  color: var(--text-dim);
+  font-size: 11.5px;
+  opacity: 0;
+  transition: opacity var(--fast) var(--ease-out);
+}
+.sidebar-status.shown { opacity: 1; }
+.sidebar-status svg { flex: none; }
+.sidebar-status span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
