@@ -17,6 +17,7 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
     public event Action<string>? Loaded;                         // id, page chargée avec succès
     public event Action<string>? NewTabRequested;
     public event Action<string, double, double, CoreWebView2ContextMenuRequestedEventArgs>? ContextMenuRequested; // id, x, y dans la fenêtre
+    public event Action<string, double, double>? DeviceAreaMenuRequested; // id, x, y : clic droit à côté d'un appareil simulé
     public event Action<string, CoreWebView2DownloadStartingEventArgs>? DownloadStarting; // onglet d'origine
     public event Action<CoreWebView2PermissionRequestedEventArgs>? PermissionRequested;
     public event Action<string, string>? StatusChanged;         // id, adresse du lien survolé (vide = aucun)
@@ -337,6 +338,18 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
             {
                 _watchingLayout = true;
                 container.LayoutUpdated += (_, _) => FitDevices();
+                // Clic droit autour des appareils (zone vide, coque) : le menu du simulateur. Le fond doit exister
+                // pour recevoir le clic ; transparent, il ne change rien à l'affichage.
+                container.Background ??= new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
+                container.RightTapped += (_, e) =>
+                {
+                    var column = e.GetPosition(container).X > primary.ActualWidth ? 2 : 0;
+                    var shown = _sims.Keys.FirstOrDefault(tab => _views.TryGetValue(tab, out var main) && main.Visibility == Visibility.Visible && Grid.GetColumn(main) == column);
+                    if (shown is null) return;
+                    e.Handled = true;
+                    var point = e.GetPosition(null);
+                    DeviceAreaMenuRequested?.Invoke(shown, point.X, point.Y);
+                };
             }
             _mode[id] = name!;
             var sims = _sims[id] = [new Sim(view, devices[0]) { Landscape = landscape && !devices[0].Desktop }];

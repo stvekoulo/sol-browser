@@ -41,6 +41,7 @@ public sealed class BrowserController
         _pages.Loaded += id => _ = LearnShortcutNameAsync(id);
         _pages.FaviconChanged += (id, data) => { _favicons[id] = data; PostFavicon(id); LearnShortcutIcon(id, data); };
         _pages.ContextMenuRequested += OpenContextMenu;
+        _pages.DeviceAreaMenuRequested += (tabId, x, y) => ShowMenu(x, y, DeviceEntries(tabId, x, y));
         _pages.StatusChanged += (id, text) =>
         {
             if (id == _tabs.ActiveId || _split.Contains(id))
@@ -1015,6 +1016,26 @@ public sealed class BrowserController
         _pages.SetDevice(tabId, PageHost.Comparison);
     }
 
+    // Entrées « simulateur » d'un menu. Chaque action s'exécute une fois le menu refermé (le moteur a alors repris la main).
+    private List<(string Label, Action? Run)> DeviceEntries(string tabId, double x, double y)
+    {
+        var simulated = _pages.DeviceOf(tabId) is not null;
+        List<(string Label, Action? Run)> items =
+        [
+            (simulated ? T("Changer d'appareil…", "Change device…") : T("Voir en mobile…", "View as mobile…"), () => _afterMenu = () =>
+                ShowMenu(x, y,
+                [
+                    .. Device.All.Where(d => !d.Desktop).Select(d => (DeviceLabel(d.Name), (Action?)(() => _afterMenu = () => _pages.SetDevice(tabId, d.Name)))),
+                    ("", null),
+                    (T("Comparer plusieurs écrans", "Compare several screens"), () => _afterMenu = () => _pages.SetDevice(tabId, PageHost.Comparison)),
+                    (T("Choisir les écrans à comparer…", "Choose the screens to compare…"), () => _afterMenu = () => AskComparison(tabId)),
+                ])),
+        ];
+        if (simulated) items.Add((T("Pivoter l'appareil", "Rotate device"), () => _afterMenu = () => _pages.RotateDevice(tabId)));
+        if (simulated) items.Add((T("Revenir à la vue ordinateur", "Back to desktop view"), () => _afterMenu = () => _pages.SetDevice(tabId, null)));
+        return items;
+    }
+
     private void OpenContextMenu(string tabId, double x, double y, Microsoft.Web.WebView2.Core.CoreWebView2ContextMenuRequestedEventArgs e)
     {
         var items = new List<(string Label, Action? Run)>();
@@ -1039,18 +1060,7 @@ public sealed class BrowserController
         }
         if (items.Count > 0 && items[^1].Label != "") items.Add(("", null));
         items.Add((T("Capturer une zone", "Capture an area"), () => Capture("region")));
-        // Simulateur d'appareil : le choix s'ouvre une fois ce menu refermé, quand le moteur a repris la main.
-        var simulated = _pages.DeviceOf(tabId) is not null;
-        items.Add((simulated ? T("Changer d'appareil…", "Change device…") : T("Voir en mobile…", "View as mobile…"), () => _afterMenu = () =>
-            ShowMenu(x, y,
-            [
-                .. Device.All.Where(d => !d.Desktop).Select(d => (DeviceLabel(d.Name), (Action?)(() => _afterMenu = () => _pages.SetDevice(tabId, d.Name)))),
-                ("", null),
-                (T("Comparer plusieurs écrans", "Compare several screens"), () => _afterMenu = () => _pages.SetDevice(tabId, PageHost.Comparison)),
-                (T("Choisir les écrans à comparer…", "Choose the screens to compare…"), () => _afterMenu = () => AskComparison(tabId)),
-            ])));
-        if (simulated) items.Add((T("Pivoter l'appareil", "Rotate device"), () => _afterMenu = () => _pages.RotateDevice(tabId)));
-        if (simulated) items.Add((T("Revenir à la vue ordinateur", "Back to desktop view"), () => _afterMenu = () => _pages.SetDevice(tabId, null)));
+        items.AddRange(DeviceEntries(tabId, x, y));
 
         // Le moteur attend notre réponse : il est toujours libéré à la fermeture du menu, avec ou sans choix.
         e.Handled = true;
