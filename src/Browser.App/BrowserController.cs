@@ -974,6 +974,8 @@ public sealed class BrowserController
         "saveAs", "print", "viewPageSource", "inspectElement",
     ];
 
+    private static string DeviceLabel(string name) => name == "iPhone Fold cover" ? T("iPhone Fold (plié)", "iPhone Fold (folded)") : name;
+
     private void OpenContextMenu(string tabId, double x, double y, Microsoft.Web.WebView2.Core.CoreWebView2ContextMenuRequestedEventArgs e)
     {
         var items = new List<(string Label, Action? Run)>();
@@ -998,13 +1000,11 @@ public sealed class BrowserController
         }
         if (items.Count > 0 && items[^1].Label != "") items.Add(("", null));
         items.Add((T("Capturer une zone", "Capture an area"), () => Capture("region")));
-        // Vue mobile : appliquée une fois le menu refermé, quand le moteur a repris la main.
-        if (_pages.DeviceOf(tabId) is null)
-        {
-            items.Add((T("Voir en mobile (iPhone)", "View as mobile (iPhone)"), () => _afterMenu = () => _pages.SetDevice(tabId, "iPhone")));
-            items.Add((T("Voir en tablette (iPad)", "View as tablet (iPad)"), () => _afterMenu = () => _pages.SetDevice(tabId, "iPad")));
-        }
-        else items.Add((T("Revenir à la vue ordinateur", "Back to desktop view"), () => _afterMenu = () => _pages.SetDevice(tabId, null)));
+        // Simulateur d'appareil : le choix s'ouvre une fois ce menu refermé, quand le moteur a repris la main.
+        var simulated = _pages.DeviceOf(tabId) is not null;
+        items.Add((simulated ? T("Changer d'appareil…", "Change device…") : T("Voir en mobile…", "View as mobile…"), () => _afterMenu = () =>
+            ShowMenu(x, y, Device.All.Select(d => (DeviceLabel(d.Name), (Action?)(() => _afterMenu = () => _pages.SetDevice(tabId, d.Name)))).ToList())));
+        if (simulated) items.Add((T("Revenir à la vue ordinateur", "Back to desktop view"), () => _afterMenu = () => _pages.SetDevice(tabId, null)));
 
         // Le moteur attend notre réponse : il est toujours libéré à la fermeture du menu, avec ou sans choix.
         e.Handled = true;
@@ -1096,7 +1096,7 @@ public sealed class BrowserController
             {
                 id = t.Id, url = t.Url, title = t.Title, pinned = t.Pinned,
                 groupId = t.GroupId,
-                device = _pages.DeviceOf(t.Id), // vue mobile : nom de l'appareil simulé
+                device = _pages.DeviceOf(t.Id) is { } simulated ? DeviceLabel(simulated) : null, // simulateur : appareil affiché
                 zoom = (int)Math.Round(_pages.ZoomOf(t.Id) * 100),
                 loading = _pages.IsLoading(t.Id),
                 canGoBack = _pages.CanGoBack(t.Id),

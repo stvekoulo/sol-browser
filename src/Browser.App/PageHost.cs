@@ -78,7 +78,7 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
             var point = view.TransformToVisual(null).TransformPoint(new Windows.Foundation.Point(e.Location.X, e.Location.Y));
             ContextMenuRequested?.Invoke(tab.Id, point.X, point.Y, e);
         };
-        view.SizeChanged += (_, _) => CornerClip.Set(view, _device.ContainsKey(tab.Id) ? DeviceRadius : 0);
+        view.SizeChanged += (_, _) => ClipToDevice(tab.Id, view);
         core.DownloadStarting += (_, e) => { _downloading.Add(tab.Id); DownloadStarting?.Invoke(tab.Id, e); };
         // Adresse du lien survolé : la bulle du moteur est coupée, le navigateur l'affiche dans son propre design.
         core.Settings.IsStatusBarEnabled = false;
@@ -195,7 +195,8 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
     {
         _asleep.Remove(id);
         _device.Remove(id);
-        if (_frames.Remove(id, out var frame)) container.Children.Remove(frame);
+        _scale.Remove(id);
+        RemoveFrame(id);
         if (!_views.Remove(id, out var view)) return;
         _loading.Remove(id);
         _blurScriptIds.Remove(id);
@@ -235,69 +236,118 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
             view.Visibility = column < 0 ? Visibility.Collapsed : Visibility.Visible;
             if (column >= 0) Grid.SetColumn(view, column);
             if (_frames.TryGetValue(id, out var frame))
-            {
-                frame.Visibility = view.Visibility;
-                if (column >= 0) Grid.SetColumn(frame, column);
-            }
+                foreach (var part in new[] { frame.Below, frame.Above })
+                {
+                    part.Visibility = view.Visibility;
+                    if (column >= 0) Grid.SetColumn(part, column);
+                }
         }
     }
 
-    // Vue mobile : la vue de l'onglet prend la taille d'un appareil, au centre, dans un cadre ; le site reçoit l'agent
-    // de cet appareil, un écran tactile et une fenêtre d'affichage mobile. Rien n'est injecté dans la page.
-    public static readonly IReadOnlyDictionary<string, (int Width, int Height, string UserAgent)> Devices = new Dictionary<string, (int, int, string)>
-    {
-        ["iPhone"] = (393, 852, "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"),
-        ["iPad"] = (820, 1180, "Mozilla/5.0 (iPad; CPU OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"),
-    };
-    private const float DeviceRadius = 34;
-    private readonly Dictionary<string, string> _device = new();
-    private readonly Dictionary<string, Border> _frames = new(); // cadre de l'appareil, dessiné sous la vue
+    // Simulateur d'appareil : la vue de l'onglet prend la taille de l'écran de l'appareil, dans sa coque, le tout à
+    // l'échelle de la fenêtre. Le site reçoit l'agent de l'appareil, un écran tactile, sa taille d'écran et sa densité
+    // de pixels. Rien n'est injecté dans la page.
+    private readonly Dictionary<string, Device> _device = new();
+    private readonly Dictionary<string, double> _scale = new();
+    private readonly Dictionary<string, (FrameworkElement Below, FrameworkElement Above)> _frames = new();
     private string? _desktopUserAgent;
+    private bool _watchingLayout;
 
-    public string? DeviceOf(string id) => _device.GetValueOrDefault(id);
+    public string? DeviceOf(string id) => _device.GetValueOrDefault(id)?.Name;
 
     /// <summary>Affiche l'onglet comme sur l'appareil donné ; null revient à la vue ordinateur. La page est rechargée.</summary>
-    public async void SetDevice(string id, string? device)
+    public void SetDevice(string id, string? name)
     {
         if (!_views.TryGetValue(id, out var view) || view.CoreWebView2 is not { } core) return;
-        if (device is not null && !Devices.ContainsKey(device)) return;
+        var device = name is null ? null : Device.Find(name);
+        if (name is not null && device is null) return;
         _desktopUserAgent ??= core.Settings.UserAgent;
-        if (_frames.Remove(id, out var old)) container.Children.Remove(old);
+        if (device is null) _device.Remove(id);
+        else _device[id] = device;
+        core.Settings.UserAgent = device?.UserAgent ?? _desktopUserAgent;
 
-        if (device is null)
+        // La place disponible change (fenêtre, vue scindée, carte latérale) : l'appareil se remet à l'échelle.
+        if (!_watchingLayout)
         {
-            _device.Remove(id);
-            (view.MaxWidth, view.MaxHeight, view.Margin) = (double.PositiveInfinity, double.PositiveInfinity, new Thickness(0));
+            _watchingLayout = true;
+            container.LayoutUpdated += (_, _) => FitDevices();
         }
-        else
-        {
-            var (width, height, _) = Devices[device];
-            _device[id] = device;
-            // Taille plafonnée, donc centrée. Fenêtre plus petite que l'appareil : l'écran est rogné d'autant, pas réduit
-            // (une vue web ne se met pas à l'échelle).
-            (view.MaxWidth, view.MaxHeight, view.Margin) = (width, height, new Thickness(26));
-            var frame = new Border
-            {
-                MaxWidth = width + 20, MaxHeight = height + 20, Margin = new Thickness(16), CornerRadius = new CornerRadius(DeviceRadius + 10),
-                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 17, 17, 20)),
-                BorderBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 78, 78, 84)),
-                BorderThickness = new Thickness(1.5), Visibility = view.Visibility,
-            };
-            Grid.SetColumn(frame, Grid.GetColumn(view));
-            _frames[id] = frame;
-            container.Children.Insert(container.Children.IndexOf(view), frame);
-        }
-
-        core.Settings.UserAgent = device is null ? _desktopUserAgent : Devices[device].UserAgent;
+        _scale.Remove(id);
+        LayoutDevice(id, view);
         RuntimeChanged?.Invoke();
+        _ = EmulateAsync(id, reload: true);
+    }
+
+    private void RemoveFrame(string id)
+    {
+        if (!_frames.Remove(id, out var frame)) return;
+        container.Children.Remove(frame.Below);
+        container.Children.Remove(frame.Above);
+    }
+
+    // Échelle à laquelle l'appareil entier (coque comprise) tient dans la colonne de la vue.
+    private double FitScale(Device device, WebView2 view)
+    {
+        var width = (Grid.GetColumn(view) == 2 ? secondary : primary).ActualWidth;
+        var scale = Math.Min((width - 36) / device.ShellWidth, (container.ActualHeight - 36) / device.ShellHeight);
+        return Math.Round(Math.Clamp(scale, 0.2, 1), 2);
+    }
+
+    private void FitDevices()
+    {
+        if (_device.Count == 0) return;
+        foreach (var (id, device) in _device.ToList())
+        {
+            if (!_views.TryGetValue(id, out var view) || view.Visibility != Visibility.Visible) continue;
+            if (_scale.TryGetValue(id, out var scale) && scale == FitScale(device, view)) continue;
+            LayoutDevice(id, view);
+            _ = EmulateAsync(id, reload: false);
+        }
+    }
+
+    private void LayoutDevice(string id, WebView2 view)
+    {
+        RemoveFrame(id);
+        if (!_device.TryGetValue(id, out var device))
+        {
+            (view.Width, view.Height, view.HorizontalAlignment, view.VerticalAlignment) = (double.NaN, double.NaN, HorizontalAlignment.Stretch, VerticalAlignment.Stretch);
+            ClipToDevice(id, view);
+            return;
+        }
+        var scale = _scale[id] = FitScale(device, view);
+        (view.Width, view.Height, view.HorizontalAlignment, view.VerticalAlignment) =
+            (Math.Round(device.Width * scale), Math.Round(device.Height * scale), HorizontalAlignment.Center, VerticalAlignment.Center);
+        var frame = _frames[id] = DeviceFrame.Build(device, scale);
+        foreach (var part in new[] { frame.Below, frame.Above })
+        {
+            Grid.SetColumn(part, Grid.GetColumn(view));
+            part.Visibility = view.Visibility;
+        }
+        container.Children.Insert(container.Children.IndexOf(view), frame.Below);     // coque : sous la vue
+        container.Children.Insert(container.Children.IndexOf(view) + 1, frame.Above); // îlot : par-dessus
+        ClipToDevice(id, view);
+    }
+
+    // Coins de l'écran : ceux de l'appareil.
+    private void ClipToDevice(string id, WebView2 view) =>
+        CornerClip.Set(view, _device.TryGetValue(id, out var device) ? (float)(device.Radius * _scale.GetValueOrDefault(id, 1)) : 0);
+
+    private async Task EmulateAsync(string id, bool reload)
+    {
+        if (Core(id) is not { } core) return;
         try
         {
-            var on = device is null ? "false" : "true";
+            var on = _device.TryGetValue(id, out var device) ? "true" : "false";
             await core.CallDevToolsProtocolMethodAsync("Emulation.setTouchEmulationEnabled", $$"""{"enabled":{{on}},"maxTouchPoints":5}""");
             await core.CallDevToolsProtocolMethodAsync("Emulation.setEmitTouchEventsForMouse", $$"""{"enabled":{{on}},"configuration":"mobile"}""");
             if (device is null) await core.CallDevToolsProtocolMethodAsync("Emulation.clearDeviceMetricsOverride", "{}");
-            else await core.CallDevToolsProtocolMethodAsync("Emulation.setDeviceMetricsOverride", """{"width":0,"height":0,"deviceScaleFactor":0,"mobile":true}""");
-            core.Reload();
+            else
+            {
+                var scale = _scale.GetValueOrDefault(id, 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                await core.CallDevToolsProtocolMethodAsync("Emulation.setDeviceMetricsOverride",
+                    $$"""{"width":{{device.Width}},"height":{{device.Height}},"deviceScaleFactor":{{device.PixelRatio}},"mobile":true,"scale":{{scale}}}""");
+            }
+            if (reload) core.Reload();
         }
         catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { /* vue fermée entre-temps */ }
     }
