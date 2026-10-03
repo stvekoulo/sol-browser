@@ -44,6 +44,7 @@ public sealed class BrowserController
         _pages.Loaded += RecordVisit;
         _pages.Discarded += id => { _restored.Add(id); Refresh(); }; // son rechargement ne sera pas une nouvelle visite
         _pages.KeepAwake = id => _split.Contains(id);
+        _pages.PipReturnRequested += id => { Activate(id); Refresh(); };
         _pages.Loaded += id => _ = LearnShortcutNameAsync(id);
         _pages.FaviconChanged += (id, data) => { _favicons[id] = data; PostFavicon(id); LearnShortcutIcon(id, data); };
         _pages.ContextMenuRequested += OpenContextMenu;
@@ -364,7 +365,8 @@ public sealed class BrowserController
         },
         items = new[]
         {
-            new { key = "blocker", label = T("Bloquer les publicités et les traqueurs", "Block ads and trackers"), hint = AdBlock.ExtensionId is null ? T("Liste de domaines connus, mise à jour chaque semaine", "List of known domains, updated weekly") : T("Avec uBlock Origin Lite, intégré au navigateur", "With uBlock Origin Lite, built into the browser"), on = _settings.BlockAds },
+            new { key = "blocker", label = T("Bloquer les publicités et les traqueurs", "Block ads and trackers"), hint = AdBlock.ExtensionId is null ? T("uBlock Origin Lite est absent : rien n'est bloqué", "uBlock Origin Lite is missing: nothing is blocked") : T("Avec uBlock Origin Lite, intégré au navigateur", "With uBlock Origin Lite, built into the browser"), on = _settings.BlockAds },
+            new { key = "pip", label = T("Lecteur flottant", "Floating player"), hint = T("En quittant un onglet où une vidéo joue, elle reste à l'écran", "Leaving a tab with a playing video keeps it on screen"), on = _settings.AutoPip },
             new { key = "memory", label = T("Économie de mémoire", "Memory saver"), hint = MemoryHint(), on = _settings.MemorySaver },
             new { key = "scrollbars", label = T("Barre de défilement fine", "Thin scrollbar"), hint = T("Apparaît seulement pendant le défilement", "Only appears while scrolling"), on = !_settings.HideScrollbars },
             new { key = "blur", label = T("Flou progressif en bas des pages", "Progressive blur at the bottom of pages"), hint = "", on = _settings.BlurEnabled },
@@ -471,6 +473,7 @@ public sealed class BrowserController
                 _settings.BlockAds = on;
                 if (_tabs.ActiveId is { } shown && _pages.CoreOf(shown) is { } shownCore) _ = AdBlock.ApplyExtensionAsync(shownCore.Profile, on);
                 break;
+            case "pip": _settings.AutoPip = on; if (!on) _pages.ExitPip(pause: false); break;
             case "memory": _settings.MemorySaver = on; break;
             case "scrollbars": _settings.HideScrollbars = !on; break;
             case "blur": _settings.BlurEnabled = on; break;
@@ -1233,10 +1236,20 @@ public sealed class BrowserController
         });
     }
 
+    private string? _lastActive;
+
     private void Refresh()
     {
         var showSplit = _split.Contains(_tabs.ActiveId);
         FollowNetwork();
+        // On vient de quitter un onglet : s'il joue une vidéo, elle reste à l'écran dans le lecteur flottant.
+        if (_lastActive != _tabs.ActiveId)
+        {
+            var left = _lastActive;
+            _lastActive = _tabs.ActiveId;
+            if (_settings.AutoPip && left is not null && !(showSplit && _split.Contains(left)) && _tabs.Tabs.Any(t => t.Id == left))
+                _ = _pages.TryEnterPipAsync(left);
+        }
         _pages.ApplyLayout(showSplit ? _split.PrimaryId : _tabs.ActiveId, showSplit ? _split.SecondaryId : null, _split.Ratio);
         _bridge.Post(JsonSerializer.Serialize(new
         {
@@ -1255,7 +1268,7 @@ public sealed class BrowserController
             groups = _tabs.Groups.Select(g => new { id = g.Id, name = g.Name, color = g.Color, icon = g.Icon, collapsed = g.Collapsed }),
             activeId = _tabs.ActiveId,
             privateMode = AppPaths.Private, // fenêtre de navigation privée
-            shield = _settings.BlockAds, // blocage des publicités et des traqueurs en service
+            shield = _settings.BlockAds && AdBlock.ExtensionId is not null && !AppPaths.Private, // blocage des publicités et des traqueurs en service
             shortcuts = _settings.Shortcuts.Select(s => new { url = s.Url, name = s.Name, icon = s.Icon, tabId = _shortcutTabs.GetValueOrDefault(s) }),
             profile = ProfileName(AppPaths.Profile),
             split = new { primaryId = _split.PrimaryId, secondaryId = _split.SecondaryId, ratio = _split.Ratio, visible = showSplit },

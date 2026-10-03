@@ -224,7 +224,7 @@ function AddressPill({ tab, focused, grow, shield }: { tab: Tab | undefined; foc
     <div ref={pillRef} className={`address-pill${focused ? ' focused' : ''}${editing ? ' editing' : ''}`} style={{ flexGrow: grow }}>
       <span
         className={`address-lead${shield ? '' : ' unshielded'}`}
-        title={shield ? t('Publicités et traqueurs bloqués', 'Ads and trackers blocked') : t('Blocage des publicités coupé (Réglages)', 'Ad blocking is off (Settings)')}
+        title={shield ? t('Publicités et traqueurs bloqués', 'Ads and trackers blocked') : t('Publicités non bloquées (réglage coupé, ou fenêtre privée)', 'Ads are not blocked (setting off, or private window)')}
       >
         {tab?.loading ? <span className="spinner" /> : <ShieldIcon />}
       </span>

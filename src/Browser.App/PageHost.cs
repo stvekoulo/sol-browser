@@ -6,7 +6,7 @@ using Microsoft.Web.WebView2.Core;
 namespace Browser.App;
 
 /// <summary>Une WebView2 par onglet. Aucun canal vers l'hôte n'est ouvert sur ces vues.</summary>
-public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDefinition divider, ColumnDefinition secondary, string blurScript, Settings settings)
+public sealed partial class PageHost(Grid container, ColumnDefinition primary, ColumnDefinition divider, ColumnDefinition secondary, string blurScript, Settings settings)
 {
     private readonly Dictionary<string, WebView2> _views = new();
     private readonly Dictionary<string, string> _blurScriptIds = new(); // vues où le flou est installé
@@ -32,8 +32,8 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
 
     public void AddAsleep(Tab tab) => _asleep[tab.Id] = tab;
 
-    // Fenêtre privée : le moteur ne garde rien sur le disque (cookies, cache, historique) et n'y charge pas les
-    // extensions ; le blocage propre au navigateur prend alors le relais.
+    // Fenêtre privée : le moteur ne garde rien sur le disque (cookies, cache, historique). Il n'y charge pas les
+    // extensions : les publicités n'y sont donc pas bloquées.
     private static async Task StartEngineAsync(WebView2 view)
     {
         var environment = await AdBlock.EnvironmentAsync();
@@ -53,8 +53,6 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
 
         var core = view.CoreWebView2;
         Harden(core);
-        if (AppPaths.Private || !await AdBlock.ExtensionInstalled) Shield(core);
-        if (!_views.ContainsKey(tab.Id)) return;
         await ApplySettingsAsync(tab.Id, core);
         if (!_views.ContainsKey(tab.Id)) return;
 
@@ -214,27 +212,11 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
         };
     }
 
-    // Blocage propre au navigateur, posé seulement quand uBlock Origin Lite manque : une requête vers un domaine de la
-    // liste, venue d'un autre site, reçoit une réponse vide au lieu de partir sur le réseau. (Avec l'extension, ce
-    // filtre ferait passer chaque requête par le navigateur pour rien.)
-    public BlockList? Blocker { get; set; }
-
-    private void Shield(CoreWebView2 core)
-    {
-        core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
-        core.WebResourceRequested += (_, e) =>
-        {
-            if (!settings.BlockAds || Blocker is not { } list) return;
-            // Un document passe toujours : c'est la page que l'utilisateur ouvre (ou un cadre, laissé à ses propres requêtes).
-            if (e.ResourceContext == CoreWebView2WebResourceContext.Document) return;
-            if (list.Blocks(e.Request.Uri, core.Source)) e.Response = core.Environment.CreateWebResourceResponse(null, 403, "Blocked", "");
-        };
-    }
-
     public void Remove(string id)
     {
         _asleep.Remove(id);
         _hiddenSince.Remove(id);
+        if (_pip == id) ExitPip(pause: false);
         if (_views.TryGetValue(id, out var closing)) ClearSims(id, closing);
         if (!_views.Remove(id, out var view)) return;
         _loading.Remove(id);
@@ -274,8 +256,11 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
         primary.Width = new GridLength(split ? ratio : 1, GridUnitType.Star);
         divider.Width = new GridLength(split ? 8 : 0);
         secondary.Width = split ? new GridLength(1 - ratio, GridUnitType.Star) : new GridLength(0);
+        // L'onglet du lecteur flottant redevient l'onglet affiché : il reprend sa place.
+        if (_pip is not null && (_pip == activeId || _pip == secondaryId)) ExitPip(pause: false);
         foreach (var (id, view) in _views)
         {
+            if (id == _pip) continue; // lecteur flottant : sa vue reste affichée, là où il l'a posée
             var column = id == activeId ? 0 : split && id == secondaryId ? 2 : -1;
             view.Visibility = column < 0 ? Visibility.Collapsed : Visibility.Visible;
             if (column >= 0) Grid.SetColumn(view, column);
@@ -439,7 +424,6 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
         await StartEngineAsync(view);
         var core = view.CoreWebView2;
         Harden(core);
-        if (AppPaths.Private || !await AdBlock.ExtensionInstalled) Shield(core);
         core.Settings.AreDefaultContextMenusEnabled = false;
         core.Settings.IsStatusBarEnabled = false;
         core.NewWindowRequested += (_, e) => { e.Handled = true; NewTabRequested?.Invoke(e.Uri); };

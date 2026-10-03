@@ -12,8 +12,3 @@
 
 Le navigateur et l'extension sont deux programmes distincts : l'extension s'exécute dans le moteur web, par l'interface
 d'extensions de celui-ci.
-
-## Liste de domaines de Peter Lowe
-
-- Rôle : liste de secours utilisée par le blocage propre au navigateur quand l'extension est absente.
-- Source : <https://pgl.yoyo.org/adservers/>. Téléchargée par le navigateur, non livrée avec lui.

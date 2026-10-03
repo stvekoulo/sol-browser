@@ -34,6 +34,10 @@ public sealed class Settings
     public bool BlockAds { get; set; } = true;
     /// <summary>Met en veille les onglets inactifs, puis les décharge de la mémoire s'ils le restent longtemps.</summary>
     public bool MemorySaver { get; set; } = true;
+    /// <summary>Quitter un onglet où une vidéo joue la garde à l'écran dans un lecteur flottant.</summary>
+    public bool AutoPip { get; set; } = true;
+    /// <summary>Largeur du lecteur flottant, réglée par l'utilisateur.</summary>
+    public double PipWidth { get; set; } = 392;
     /// <summary>Largeur de la carte latérale, réglée en tirant son bord droit.</summary>
     public double SidebarWidth { get; set; } = 296;
     /// <summary>Écrans affichés côte à côte par la comparaison d'écrans ; vide : le choix par défaut.</summary>

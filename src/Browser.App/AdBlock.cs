@@ -7,49 +7,13 @@ using Microsoft.Web.WebView2.Core;
 namespace Browser.App;
 
 /// <summary>
-/// Blocage des publicités et des traqueurs.
-/// - uBlock Origin Lite (extension libre, GPLv3) est livré avec le navigateur, copié dans le dossier de données commun
-///   aux profils, installé dans chaque profil au démarrage et mis à jour depuis son dépôt officiel.
-/// - S'il manque ou est refusé, le navigateur bloque lui-même une liste de domaines (voir <see cref="BlockList"/>).
+/// Blocage des publicités et des traqueurs : uBlock Origin Lite (extension libre, GPLv3), livré avec le navigateur,
+/// copié dans le dossier de données commun aux profils, installé dans chaque profil au démarrage et mis à jour depuis
+/// son dépôt officiel. Le navigateur n'a pas de blocage à lui : sans l'extension, rien n'est bloqué.
 /// </summary>
 public static class AdBlock
 {
-    // ---------- Liste de domaines du navigateur (solution de repli)
-
-    // Liste de Peter Lowe (pgl.yoyo.org) : quelques milliers de domaines de publicité et de pistage, un par ligne.
-    private const string Source = "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=nohtml&showintro=0&mimetype=plaintext";
-    private const int MinDomains = 1000, MaxBytes = 5_000_000;
     private static readonly TimeSpan MaxAge = TimeSpan.FromDays(7);
-    private static string Cache => Path.Combine(AppPaths.BaseDir, "blocklist.txt");
-
-    public static BlockList Load()
-    {
-        IEnumerable<string> downloaded = [];
-        try { if (File.Exists(Cache)) downloaded = BlockList.Parse(File.ReadAllText(Cache)).ToList(); }
-        catch (IOException) { /* fichier illisible : la liste livrée suffit */ }
-        return new BlockList(BlockList.BuiltIn.Concat(downloaded));
-    }
-
-    /// <summary>Télécharge la liste si celle de l'ordinateur manque ou a plus d'une semaine. Null : rien de nouveau.</summary>
-    public static async Task<BlockList?> UpdateAsync()
-    {
-        try
-        {
-            if (File.Exists(Cache) && DateTime.UtcNow - File.GetLastWriteTimeUtc(Cache) < MaxAge) return null;
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(20), MaxResponseContentBufferSize = MaxBytes };
-            var text = await http.GetStringAsync(Source);
-            // Une réponse qui ne ressemble pas à la liste attendue (page d'erreur, liste vidée) ne remplace rien.
-            var domains = BlockList.Parse(text).Distinct().ToList();
-            if (domains.Count < MinDomains) return null;
-            Directory.CreateDirectory(AppPaths.BaseDir);
-            File.WriteAllLines(Cache, domains);
-            return Load();
-        }
-        catch (Exception e) when (e is HttpRequestException or TaskCanceledException or IOException or UnauthorizedAccessException)
-        {
-            return null; // hors ligne ou disque refusé : on garde la liste en place
-        }
-    }
 
     // ---------- Moteur
 
