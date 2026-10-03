@@ -111,12 +111,15 @@
   background: var(--bg-pill-solid-hover);
   box-shadow: var(--shadow-pill-elevated);
 }
+/* Action de fermeture survolée : fond rouge plein et texte blanc, lisible quelle que soit la teinte du site
+   (du rouge sur un menu teinté par un site rouge ne se lisait pas). */
 .row.danger:hover {
-  color: #e5484d;
+  background: #d93d42;
+  color: #ffffff;
 }
 .row.danger:hover .row-badge {
-  background: rgba(229, 72, 77, 0.12);
-  color: #e5484d;
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
 }
 
 .row-badge {
