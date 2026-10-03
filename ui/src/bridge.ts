@@ -7,6 +7,7 @@ export type Tab = {
   title: string;
   pinned: boolean;
   groupId: string | null;
+  blocked: number; // publicités et traqueurs bloqués sur la page
   device: string | null; // simulateur : nom de l'appareil affiché
   zoom: number; // en pour cent
   loading: boolean;

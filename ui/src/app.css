@@ -188,3 +188,6 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   animation: spin 0.65s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Nombre de publicités et de traqueurs bloqués, à côté du bouclier. */
+.blocked-count { margin-left: 3px; font-size: 10.5px; font-weight: 600; color: var(--text-dim); font-variant-numeric: tabular-nums; }

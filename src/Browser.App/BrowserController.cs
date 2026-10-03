@@ -351,6 +351,7 @@ public sealed class BrowserController
         },
         items = new[]
         {
+            new { key = "blocker", label = T("Bloquer les publicités et les traqueurs", "Block ads and trackers"), hint = T("Liste de domaines connus, mise à jour chaque semaine", "List of known domains, updated weekly"), on = _settings.BlockAds },
             new { key = "scrollbars", label = T("Barre de défilement fine", "Thin scrollbar"), hint = T("Apparaît seulement pendant le défilement", "Only appears while scrolling"), on = !_settings.HideScrollbars },
             new { key = "blur", label = T("Flou progressif en bas des pages", "Progressive blur at the bottom of pages"), hint = "", on = _settings.BlurEnabled },
             new { key = "floatingDownloads", label = T("Téléchargements en bas à droite", "Downloads at the bottom right"), hint = T("Sinon, uniquement dans le panneau de la barre", "Otherwise, only in the toolbar panel"), on = _settings.FloatingDownloads },
@@ -430,6 +431,7 @@ public sealed class BrowserController
     {
         switch (key)
         {
+            case "blocker": _settings.BlockAds = on; break;
             case "scrollbars": _settings.HideScrollbars = !on; break;
             case "blur": _settings.BlurEnabled = on; break;
             case "floatingDownloads": _settings.FloatingDownloads = on; break;
@@ -1194,6 +1196,7 @@ public sealed class BrowserController
             {
                 id = t.Id, url = t.Url, title = t.Title, pinned = t.Pinned,
                 groupId = t.GroupId,
+                blocked = _pages.BlockedOn(t.Id), // publicités et traqueurs bloqués sur cette page
                 device = _pages.DeviceOf(t.Id) is { } simulated ? DeviceLabel(simulated) : null, // simulateur : appareil affiché
                 zoom = (int)Math.Round(_pages.ZoomOf(t.Id) * 100),
                 loading = _pages.IsLoading(t.Id),

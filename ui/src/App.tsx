@@ -216,8 +216,12 @@ function AddressPill({ tab, focused, grow }: { tab: Tab | undefined; focused: bo
 
   return (
     <div ref={pillRef} className={`address-pill${focused ? ' focused' : ''}${editing ? ' editing' : ''}`} style={{ flexGrow: grow }}>
-      <span className="address-lead" aria-hidden>
+      <span
+        className="address-lead"
+        title={tab?.blocked ? t(`${tab.blocked} publicité${tab.blocked > 1 ? 's' : ''} ou traqueur${tab.blocked > 1 ? 's' : ''} bloqué${tab.blocked > 1 ? 's' : ''} sur cette page`, `${tab.blocked} ad${tab.blocked > 1 ? 's' : ''} or tracker${tab.blocked > 1 ? 's' : ''} blocked on this page`) : undefined}
+      >
         {tab?.loading ? <span className="spinner" /> : <ShieldIcon />}
+        {!!tab?.blocked && <span className="blocked-count">{tab.blocked > 99 ? '99+' : tab.blocked}</span>}
       </span>
 
       <form

@@ -69,6 +69,12 @@ public sealed partial class MainWindow : Window
         if (args.Contains("--maximized") && AppWindow.Presenter is OverlappedPresenter presenter) presenter.Maximize();
     }
 
+    // La liste de blocage se met à jour en arrière-plan, sans retarder le démarrage ; jamais si le blocage est coupé.
+    private static async Task RefreshBlockListAsync(PageHost pages, Settings settings)
+    {
+        if (settings.BlockAds && await AdBlock.UpdateAsync() is { } fresh) pages.Blocker = fresh;
+    }
+
     private async Task InitAsync()
     {
         var settings = JsonFileStore.Load<Settings>(AppPaths.Settings);
@@ -76,6 +82,8 @@ public sealed partial class MainWindow : Window
 
         UiBridge.Settings = settings;
         var pages = new PageHost(Pages, PrimaryColumn, DividerColumn, SecondaryColumn, blur, settings);
+        pages.Blocker = AdBlock.Load();
+        _ = RefreshBlockListAsync(pages, settings);
         var bridge = new UiBridge(Ui, "index.html", Sidebar, SidebarColumn, pages);
         _bridge = bridge;
         UiBridge.SystemColorsChanged += () => DispatcherQueue.TryEnqueue(bridge.BroadcastTheme);
