@@ -124,10 +124,10 @@ public sealed class CaptureService(Window window)
         var picker = new FileSavePicker
         {
             SuggestedStartLocation = PickerLocationId.PicturesLibrary,
-            SuggestedFileName = $"Capture {(name.Length > 0 ? name : "de page")} {DateTime.Now:yyyy-MM-dd HH.mm.ss}",
+            SuggestedFileName = $"Capture {(name.Length > 0 ? name : Language.T("de page", "page"))} {DateTime.Now:yyyy-MM-dd HH.mm.ss}",
         };
-        picker.FileTypeChoices.Add("Image PNG", [".png"]);
-        picker.FileTypeChoices.Add("Document PDF", [".pdf"]);
+        picker.FileTypeChoices.Add(Language.T("Image PNG", "PNG image"), [".png"]);
+        picker.FileTypeChoices.Add(Language.T("Document PDF", "PDF document"), [".pdf"]);
         WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(window));
         return await picker.PickSaveFileAsync() is { } file ? [file.Path] : [];
     }

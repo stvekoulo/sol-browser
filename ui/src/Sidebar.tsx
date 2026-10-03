@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { onState, send, type State, type Tab } from './bridge';
-import { CopyIcon, GoogleLogo, Icon, LockIcon, XLogo, YoutubeLogo } from './Icons';
+import { formatDomain, onState, send, type State, type Tab } from './bridge';
+import { t, useLang } from './i18n';
+import { CopyIcon, DevBeninLogo, GithubLogo, Icon, LockIcon, YoutubeLogo } from './Icons';
 import { startSlotDrag, useVerticalDrag } from './useVerticalDrag';
 
 type Icons = Record<string, string | null | undefined>;
@@ -18,6 +19,7 @@ export default function Sidebar() {
   const [urlText, setUrlText] = useState('');
   const [editingUrl, setEditingUrl] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  useLang();
 
   useEffect(() => {
     const off = onState(setState, e => {
@@ -44,7 +46,6 @@ export default function Sidebar() {
   useVerticalDrag();
 
   if (!state) return null;
-  const pinnedTabs = state.tabs.filter(t => t.pinned);
   const { tabs, split, activeId } = state;
 
   const copyUrl = () => {
@@ -91,7 +92,7 @@ export default function Sidebar() {
           <button
             className="tab-group-header"
             aria-expanded={!group.collapsed}
-            title={group.collapsed ? `Déplier « ${group.name} »` : `Replier « ${group.name} »`}
+            title={group.collapsed ? t(`Déplier « ${group.name} »`, `Expand “${group.name}”`) : t(`Replier « ${group.name} »`, `Collapse “${group.name}”`)}
             onClick={() => send({ type: 'group.toggle', id: group.id })}
             onContextMenu={e => {
               e.preventDefault();
@@ -113,7 +114,7 @@ export default function Sidebar() {
   }
 
   return (
-    <aside key={motion.run} className={`sidebar-card ${motion.way}`} aria-label="Panneau latéral des onglets">
+    <aside key={motion.run} className={`sidebar-card ${motion.way}`} aria-label={t('Panneau latéral des onglets', 'Tabs sidebar')}>
       <div className="sidebar-url-pill">
         <LockIcon />
         <form
@@ -126,7 +127,7 @@ export default function Sidebar() {
         >
           <input
             ref={inputRef}
-            aria-label="Adresse complète"
+            aria-label={t('Adresse complète', 'Full address')}
             placeholder="https://..."
             spellCheck={false}
             value={urlText}
@@ -146,16 +147,16 @@ export default function Sidebar() {
         </form>
         <button
           className={`sidebar-url-btn${copied ? ' copied' : ''}`}
-          aria-label="Copier l'adresse"
-          title={copied ? 'Adresse copiée' : "Copier l'adresse"}
+          aria-label={t("Copier l'adresse", 'Copy address')}
+          title={copied ? t('Adresse copiée', 'Address copied') : t("Copier l'adresse", 'Copy address')}
           onClick={copyUrl}
         >
           {copied ? <Icon d="M3.5 8.5l3 3 6-6.5" size={14} /> : <CopyIcon />}
         </button>
         <button
           className="sidebar-url-btn"
-          aria-label="Effacer ou saisir une adresse"
-          title="Saisir une nouvelle adresse"
+          aria-label={t('Effacer ou saisir une adresse', 'Clear or enter an address')}
+          title={t('Saisir une nouvelle adresse', 'Enter a new address')}
           onClick={() => {
             setEditingUrl(true);
             setUrlText('');
@@ -166,13 +167,13 @@ export default function Sidebar() {
         </button>
       </div>
 
-      <PinnedStrip pinnedTabs={pinnedTabs} icons={icons} activeId={activeId} />
+      <PinnedStrip tabs={tabs} icons={icons} activeId={activeId} />
 
       <div className="sidebar-tabs" role="tablist" aria-orientation="vertical">
         {normalItems}
         <button className="sidebar-new-tab" onClick={() => send({ type: 'tab.open' })}>
           <Icon d="M8 3.5v9M3.5 8h9" size={14} />
-          <span>Nouvel onglet</span>
+          <span>{t('Nouvel onglet', 'New tab')}</span>
         </button>
       </div>
 
@@ -185,58 +186,74 @@ export default function Sidebar() {
   );
 }
 
-// Rangée de pilules épinglées (ou raccourcis Google / X / Youtube par défaut comme sur la maquette).
-function PinnedStrip({ pinnedTabs, icons, activeId }: { pinnedTabs: Tab[]; icons: Icons; activeId: string | null }) {
-  if (pinnedTabs.length === 0) {
-    const go = (url: string, middle: boolean) =>
-      middle || !activeId ? send({ type: 'tab.open', url }) : send({ type: 'nav.go', id: activeId, input: url });
-    return (
-      <div className="pinned-row" aria-label="Accès rapides">
-        <button className="pinned-pill circle" title="Google" onMouseDown={e => e.button <= 1 && go('https://www.google.com', e.button === 1)}>
-          <GoogleLogo />
-        </button>
-        <button className="pinned-pill circle" title="X" onMouseDown={e => e.button <= 1 && go('https://x.com', e.button === 1)}>
-          <XLogo />
-        </button>
-        <button className="pinned-pill wide" title="YouTube" onMouseDown={e => e.button <= 1 && go('https://www.youtube.com', e.button === 1)}>
-          <YoutubeLogo />
-          <span>Youtube</span>
-        </button>
-      </div>
-    );
-  }
+// Raccourcis proposés par défaut : toujours là, que l'utilisateur ait épinglé des onglets ou non.
+const SHORTCUTS = [
+  { name: 'GitHub', url: 'https://github.com', Logo: GithubLogo },
+  { name: 'YouTube', url: 'https://www.youtube.com', Logo: YoutubeLogo },
+  { name: 'DevBenin', url: 'https://devbenin.bj', Logo: DevBeninLogo },
+];
 
+// Deux rangées de pilules : les raccourcis par défaut, puis les onglets épinglés par l'utilisateur.
+function PinnedStrip({ tabs, icons, activeId }: { tabs: Tab[]; icons: Icons; activeId: string | null }) {
+  const pinnedTabs = tabs.filter(tab => tab.pinned);
+  const activeDomain = formatDomain(tabs.find(tab => tab.id === activeId)?.url ?? '');
   return (
-    <div className="pinned-row" aria-label="Onglets épinglés">
-      {pinnedTabs.map((tab, idx) => {
-        const wide = idx === pinnedTabs.length - 1 && pinnedTabs.length <= 3;
-        const label = tab.title && tab.title !== 'about:blank' ? tab.title.split(' - ')[0].split(' · ')[0] : 'Épinglé';
-        const icon = icons[tab.id];
-        return (
-          <button
-            key={tab.id}
-            className={`pinned-pill ${wide ? 'wide' : 'circle'}${tab.id === activeId ? ' active' : ''}`}
-            title={tab.title || tab.url}
-            onContextMenu={e => {
-              e.preventDefault();
-              send({ type: 'tab.menu', id: tab.id, x: e.clientX + OFFSET_X, y: e.clientY + OFFSET_Y });
-            }}
-            onMouseDown={e => {
-              if (e.button === 0) send({ type: 'tab.activate', id: tab.id });
-              if (e.button === 1) send({ type: 'tab.close', id: tab.id });
-            }}
-          >
-            {icon ? <img className="favicon" src={icon} alt="" draggable={false} /> : <span className="favicon letter">{label[0]?.toUpperCase()}</span>}
-            {wide && <span>{label}</span>}
-          </button>
-        );
-      })}
-    </div>
+    <>
+      <div className="pinned-row" aria-label={t('Accès rapides', 'Shortcuts')}>
+        {SHORTCUTS.map(({ name, url, Logo }, idx) => {
+          const domain = formatDomain(url);
+          // Le site est déjà ouvert : on y retourne. Sinon il s'ouvre dans un nouvel onglet, sans remplacer la page en cours.
+          const open = tabs.find(tab => formatDomain(tab.url) === domain);
+          const wide = idx === SHORTCUTS.length - 1;
+          return (
+            <button
+              key={url}
+              className={`pinned-pill ${wide ? 'wide' : 'circle'}${activeDomain === domain ? ' active' : ''}`}
+              title={name}
+              onMouseDown={e => {
+                if (e.button === 0) send(open ? { type: 'tab.activate', id: open.id } : { type: 'tab.open', url });
+                if (e.button === 1) send({ type: 'tab.open', url });
+              }}
+            >
+              <Logo />
+              {wide && <span>{name}</span>}
+            </button>
+          );
+        })}
+      </div>
+      {pinnedTabs.length > 0 && (
+        <div className="pinned-row" aria-label={t('Onglets épinglés', 'Pinned tabs')}>
+          {pinnedTabs.map((tab, idx) => {
+            const wide = idx === pinnedTabs.length - 1 && pinnedTabs.length <= 3;
+            const label = tab.title && tab.title !== 'about:blank' ? tab.title.split(' - ')[0].split(' · ')[0] : t('Épinglé', 'Pinned');
+            const icon = icons[tab.id];
+            return (
+              <button
+                key={tab.id}
+                className={`pinned-pill ${wide ? 'wide' : 'circle'}${tab.id === activeId ? ' active' : ''}`}
+                title={tab.title || tab.url}
+                onContextMenu={e => {
+                  e.preventDefault();
+                  send({ type: 'tab.menu', id: tab.id, x: e.clientX + OFFSET_X, y: e.clientY + OFFSET_Y });
+                }}
+                onMouseDown={e => {
+                  if (e.button === 0) send({ type: 'tab.activate', id: tab.id });
+                  if (e.button === 1) send({ type: 'tab.close', id: tab.id });
+                }}
+              >
+                {icon ? <img className="favicon" src={icon} alt="" draggable={false} /> : <span className="favicon letter">{label[0]?.toUpperCase()}</span>}
+                {wide && <span>{label}</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </>
   );
 }
 
 function SidebarTabRow({ tab, index, icon, active, grouped = false }: { tab: Tab; index: number; icon: string | null | undefined; active: boolean; grouped?: boolean }) {
-  const label = tab.title && tab.title !== 'about:blank' ? tab.title : 'Nouvel onglet';
+  const label = tab.title && tab.title !== 'about:blank' ? tab.title : t('Nouvel onglet', 'New tab');
   const slot = grouped ? {} : { 'data-slot-id': tab.id, 'data-slot-first': index, 'data-slot-last': index };
 
   return (
@@ -268,7 +285,7 @@ function SidebarTabRow({ tab, index, icon, active, grouped = false }: { tab: Tab
       <span className="sidebar-tab-title">{label}</span>
       <button
         className="sidebar-tab-close"
-        aria-label={`Fermer ${label}`}
+        aria-label={t(`Fermer ${label}`, `Close ${label}`)}
         onMouseDown={e => e.stopPropagation()}
         onClick={e => {
           e.stopPropagation();

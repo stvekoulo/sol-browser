@@ -1,3 +1,5 @@
+import { setLang } from './i18n';
+
 // Canal avec l'hôte C#. Les types de commandes sont ceux validés par CommandParser côté hôte.
 export type Tab = {
   id: string;
@@ -62,6 +64,7 @@ export type HostEvent = {
   dark?: boolean;
   accent?: string | null;
   mode?: 'page' | 'light' | 'dark' | 'system';
+  lang?: string; // langue de l'interface, choisie par l'hôte
   systemDark?: boolean; // thème de Windows, lu par l'hôte
   tint?: { topbar: boolean; sidebar: boolean; menus: boolean; background: boolean };
 };
@@ -93,6 +96,7 @@ export function onMessage(callback: (data: unknown) => void) {
   const handler = (e: MessageEvent) => {
     const ev = e.data as HostEvent | null;
     if (ev && ev.event === 'theme' && ev.bg) {
+      setLang(ev.lang);
       applyTheme(ev);
       return;
     }

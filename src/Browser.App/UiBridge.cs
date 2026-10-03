@@ -113,7 +113,7 @@ public sealed class UiBridge(WebView2 view, string page = "index.html", WebView2
         var on = Settings;
         s_lastThemeMsg = JsonSerializer.Serialize(new
         {
-            @event = "theme", bg, dark, accent, mode = on?.Theme ?? "page", systemDark = IsSystemDark(),
+            @event = "theme", bg, dark, accent, mode = on?.Theme ?? "page", systemDark = IsSystemDark(), lang = Language.Current,
             tint = new { topbar = on?.TintTopbar ?? true, sidebar = on?.TintSidebar ?? true, menus = on?.TintMenus ?? true, background = on?.TintBackground ?? true },
         });
         view.CoreWebView2?.PostWebMessageAsJson(s_lastThemeMsg);

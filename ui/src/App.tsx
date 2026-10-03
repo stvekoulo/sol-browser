@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { formatDomain, onMessage, onState, send, type State, type Tab } from './bridge';
+import { t, useLang } from './i18n';
 import { Icon, ShieldIcon, SidebarIcon } from './Icons';
 
 // Pression sur le fond de la barre, en attente d'un mouvement pour déplacer la fenêtre.
@@ -8,6 +9,7 @@ let dragArmed: { x: number; y: number } | null = null;
 export default function App() {
   const [state, setState] = useState<State | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  useLang();
 
   useEffect(() => {
     const off = onState(setState, e => {
@@ -55,20 +57,20 @@ export default function App() {
     <header className="topbar" onMouseDown={dragWindow} onDoubleClick={maximize}>
       <div className="topbar-left" onMouseDown={dragWindow}>
         <div className="lights">
-          <button className="light close" aria-label="Fermer" onClick={() => send({ type: 'window.close' })} />
-          <button className="light minimize" aria-label="Réduire" onClick={() => send({ type: 'window.minimize' })} />
+          <button className="light close" aria-label={t('Fermer', 'Close')} onClick={() => send({ type: 'window.close' })} />
+          <button className="light minimize" aria-label={t('Réduire', 'Minimize')} onClick={() => send({ type: 'window.minimize' })} />
           <button
             className="light maximize"
-            aria-label={state.maximized ? 'Restaurer' : 'Agrandir'}
+            aria-label={state.maximized ? t('Restaurer', 'Restore') : t('Agrandir', 'Maximize')}
             onClick={() => send({ type: 'window.maximize' })}
           />
         </div>
 
         <button
           className={`pill-surface sidebar-toggle${sidebarOpen ? ' active' : ''}`}
-          aria-label={sidebarOpen ? 'Masquer les onglets' : 'Afficher les onglets'}
+          aria-label={sidebarOpen ? t('Masquer les onglets', 'Hide tabs') : t('Afficher les onglets', 'Show tabs')}
           aria-pressed={sidebarOpen}
-          title={sidebarOpen ? 'Masquer le panneau latéral' : 'Afficher le panneau latéral'}
+          title={sidebarOpen ? t('Masquer le panneau latéral', 'Hide sidebar') : t('Afficher le panneau latéral', 'Show sidebar')}
           onClick={() => send({ type: 'sidebar.toggle' })}
         >
           <SidebarIcon />
@@ -77,7 +79,7 @@ export default function App() {
         <div className="pill-surface nav-segment" role="group" aria-label="Navigation">
           <button
             className="segment-btn"
-            aria-label="Précédent"
+            aria-label={t('Précédent', 'Back')}
             disabled={!activeTab?.canGoBack}
             onClick={() => activeTab && send({ type: 'nav.back', id: activeTab.id })}
           >
@@ -86,7 +88,7 @@ export default function App() {
           <span className="segment-divider" aria-hidden />
           <button
             className="segment-btn"
-            aria-label="Suivant"
+            aria-label={t('Suivant', 'Forward')}
             disabled={!activeTab?.canGoForward}
             onClick={() => activeTab && send({ type: 'nav.forward', id: activeTab.id })}
           >
@@ -110,8 +112,8 @@ export default function App() {
         {state.downloads.count > 0 && !state.downloads.docked && (
           <button
             className={`pill-icon-btn${state.downloads.active > 0 ? ' on' : ''}`}
-            aria-label={state.downloads.active > 0 ? 'Téléchargements (en cours)' : 'Téléchargements'}
-            title="Téléchargements"
+            aria-label={state.downloads.active > 0 ? t('Téléchargements (en cours)', 'Downloads (in progress)') : t('Téléchargements', 'Downloads')}
+            title={t('Téléchargements', 'Downloads')}
             onClick={e => {
               const box = e.currentTarget.getBoundingClientRect();
               send({ type: 'downloads.open', x: box.right, y: box.bottom + 6 });
@@ -122,8 +124,8 @@ export default function App() {
         )}
         <button
           className="pill-icon-btn"
-          aria-label="Capture d'écran"
-          title="Capture d'écran"
+          aria-label={t("Capture d'écran", 'Screenshot')}
+          title={t("Capture d'écran", 'Screenshot')}
           onClick={e => {
             const box = e.currentTarget.getBoundingClientRect();
             send({ type: 'capture.menu', x: box.right, y: box.bottom + 6 });
@@ -133,17 +135,17 @@ export default function App() {
         </button>
         <button
           className={`pill-icon-btn${ split.visible ? ' on' : ''}`}
-          aria-label={split.visible ? 'Fermer la vue scindée' : 'Vue scindée'}
+          aria-label={split.visible ? t('Fermer la vue scindée', 'Close split view') : t('Vue scindée', 'Split view')}
           aria-pressed={split.visible}
-          title={split.visible ? 'Fermer la vue scindée' : 'Afficher deux pages côte à côte'}
+          title={split.visible ? t('Fermer la vue scindée', 'Close split view') : t('Afficher deux pages côte à côte', 'Show two pages side by side')}
           onClick={() => send({ type: split.visible ? 'split.close' : 'split.open' })}
         >
           <Icon d="M2 3h12v10H2zM8 3v10" />
         </button>
         <button
           className="pill-icon-btn"
-          aria-label="Favoris et historique"
-          title="Favoris et historique"
+          aria-label={t('Favoris et historique', 'Bookmarks and history')}
+          title={t('Favoris et historique', 'Bookmarks and history')}
           onClick={e => {
             const box = e.currentTarget.getBoundingClientRect();
             send({ type: 'library.open', x: box.right, y: box.bottom + 6 });
@@ -153,8 +155,8 @@ export default function App() {
         </button>
         <button
           className="pill-icon-btn profile-btn"
-          aria-label={`Profil : ${state.profile}`}
-          title={`Profil : ${state.profile}`}
+          aria-label={t(`Profil : ${state.profile}`, `Profile: ${state.profile}`)}
+          title={t(`Profil : ${state.profile}`, `Profile: ${state.profile}`)}
           onClick={e => {
             const box = e.currentTarget.getBoundingClientRect();
             send({ type: 'profile.menu', x: box.right, y: box.bottom + 6 });
@@ -164,8 +166,8 @@ export default function App() {
         </button>
         <button
           className="pill-icon-btn"
-          aria-label="Réglages"
-          title="Réglages"
+          aria-label={t('Réglages', 'Settings')}
+          title={t('Réglages', 'Settings')}
           onClick={e => {
             const box = e.currentTarget.getBoundingClientRect();
             send({ type: 'settings.open', x: box.right, y: box.bottom + 6 });
@@ -228,8 +230,8 @@ function AddressPill({ tab, focused, grow }: { tab: Tab | undefined; focused: bo
         }}
       >
         <input
-          aria-label="Adresse ou recherche"
-          placeholder="Rechercher ou saisir une adresse"
+          aria-label={t('Adresse ou recherche', 'Address or search')}
+          placeholder={t('Rechercher ou saisir une adresse', 'Search or enter an address')}
           spellCheck={false}
           value={editing ? text : domain}
           onChange={e => {
@@ -263,15 +265,15 @@ function AddressPill({ tab, focused, grow }: { tab: Tab | undefined; focused: bo
 
       <div className="address-trail">
         {tab && tab.zoom !== 100 && (
-          <button className="zoom-chip" aria-label={`Zoom ${tab.zoom} %, revenir à 100 %`} title="Revenir à 100 %" onClick={() => send({ type: 'zoom.reset', id: tab.id })}>
+          <button className="zoom-chip" aria-label={t(`Zoom ${tab.zoom} %, revenir à 100 %`, `Zoom ${tab.zoom}%, reset to 100%`)} title={t('Revenir à 100 %', 'Reset to 100%')} onClick={() => send({ type: 'zoom.reset', id: tab.id })}>
             {tab.zoom} %
           </button>
         )}
         {rawUrl && (
           <button
             className={`inline-btn${tab?.bookmarked ? ' on' : ''}`}
-            aria-label={tab?.bookmarked ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-            title={tab?.bookmarked ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+            aria-label={tab?.bookmarked ? t('Retirer des favoris', 'Remove bookmark') : t('Ajouter aux favoris', 'Add bookmark')}
+            title={tab?.bookmarked ? t('Retirer des favoris', 'Remove bookmark') : t('Ajouter aux favoris', 'Add bookmark')}
             onClick={() => tab && send(tab.bookmarked ? { type: 'bookmark.remove', url: tab.url } : { type: 'bookmark.add', url: tab.url, title: tab.title })}
           >
             <Icon d="M8 2.4l1.7 3.5 3.8.5-2.8 2.7.7 3.8L8 11.1l-3.4 1.8.7-3.8-2.8-2.7 3.8-.5z" fill={!!tab?.bookmarked} size={14} />
@@ -279,8 +281,8 @@ function AddressPill({ tab, focused, grow }: { tab: Tab | undefined; focused: bo
         )}
         <button
           className="inline-btn"
-          aria-label={tab?.loading ? 'Arrêter' : 'Recharger'}
-          title={tab?.loading ? 'Arrêter' : 'Recharger'}
+          aria-label={tab?.loading ? t('Arrêter', 'Stop') : t('Recharger', 'Reload')}
+          title={tab?.loading ? t('Arrêter', 'Stop') : t('Recharger', 'Reload')}
           disabled={!id}
           onClick={() => id && send({ type: tab?.loading ? 'nav.stop' : 'nav.reload', id })}
         >

@@ -67,6 +67,7 @@
   gap: 8px;
   margin-top: 10px;
   flex: none;
+  flex-wrap: wrap; /* beaucoup d'onglets épinglés : ils passent à la ligne */
 }
 .pinned-pill {
   height: 40px;

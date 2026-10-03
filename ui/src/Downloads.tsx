@@ -1,16 +1,17 @@
 import { send } from './bridge';
+import { t } from './i18n';
 import { Icon } from './Icons';
 
 export type Download = { id: string; name: string; received: number; total: number | null; state: 'InProgress' | 'Interrupted' | 'Completed' };
 
 const size = (bytes: number) =>
-  bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} Ko` : `${(bytes / 1024 / 1024).toFixed(1)} Mo`;
+  bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} ${t('Ko', 'KB')}` : `${(bytes / 1024 / 1024).toFixed(1)} ${t('Mo', 'MB')}`;
 
 export const percent = (d: Download) => (d.total && d.total > 0 ? Math.round((d.received / d.total) * 100) : null);
 
 function status(d: Download) {
-  if (d.state === 'Completed') return `Terminé · ${size(d.received)}`;
-  if (d.state === 'Interrupted') return 'Interrompu';
+  if (d.state === 'Completed') return `${t('Terminé', 'Done')} · ${size(d.received)}`;
+  if (d.state === 'Interrupted') return t('Interrompu', 'Interrupted');
   return d.total ? `${percent(d)} % · ${size(d.total)}` : size(d.received);
 }
 
@@ -30,16 +31,16 @@ export function DownloadCard({ d }: { d: Download }) {
         <div className="download-actions">
           {d.state === 'InProgress' && (
             <button className="pill-action" onClick={() => send({ type: 'download.cancel', id: d.id })}>
-              Annuler
+              {t('Annuler', 'Cancel')}
             </button>
           )}
           {d.state === 'Completed' && (
             <>
               <button className="pill-action primary" onClick={() => send({ type: 'download.open', id: d.id })}>
-                Ouvrir
+                {t('Ouvrir', 'Open')}
               </button>
               <button className="pill-action" onClick={() => send({ type: 'download.reveal', id: d.id })}>
-                Dossier
+                {t('Dossier', 'Folder')}
               </button>
             </>
           )}

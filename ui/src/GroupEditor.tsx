@@ -1,5 +1,6 @@
 import { useState, type CSSProperties, type RefObject } from 'react';
 import { send } from './bridge';
+import { t } from './i18n';
 
 type Group = { create: boolean; id: string; name: string; color: string; icon: string; presets: string[] };
 
@@ -51,32 +52,32 @@ export default function GroupEditor({ rootRef, group }: { rootRef: RefObject<HTM
           if (name.trim()) send({ type: group.create ? 'group.create' : 'group.update', id: group.id, title: name.trim(), query: color, input: icon });
         }}
       >
-        <span className="name-form-title">{group.create ? 'Nouveau groupe' : 'Modifier le groupe'}</span>
+        <span className="name-form-title">{group.create ? t('Nouveau groupe', 'New group') : t('Modifier le groupe', 'Edit group')}</span>
 
         <div className="group-preview" aria-hidden>
           {icon ? <span className="group-preview-icon">{icon}</span> : <span className="group-preview-dot" />}
-          <span>{name.trim() || 'Nom du groupe'}</span>
+          <span>{name.trim() || t('Nom du groupe', 'Group name')}</span>
         </div>
 
-        <input id="name-input" aria-label="Nom du groupe" autoFocus maxLength={30} placeholder="Nom du groupe" spellCheck={false} value={name} onChange={e => setName(e.target.value)} onFocus={e => e.target.select()} />
+        <input id="name-input" aria-label={t('Nom du groupe', 'Group name')} autoFocus maxLength={30} placeholder={t('Nom du groupe', 'Group name')} spellCheck={false} value={name} onChange={e => setName(e.target.value)} onFocus={e => e.target.select()} />
 
         <fieldset>
-          <legend>Couleur</legend>
+          <legend>{t('Couleur', 'Color')}</legend>
           <div className="swatches">
             {group.presets.map(preset => (
-              <button key={preset} type="button" className={`swatch${preset === color ? ' on' : ''}`} style={{ background: preset }} aria-label={`Couleur ${preset}`} aria-pressed={preset === color} onClick={() => pick(preset)} />
+              <button key={preset} type="button" className={`swatch${preset === color ? ' on' : ''}`} style={{ background: preset }} aria-label={t(`Couleur ${preset}`, `Color ${preset}`)} aria-pressed={preset === color} onClick={() => pick(preset)} />
             ))}
           </div>
           <label className="slider">
-            <span>Teinte</span>
+            <span>{t('Teinte', 'Hue')}</span>
             <input type="range" className="hue" min={0} max={359} value={h} onChange={e => slide(+e.target.value, s || 60, l)} />
           </label>
           <label className="slider">
-            <span>Intensité</span>
+            <span>{t('Intensité', 'Saturation')}</span>
             <input type="range" min={0} max={100} value={s} style={{ background: `linear-gradient(90deg, ${toHex(h, 0, l)}, ${toHex(h, 100, l)})` }} onChange={e => slide(h, +e.target.value, l)} />
           </label>
           <label className="slider">
-            <span>Clarté</span>
+            <span>{t('Clarté', 'Lightness')}</span>
             <input type="range" min={15} max={90} value={l} style={{ background: `linear-gradient(90deg, ${toHex(h, s, 15)}, ${toHex(h, s, 52)}, ${toHex(h, s, 90)})` }} onChange={e => slide(h, s, +e.target.value)} />
           </label>
           <label className="slider">
@@ -84,7 +85,7 @@ export default function GroupEditor({ rootRef, group }: { rootRef: RefObject<HTM
             <input
               type="text"
               className="hex"
-              aria-label="Code de la couleur"
+              aria-label={t('Code de la couleur', 'Color code')}
               maxLength={7}
               spellCheck={false}
               value={hexText}
@@ -98,26 +99,26 @@ export default function GroupEditor({ rootRef, group }: { rootRef: RefObject<HTM
         </fieldset>
 
         <fieldset>
-          <legend>Icône</legend>
+          <legend>{t('Icône', 'Icon')}</legend>
           <div className="icons">
-            <button type="button" className={`icon-choice none${icon === '' ? ' on' : ''}`} aria-pressed={icon === ''} title="Sans icône" onClick={() => setIcon('')}>
-              Aucune
+            <button type="button" className={`icon-choice none${icon === '' ? ' on' : ''}`} aria-pressed={icon === ''} title={t('Sans icône', 'No icon')} onClick={() => setIcon('')}>
+              {t('Aucune', 'None')}
             </button>
             {ICONS.map(choice => (
-              <button key={choice} type="button" className={`icon-choice${choice === icon ? ' on' : ''}`} aria-pressed={choice === icon} aria-label={`Icône ${choice}`} onClick={() => setIcon(choice)}>
+              <button key={choice} type="button" className={`icon-choice${choice === icon ? ' on' : ''}`} aria-pressed={choice === icon} aria-label={t(`Icône ${choice}`, `Icon ${choice}`)} onClick={() => setIcon(choice)}>
                 {choice}
               </button>
             ))}
           </div>
           <label className="slider">
-            <span>Autre</span>
-            <input type="text" className="hex" aria-label="Autre emoji" placeholder="Coller un emoji (Win + .)" maxLength={16} value={ICONS.includes(icon) ? '' : icon} onChange={e => setIcon(e.target.value.trim())} />
+            <span>{t('Autre', 'Other')}</span>
+            <input type="text" className="hex" aria-label={t('Autre emoji', 'Other emoji')} placeholder={t('Coller un emoji (Win + .)', 'Paste an emoji (Win + .)')} maxLength={16} value={ICONS.includes(icon) ? '' : icon} onChange={e => setIcon(e.target.value.trim())} />
           </label>
         </fieldset>
 
         <div className="name-form-actions">
-          <button type="button" className="pill-action" onClick={() => send({ type: 'popup.close' })}>Annuler</button>
-          <button type="submit" className="pill-action primary" disabled={!name.trim()}>{group.create ? 'Créer le groupe' : 'Enregistrer'}</button>
+          <button type="button" className="pill-action" onClick={() => send({ type: 'popup.close' })}>{t('Annuler', 'Cancel')}</button>
+          <button type="submit" className="pill-action primary" disabled={!name.trim()}>{group.create ? t('Créer le groupe', 'Create group') : t('Enregistrer', 'Save')}</button>
         </div>
       </form>
     </div>

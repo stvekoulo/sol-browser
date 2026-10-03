@@ -25,7 +25,11 @@ public sealed class Settings
     /// <summary>Envoie la saisie de la barre d'adresse au moteur de recherche pour obtenir des complétions.</summary>
     public bool OnlineSuggestions { get; set; } = true;
     public string SuggestUrlTemplate { get; set; } = "https://suggestqueries.google.com/complete/search?client=firefox&ie=utf-8&oe=utf-8&q={0}";
-    public string HomeUrl { get; set; } = "about:blank";
+    public const string DefaultHomePage = "https://www.google.com";
+    /// <summary>Page ouverte dans un nouvel onglet. (Nouveau nom : l'ancien réglage « HomeUrl » valait toujours about:blank.)</summary>
+    public string HomePage { get; set; } = DefaultHomePage;
+    /// <summary>Langue de l'interface : "system" (celle de Windows), "fr" ou "en".</summary>
+    public string Language { get; set; } = "system";
 }
 
 public sealed class Session

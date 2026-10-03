@@ -33,8 +33,10 @@ public partial class App : Application
         // Options du moteur, ajoutées à celles déjà demandées par l'environnement :
         // - barres de défilement fines qui n'apparaissent qu'au défilement (quand le réglage les affiche) ;
         // - retour et avance par balayage horizontal à deux doigts sur le pavé tactile.
+        // - langue : celle de l'interface, que les sites reçoivent aussi comme langue préférée.
+        Language.Current = Language.Resolve(JsonFileStore.Load<Settings>(AppPaths.Settings).Language, System.Globalization.CultureInfo.CurrentUICulture.Name);
         const string features = "--enable-features=OverlayScrollbar,msOverlayScrollbarWinStyle,msOverlayScrollbarWinStyleAnimation,OverscrollHistoryNavigation";
-        Environment.SetEnvironmentVariable(WebArgsVariable, $"{LaunchEnvironment[WebArgsVariable]} {features}".Trim());
+        Environment.SetEnvironmentVariable(WebArgsVariable, $"{LaunchEnvironment[WebArgsVariable]} {features} --lang={Language.Current}".Trim());
 
         InitializeComponent();
     }

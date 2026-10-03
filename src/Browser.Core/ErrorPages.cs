@@ -6,30 +6,40 @@ namespace Browser.Core;
 public static class ErrorPages
 {
     /// <summary>"dns", "offline", "timeout", "certificate", "crash" ou autre chose (erreur générique).</summary>
-    public static (string Title, string Text) Describe(string kind) => kind switch
-    {
-        "dns" => ("Site introuvable", "L'adresse n'existe pas, ou elle contient une faute de frappe."),
-        "offline" => ("Connexion impossible", "Le site ne répond pas, ou cet ordinateur n'est pas connecté à Internet."),
-        "timeout" => ("Le site met trop de temps à répondre", "Il est peut-être surchargé. Réessayez dans un instant."),
-        "certificate" => ("Connexion non sécurisée", "Ce site ne prouve pas son identité : quelqu'un pourrait intercepter ce que vous y envoyez. Le navigateur ne l'ouvre pas."),
-        "crash" => ("La page a cessé de fonctionner", "Elle a planté. Les autres onglets ne sont pas touchés."),
-        _ => ("Cette page ne peut pas être affichée", "Une erreur s'est produite pendant le chargement."),
-    };
+    public static (string Title, string Text) Describe(string kind, string lang = "fr") => lang == "fr"
+        ? kind switch
+        {
+            "dns" => ("Site introuvable", "L'adresse n'existe pas, ou elle contient une faute de frappe."),
+            "offline" => ("Connexion impossible", "Le site ne répond pas, ou cet ordinateur n'est pas connecté à Internet."),
+            "timeout" => ("Le site met trop de temps à répondre", "Il est peut-être surchargé. Réessayez dans un instant."),
+            "certificate" => ("Connexion non sécurisée", "Ce site ne prouve pas son identité : quelqu'un pourrait intercepter ce que vous y envoyez. Le navigateur ne l'ouvre pas."),
+            "crash" => ("La page a cessé de fonctionner", "Elle a planté. Les autres onglets ne sont pas touchés."),
+            _ => ("Cette page ne peut pas être affichée", "Une erreur s'est produite pendant le chargement."),
+        }
+        : kind switch
+        {
+            "dns" => ("Site not found", "This address does not exist, or it contains a typo."),
+            "offline" => ("Unable to connect", "The site is not responding, or this computer is not connected to the Internet."),
+            "timeout" => ("The site is taking too long to respond", "It may be overloaded. Try again in a moment."),
+            "certificate" => ("Connection not secure", "This site cannot prove its identity: someone could intercept what you send to it. The browser will not open it."),
+            "crash" => ("This page stopped working", "It crashed. Your other tabs are not affected."),
+            _ => ("This page cannot be displayed", "An error occurred while loading."),
+        };
 
     /// <summary>
     /// Page d'erreur autonome (aucun script, aucune ressource externe). L'adresse vient de l'extérieur : elle est
     /// toujours échappée, et le lien « Réessayer » n'existe que pour une adresse web.
     /// </summary>
-    public static string Html(string url, string kind)
+    public static string Html(string url, string kind, string lang = "fr")
     {
-        var (title, text) = Describe(kind);
+        var (title, text) = Describe(kind, lang);
         var shown = WebUtility.HtmlEncode(url);
         var isWeb = Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme is "https" or "http";
         // Un site dont l'identité n'est pas prouvée : pas de bouton pour passer outre.
-        var retry = isWeb && kind != "certificate" ? $"""<a class="retry" href="{shown}">Réessayer</a>""" : "";
+        var retry = isWeb && kind != "certificate" ? $"""<a class="retry" href="{shown}">{(lang == "fr" ? "Réessayer" : "Try again")}</a>""" : "";
         return $$"""
             <!doctype html>
-            <html lang="fr" data-nav-error>
+            <html lang="{{lang}}" data-nav-error>
             <head>
             <meta charset="utf-8">
             <meta name="color-scheme" content="light dark">

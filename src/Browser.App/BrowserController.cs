@@ -51,6 +51,9 @@ public sealed class BrowserController
         _window.Closed += (_, _) => { SaveSession(); _db.Dispose(); };
     }
 
+    private static string T(string fr, string en) => Language.T(fr, en);
+    private static string ProfileName(string id) => id == Profiles.Default ? T("Défaut", "Default") : Profiles.NameOf(AppPaths.BaseDir, id);
+
     public void Execute(Command c)
     {
         var id = c.Id ?? "";
@@ -89,8 +92,10 @@ public sealed class BrowserController
             case "settings.open": OpenSettings(c.X!.Value, c.Y!.Value); return;
             case "settings.set":
                 if (id == "theme") SetTheme(c.Index!.Value);
+                else if (id == "language") SetLanguage(c.Index!.Value);
                 else SetSetting(id, c.Index != 0);
                 return;
+            case "settings.text": if (id == "home") SetHomePage(c.Input!); return;
             case "dock.size": if (_dockShown) _dock.SetSize(c.Width!.Value, c.Height!.Value); return;
             case "tab.menu": OpenTabMenu(id, c.X!.Value, c.Y!.Value); return;
             case "permission.answer": AnswerPermission(c.Index != 0); return;
@@ -112,7 +117,7 @@ public sealed class BrowserController
                 if (_tabs.Tabs.Count == 0) RestoreSession();
                 foreach (var tabId in _favicons.Keys) PostFavicon(tabId);
                 break;
-            case "tab.open": Open(c.Url is null ? _settings.HomeUrl : Resolve(c.Url)); break;
+            case "tab.open": Open(c.Url is null ? _settings.HomePage : Resolve(c.Url)); break;
             case "tab.close": Close(id); break;
             case "tab.activate": Activate(id); break;
             case "group.new": EditGroup(tabId: id, group: null); return;
@@ -236,15 +241,15 @@ public sealed class BrowserController
 
     private static string PermissionLabel(Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind kind) => kind switch
     {
-        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.Microphone => "utiliser votre micro",
-        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.Camera => "utiliser votre caméra",
-        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.Geolocation => "connaître votre position",
-        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.Notifications => "vous envoyer des notifications",
-        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.ClipboardRead => "lire le contenu du presse-papiers",
-        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.MultipleAutomaticDownloads => "télécharger plusieurs fichiers à la suite",
-        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.FileReadWrite => "lire et modifier des fichiers de cet ordinateur",
-        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.OtherSensors => "lire les capteurs de mouvement",
-        _ => $"utiliser une fonction sensible ({kind})",
+        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.Microphone => T("utiliser votre micro", "use your microphone"),
+        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.Camera => T("utiliser votre caméra", "use your camera"),
+        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.Geolocation => T("connaître votre position", "know your location"),
+        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.Notifications => T("vous envoyer des notifications", "send you notifications"),
+        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.ClipboardRead => T("lire le contenu du presse-papiers", "read the clipboard"),
+        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.MultipleAutomaticDownloads => T("télécharger plusieurs fichiers à la suite", "download several files in a row"),
+        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.FileReadWrite => T("lire et modifier des fichiers de cet ordinateur", "read and change files on this computer"),
+        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.OtherSensors => T("lire les capteurs de mouvement", "read motion sensors"),
+        _ => T($"utiliser une fonction sensible ({kind})", $"use a sensitive feature ({kind})"),
     };
 
     private void OnPermissionRequested(Microsoft.Web.WebView2.Core.CoreWebView2PermissionRequestedEventArgs e)
@@ -292,22 +297,24 @@ public sealed class BrowserController
         popup = "settings",
         zoom = _tabs.ActiveId is { } activeId ? (int)Math.Round(_pages.ZoomOf(activeId) * 100) : 100,
         theme = Math.Max(0, Array.IndexOf(Themes, _settings.Theme)),
+        language = Math.Max(0, Array.IndexOf(Languages, _settings.Language)),
+        home = _settings.HomePage,
         permissions = _permissions.Count, // réponses retenues aux demandes d'accès des sites
         // Sous-menu : où la couleur du site teinte l'interface.
         tint = new[]
         {
-            new { key = "tint.topbar", label = "Barre du haut et boutons", hint = "", on = _settings.TintTopbar },
-            new { key = "tint.sidebar", label = "Carte latérale", hint = "", on = _settings.TintSidebar },
-            new { key = "tint.menus", label = "Menus et panneaux", hint = "", on = _settings.TintMenus },
-            new { key = "tint.background", label = "Arrière-plan de l'interface", hint = "Le fond de la barre et de la colonne prend une teinte légère", on = _settings.TintBackground },
+            new { key = "tint.topbar", label = T("Barre du haut et boutons", "Top bar and buttons"), hint = "", on = _settings.TintTopbar },
+            new { key = "tint.sidebar", label = T("Carte latérale", "Sidebar"), hint = "", on = _settings.TintSidebar },
+            new { key = "tint.menus", label = T("Menus et panneaux", "Menus and panels"), hint = "", on = _settings.TintMenus },
+            new { key = "tint.background", label = T("Arrière-plan de l'interface", "Interface background"), hint = T("Le fond de la barre et de la colonne prend une teinte légère", "The bar and sidebar background takes a light tint"), on = _settings.TintBackground },
         },
         items = new[]
         {
-            new { key = "scrollbars", label = "Barre de défilement fine", hint = "Apparaît seulement pendant le défilement", on = !_settings.HideScrollbars },
-            new { key = "blur", label = "Flou progressif en bas des pages", hint = "", on = _settings.BlurEnabled },
-            new { key = "floatingDownloads", label = "Téléchargements en bas à droite", hint = "Sinon, uniquement dans le panneau de la barre", on = _settings.FloatingDownloads },
-            new { key = "onlineSuggestions", label = "Suggestions de recherche Google", hint = "Envoie à Google ce qui est tapé dans la barre d'adresse", on = _settings.OnlineSuggestions },
-            new { key = "passwords", label = "Enregistrer les mots de passe", hint = "Stockage chiffré du moteur, sur cet ordinateur", on = _settings.SavePasswords },
+            new { key = "scrollbars", label = T("Barre de défilement fine", "Thin scrollbar"), hint = T("Apparaît seulement pendant le défilement", "Only appears while scrolling"), on = !_settings.HideScrollbars },
+            new { key = "blur", label = T("Flou progressif en bas des pages", "Progressive blur at the bottom of pages"), hint = "", on = _settings.BlurEnabled },
+            new { key = "floatingDownloads", label = T("Téléchargements en bas à droite", "Downloads at the bottom right"), hint = T("Sinon, uniquement dans le panneau de la barre", "Otherwise, only in the toolbar panel"), on = _settings.FloatingDownloads },
+            new { key = "onlineSuggestions", label = T("Suggestions de recherche Google", "Google search suggestions"), hint = T("Envoie à Google ce qui est tapé dans la barre d'adresse", "Sends what you type in the address bar to Google"), on = _settings.OnlineSuggestions },
+            new { key = "passwords", label = T("Enregistrer les mots de passe", "Save passwords"), hint = T("Stockage chiffré du moteur, sur cet ordinateur", "Encrypted engine storage, on this computer"), on = _settings.SavePasswords },
         },
     });
 
@@ -329,6 +336,28 @@ public sealed class BrowserController
         JsonFileStore.Save(AppPaths.Settings, _settings);
         _pages.ApplySettings(); // les sites reçoivent aussi la préférence clair ou sombre
         _bridge.BroadcastTheme();
+        if (_settingsOpen) _popup.Post(SettingsJson());
+    }
+
+    private static readonly string[] Languages = ["system", "fr", "en"];
+
+    private void SetLanguage(int index)
+    {
+        if (index < 0 || index >= Languages.Length) return;
+        _settings.Language = Languages[index];
+        JsonFileStore.Save(AppPaths.Settings, _settings);
+        Language.Current = Language.Resolve(_settings.Language, System.Globalization.CultureInfo.CurrentUICulture.Name);
+        _bridge.BroadcastTheme(); // la langue voyage avec le thème : toutes les vues la reçoivent
+        Refresh();
+        if (_settingsOpen) _popup.Post(SettingsJson());
+    }
+
+    // Page d'accueil : une adresse web. Champ vidé, ou autre chose qu'une adresse web : retour à la page par défaut.
+    private void SetHomePage(string input)
+    {
+        var url = input.Trim().Length == 0 ? "" : Resolve(input);
+        _settings.HomePage = IsWeb(url) ? url : Settings.DefaultHomePage;
+        JsonFileStore.Save(AppPaths.Settings, _settings);
         if (_settingsOpen) _popup.Post(SettingsJson());
     }
 
@@ -443,7 +472,7 @@ public sealed class BrowserController
         _favicons.Remove(id);
         _split.OnTabClosed(id);
         // Dernier onglet fermé : la fenêtre reste ouverte sur un onglet vide. Elle ne se ferme que par son bouton.
-        if (_tabs.Tabs.Count == 0) Open(_settings.HomeUrl);
+        if (_tabs.Tabs.Count == 0) Open(_settings.HomePage);
     }
 
     // Onglet vide ouvert seulement pour remplir la moitié droite d'une vue scindée.
@@ -464,7 +493,7 @@ public sealed class BrowserController
     {
         if (_tabs.ActiveId is not { } active) return;
         if (otherId is not null && (otherId == active || _tabs.Tabs.All(t => t.Id != otherId))) return;
-        var other = otherId ?? Open(_settings.HomeUrl, activate: false).Id;
+        var other = otherId ?? Open("about:blank", activate: false).Id;
         _splitBlankTab = otherId is null ? other : null;
 
         _split.Open(active, other);
@@ -574,15 +603,15 @@ public sealed class BrowserController
         var block = ids.Length > 1;
         ShowMenu(x, y,
         [
-            (tab.Pinned ? (block ? "Détacher les deux pages" : "Détacher l'onglet") : (block ? "Épingler les deux pages" : "Épingler l'onglet"), () =>
+            (tab.Pinned ? (block ? T("Détacher les deux pages", "Unpin both pages") : T("Détacher l'onglet", "Unpin tab")) : (block ? T("Épingler les deux pages", "Pin both pages") : T("Épingler l'onglet", "Pin tab")), () =>
             {
                 foreach (var tabId in ids) _tabs.SetPinned(tabId, !tab.Pinned);
                 KeepPairAdjacent();
             }),
             .. GroupEntries(tab),
             ("", null),
-            ("Fermer l'onglet", () => Close(id)),
-            ("Fermer les autres onglets", () =>
+            (T("Fermer l'onglet", "Close tab"), () => Close(id)),
+            (T("Fermer les autres onglets", "Close other tabs"), () =>
             {
                 foreach (var other in _tabs.Tabs.Where(t => t.Id != id && !t.Pinned).Select(t => t.Id).ToList()) Close(other);
             }),
@@ -603,11 +632,11 @@ public sealed class BrowserController
         var entries = new List<(string Label, Action? Run)>();
         if (tab.Pinned) return entries;
         entries.Add(("", null));
-        if (tab.GroupId is not null) entries.Add(("Retirer du groupe", () => { _tabs.RemoveFromGroup(tab.Id); KeepPairAdjacent(); }));
+        if (tab.GroupId is not null) entries.Add((T("Retirer du groupe", "Remove from group"), () => { _tabs.RemoveFromGroup(tab.Id); KeepPairAdjacent(); }));
         foreach (var group in _tabs.Groups.Where(g => g.Id != tab.GroupId))
-            entries.Add(($"Ajouter au groupe « {group.Name} »", () => { _tabs.AddToGroup(tab.Id, group.Id); KeepPairAdjacent(); }));
+            entries.Add((T($"Ajouter au groupe « {group.Name} »", $"Add to group “{group.Name}”"), () => { _tabs.AddToGroup(tab.Id, group.Id); KeepPairAdjacent(); }));
         // L'action ouvre une saisie : elle ne doit pas être refermée par la fermeture du menu.
-        entries.Add(("Nouveau groupe avec cet onglet", () => _afterMenu = () => Execute(new Command("group.new", Id: tab.Id))));
+        entries.Add((T("Nouveau groupe avec cet onglet", "New group with this tab"), () => _afterMenu = () => Execute(new Command("group.new", Id: tab.Id))));
         return entries;
     }
 
@@ -618,10 +647,10 @@ public sealed class BrowserController
         var members = _tabs.Tabs.Where(t => t.GroupId == groupId).Select(t => t.Id).ToList();
         ShowMenu(x, y,
         [
-            ("Modifier le groupe (nom, couleur, icône)", () => _afterMenu = () => EditGroup(tabId: null, group)),
+            (T("Modifier le groupe (nom, couleur, icône)", "Edit group (name, color, icon)"), () => _afterMenu = () => EditGroup(tabId: null, group)),
             ("", null),
-            ("Dissocier le groupe", () => _tabs.Ungroup(groupId)),
-            ("Fermer les onglets du groupe", () => { foreach (var member in members) Close(member); }),
+            (T("Dissocier le groupe", "Ungroup"), () => _tabs.Ungroup(groupId)),
+            (T("Fermer les onglets du groupe", "Close the group's tabs"), () => { foreach (var member in members) Close(member); }),
         ]);
     }
 
@@ -660,7 +689,7 @@ public sealed class BrowserController
         items = Profiles.List(AppPaths.BaseDir).Select(id => new
         {
             id,
-            name = Profiles.NameOf(AppPaths.BaseDir, id),
+            name = ProfileName(id),
             current = id == AppPaths.Profile,
             // Ni le profil par défaut, ni celui de cette fenêtre, ni un profil ouvert dans une autre fenêtre.
             deletable = id != Profiles.Default && id != AppPaths.Profile && !IsProfileOpen(id),
@@ -676,8 +705,8 @@ public sealed class BrowserController
     }
 
     private void AskProfileName() =>
-        AskName("Nouveau profil", "Ses onglets, son historique, ses favoris et ses mots de passe restent séparés des autres profils.",
-            "Nom du profil", "Créer et ouvrir", "", "profile.create");
+        AskName(T("Nouveau profil", "New profile"), T("Ses onglets, son historique, ses favoris et ses mots de passe restent séparés des autres profils.", "Its tabs, history, bookmarks and passwords stay separate from other profiles."),
+            T("Nom du profil", "Profile name"), T("Créer et ouvrir", "Create and open"), "", "profile.create");
 
     private void DeleteProfile(string id)
     {
@@ -722,9 +751,9 @@ public sealed class BrowserController
         if (ClosesPanel("capture")) return;
         ShowMenu(x - 260, y,
         [
-            ("Capturer une zone", () => Capture("region")),
-            ("Capturer la partie visible", () => Capture("visible")),
-            ("Capturer la page entière", () => Capture("full")),
+            (T("Capturer une zone", "Capture an area"), () => Capture("region")),
+            (T("Capturer la partie visible", "Capture the visible part"), () => Capture("visible")),
+            (T("Capturer la page entière", "Capture the full page"), () => Capture("full")),
         ]);
     }
 
@@ -748,8 +777,8 @@ public sealed class BrowserController
         var link = e.ContextMenuTarget.HasLinkUri ? e.ContextMenuTarget.LinkUri : null;
         if (link is not null && IsWeb(link))
         {
-            items.Add(("Ouvrir le lien dans un nouvel onglet", () => Open(link)));
-            items.Add(("Ouvrir le lien en vue scindée", () => Split(Open(link, activate: false).Id)));
+            items.Add((T("Ouvrir le lien dans un nouvel onglet", "Open link in a new tab"), () => Open(link)));
+            items.Add((T("Ouvrir le lien en vue scindée", "Open link in split view"), () => Split(Open(link, activate: false).Id)));
             items.Add(("", null));
         }
         foreach (var item in e.MenuItems)
@@ -765,7 +794,7 @@ public sealed class BrowserController
             }
         }
         if (items.Count > 0 && items[^1].Label != "") items.Add(("", null));
-        items.Add(("Capturer une zone", () => Capture("region")));
+        items.Add((T("Capturer une zone", "Capture an area"), () => Capture("region")));
 
         // Le moteur attend notre réponse : il est toujours libéré à la fermeture du menu, avec ou sans choix.
         e.Handled = true;
@@ -800,7 +829,7 @@ public sealed class BrowserController
     {
         var session = JsonFileStore.Load<Session>(AppPaths.Session);
         var tabs = session.Urls.Select((url, i) => Open(url, activate: false, pinned: i < session.PinnedCount)).ToList();
-        if (tabs.Count == 0) { Open(_settings.HomeUrl); return; }
+        if (tabs.Count == 0) { Open(_settings.HomePage); return; }
         foreach (var tab in tabs) _restored.Add(tab.Id);
 
         // Groupes : recréés autour de leurs onglets, qui étaient voisins à l'enregistrement.
@@ -858,7 +887,7 @@ public sealed class BrowserController
             }),
             groups = _tabs.Groups.Select(g => new { id = g.Id, name = g.Name, color = g.Color, icon = g.Icon, collapsed = g.Collapsed }),
             activeId = _tabs.ActiveId,
-            profile = Profiles.NameOf(AppPaths.BaseDir, AppPaths.Profile),
+            profile = ProfileName(AppPaths.Profile),
             split = new { primaryId = _split.PrimaryId, secondaryId = _split.SecondaryId, ratio = _split.Ratio, visible = showSplit },
             maximized = Presenter?.State == OverlappedPresenterState.Maximized,
             downloads = new

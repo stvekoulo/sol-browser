@@ -90,9 +90,9 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
     {
         _errorUrl[id] = url;
         _showingError.Add(id);
-        try { core.NavigateToString(ErrorPages.Html(url, kind)); }
+        try { core.NavigateToString(ErrorPages.Html(url, kind, Language.Current)); }
         catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { _showingError.Remove(id); }
-        PageChanged?.Invoke(id, url, ErrorPages.Describe(kind).Title);
+        PageChanged?.Invoke(id, url, ErrorPages.Describe(kind, Language.Current).Title);
     }
 
     private static string ErrorKind(CoreWebView2WebErrorStatus status) => status switch
