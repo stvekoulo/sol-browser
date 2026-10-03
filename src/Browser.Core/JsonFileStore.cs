@@ -45,6 +45,8 @@ public sealed class SiteShortcut
     public string Url { get; set; } = "";
     public string Name { get; set; } = "";
     public string? Icon { get; set; }
+    /// <summary>Nom saisi par l'utilisateur : le nom annoncé par le site ne le remplace pas.</summary>
+    public bool NameLocked { get; set; }
 
     /// <summary>Le site d'une adresse, sans « www. » ; vide si ce n'est pas une adresse.</summary>
     public static string DomainOf(string? url)
@@ -79,6 +81,8 @@ public sealed class Session
     /// <summary>Groupes d'onglets, et pour chaque adresse de <see cref="Urls"/> le rang de son groupe (ou null).</summary>
     public List<SessionGroup> Groups { get; set; } = new();
     public List<int?> GroupOf { get; set; } = new();
+    /// <summary>Pour chaque adresse de <see cref="Urls"/>, le rang du raccourci dans lequel elle est ouverte (ou null).</summary>
+    public List<int?> ShortcutOf { get; set; } = new();
 }
 
 public sealed class SessionGroup

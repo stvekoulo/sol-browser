@@ -86,18 +86,14 @@
 .pinned-pill.wide { flex: 1; min-width: 0; padding: 0 14px; }
 .pinned-pill.wide span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .pinned-pill:hover { background: var(--bg-pill-solid-hover); transform: translateY(-0.5px); }
-/* Raccourci dont la page est ouverte : un point discret ; icône d'une seule teinte qui se perdrait dans le thème. */
-.pinned-pill.loaded { position: relative; }
-.pinned-pill.loaded::after {
-  content: '';
-  position: absolute; left: 50%; bottom: 4px;
-  width: 4px; height: 4px; margin-left: -2px;
-  border-radius: 50%;
-  background: var(--text-dim);
-}
+/* Icône d'une seule teinte, qui se perdrait dans le thème. */
 [data-theme='dark'] .favicon.tone-dark,
 [data-theme='light'] .favicon.tone-light { filter: invert(1) hue-rotate(180deg); }
 .pinned-pill.active { box-shadow: var(--shadow-pill-elevated), 0 0 0 1.5px var(--border-strong); }
+/* Raccourci dont la page est ouverte : contour à la couleur du site (à défaut, celle du texte). */
+.pinned-pill.loaded { box-shadow: var(--shadow-pill-elevated), 0 0 0 1.5px color-mix(in srgb, var(--site, var(--text-dim)) 45%, transparent); }
+.pinned-pill.loaded.active { box-shadow: var(--shadow-pill-elevated), 0 0 0 2px var(--site, var(--text)); }
+.pinned-pill { transition: box-shadow var(--fast) var(--ease-out); }
 
 /* Liste verticale des onglets flottants */
 .sidebar-tabs {

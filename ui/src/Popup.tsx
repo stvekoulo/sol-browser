@@ -14,6 +14,7 @@ type Content =
   | { popup: 'settings'; zoom: number; theme: number; language: number; home: string; permissions: number; tint: Setting[]; items: Setting[] }
   | { popup: 'profiles'; items: Profile[] }
   | { popup: 'group-edit'; create: boolean; id: string; name: string; color: string; icon: string; presets: string[] }
+  | { popup: 'shortcut-edit'; id: string; name: string; url: string }
   | { popup: 'permission'; site: string; what: string; secure: boolean }
   | { popup: 'prompt'; title: string; hint: string; placeholder: string; submit: string; value: string; command: string; id: string | null };
 
@@ -262,6 +263,9 @@ export default function Popup() {
       </div>
     );
 
+  if (content.popup === 'shortcut-edit')
+    return <ShortcutForm key={opening} rootRef={root} ask={content} />;
+
   if (content.popup === 'prompt')
     return <NameForm key={opening} rootRef={root} ask={content} />;
 
@@ -432,10 +436,37 @@ function NameForm({ rootRef, ask }: { rootRef: RefObject<HTMLDivElement | null>;
       >
         <label htmlFor="name-input" className="name-form-title">{ask.title}</label>
         {ask.hint && <p className="row-sub">{ask.hint}</p>}
-        <input id="name-input" autoFocus maxLength={300} placeholder={ask.placeholder} spellCheck={false} value={name} onChange={e => setName(e.target.value)} onFocus={e => e.target.select()} />
+        <input id="name-input" autoFocus maxLength={40} placeholder={ask.placeholder} spellCheck={false} value={name} onChange={e => setName(e.target.value)} onFocus={e => e.target.select()} />
         <div className="name-form-actions">
           <button type="button" className="pill-action" onClick={() => send({ type: 'popup.close' })}>{t('Annuler', 'Cancel')}</button>
           <button type="submit" className="pill-action primary" disabled={!name.trim()}>{ask.submit}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// Modification d'un raccourci de la carte latérale : son nom (vide = celui du site) et son adresse.
+function ShortcutForm({ rootRef, ask }: { rootRef: RefObject<HTMLDivElement | null>; ask: Extract<Content, { popup: 'shortcut-edit' }> }) {
+  const [name, setName] = useState(ask.name);
+  const [url, setUrl] = useState(ask.url);
+  return (
+    <div ref={rootRef} className="popup arriving">
+      <form
+        className="name-form"
+        onSubmit={e => {
+          e.preventDefault();
+          if (url.trim()) send({ type: 'shortcut.update', id: ask.id, title: name.trim(), input: url.trim() });
+        }}
+      >
+        <span className="name-form-title">{t('Modifier le raccourci', 'Edit shortcut')}</span>
+        <label htmlFor="name-input" className="row-sub">{t('Nom (vide : celui du site)', "Name (empty: the site's own)")}</label>
+        <input id="name-input" autoFocus maxLength={24} spellCheck={false} value={name} onChange={e => setName(e.target.value)} onFocus={e => e.target.select()} />
+        <label htmlFor="url-input" className="row-sub">{t('Adresse', 'Address')}</label>
+        <input id="url-input" type="text" inputMode="url" maxLength={2000} placeholder="https://…" spellCheck={false} value={url} onChange={e => setUrl(e.target.value)} />
+        <div className="name-form-actions">
+          <button type="button" className="pill-action" onClick={() => send({ type: 'popup.close' })}>{t('Annuler', 'Cancel')}</button>
+          <button type="submit" className="pill-action primary" disabled={!url.trim()}>{t('Enregistrer', 'Save')}</button>
         </div>
       </form>
     </div>

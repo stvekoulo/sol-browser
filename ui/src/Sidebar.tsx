@@ -193,29 +193,15 @@ function PinnedStrip({ shortcuts, tabs, icons, activeId }: { shortcuts: State['s
     <>
       {shortcuts.length > 0 && (
         <div className="pinned-row" aria-label={t('Accès rapides', 'Shortcuts')}>
-          {shortcuts.map(({ name, url, icon, tabId }, index) => {
-            const label = name || formatDomain(url);
-            const wide = index === shortcuts.length - 1 && shortcuts.length <= 3;
-            return (
-              <button
-                key={`${index}-${url}`}
-                className={`pinned-pill ${wide ? 'wide' : 'circle'}${tabId && tabId === activeId ? ' active' : ''}${tabId ? ' loaded' : ''}`}
-                title={label}
-                onContextMenu={e => {
-                  e.preventDefault();
-                  send({ type: 'shortcut.menu', index, x: e.clientX + OFFSET_X, y: e.clientY + OFFSET_Y });
-                }}
-                onMouseDown={e => {
-                  // La page s'ouvre dans le raccourci lui-même, sans ligne dans la liste des onglets. Clic du milieu : elle se ferme.
-                  if (e.button === 0) send({ type: 'shortcut.open', index });
-                  if (e.button === 1 && tabId) send({ type: 'tab.close', id: tabId });
-                }}
-              >
-                {icon ? <ShortcutIcon src={icon} /> : <span className="favicon letter">{label[0]?.toUpperCase()}</span>}
-                {wide && <span>{label}</span>}
-              </button>
-            );
-          })}
+          {shortcuts.map((shortcut, index) => (
+            <ShortcutPill
+              key={`${index}-${shortcut.url}`}
+              shortcut={shortcut}
+              index={index}
+              wide={index === shortcuts.length - 1 && shortcuts.length <= 3}
+              active={!!shortcut.tabId && shortcut.tabId === activeId}
+            />
+          ))}
         </div>
       )}
       {pinnedTabs.length > 0 && (
@@ -249,11 +235,42 @@ function PinnedStrip({ shortcuts, tabs, icons, activeId }: { shortcuts: State['s
   );
 }
 
-// Icône d'un raccourci. Une icône toute sombre (GitHub…) est illisible sur le thème sombre, et une toute claire
-// sur le thème clair : sa clarté est mesurée une fois, et la feuille de style l'inverse dans le thème où elle disparaît.
-function ShortcutIcon({ src }: { src: string }) {
-  const [tone, setTone] = useState('');
+// Pilule d'un raccourci. Sa page ouverte, son contour prend la couleur du site (lue dans son icône) : léger tant
+// qu'elle est en arrière-plan, franc quand c'est la page affichée.
+function ShortcutPill({ shortcut, index, wide, active }: { shortcut: State['shortcuts'][number]; index: number; wide: boolean; active: boolean }) {
+  const { name, url, icon, tabId } = shortcut;
+  const label = name || formatDomain(url);
+  const look = useIconLook(icon);
+  return (
+    <button
+      className={`pinned-pill ${wide ? 'wide' : 'circle'}${active ? ' active' : ''}${tabId ? ' loaded' : ''}`}
+      style={look.color ? ({ '--site': look.color } as CSSProperties) : undefined}
+      title={label}
+      onContextMenu={e => {
+        e.preventDefault();
+        send({ type: 'shortcut.menu', index, x: e.clientX + OFFSET_X, y: e.clientY + OFFSET_Y });
+      }}
+      onMouseDown={e => {
+        // La page s'ouvre dans le raccourci lui-même, sans ligne dans la liste des onglets. Clic du milieu : elle se ferme.
+        if (e.button === 0) send({ type: 'shortcut.open', index });
+        if (e.button === 1 && tabId) send({ type: 'tab.close', id: tabId });
+      }}
+    >
+      {icon ? <img className={`favicon${look.tone}`} src={icon} alt="" draggable={false} /> : <span className="favicon letter">{label[0]?.toUpperCase()}</span>}
+      {wide && <span>{label}</span>}
+    </button>
+  );
+}
+
+// Ce que l'icône d'un site dit de lui, mesuré une fois :
+// - sa couleur : la moyenne de ses pixels colorés (aucune pour une icône grise, noire ou blanche) ;
+// - son ton : une icône toute sombre est illisible sur le thème sombre, une toute claire sur le thème clair ;
+//   la feuille de style l'inverse dans le thème où elle disparaîtrait.
+function useIconLook(src: string | null) {
+  const [look, setLook] = useState<{ tone: string; color: string | null }>({ tone: '', color: null });
   useEffect(() => {
+    setLook({ tone: '', color: null });
+    if (!src) return;
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
@@ -262,19 +279,29 @@ function ShortcutIcon({ src }: { src: string }) {
       if (!ctx) return;
       ctx.drawImage(img, 0, 0, 16, 16);
       const px = ctx.getImageData(0, 0, 16, 16).data;
-      let sum = 0, count = 0;
+      let light = 0, count = 0, vivid = 0;
+      const sum = [0, 0, 0];
       for (let i = 0; i < px.length; i += 4) {
         if (px[i + 3] < 128) continue; // pixels transparents ignorés
-        sum += 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+        const [r, g, b] = [px[i], px[i + 1], px[i + 2]];
+        light += 0.299 * r + 0.587 * g + 0.114 * b;
         count++;
+        const max = Math.max(r, g, b);
+        if (max > 60 && (max - Math.min(r, g, b)) / max > 0.35) {
+          sum[0] += r; sum[1] += g; sum[2] += b;
+          vivid++;
+        }
       }
-      const light = count ? sum / count : 128;
-      setTone(light < 60 ? ' tone-dark' : light > 225 ? ' tone-light' : '');
+      const mean = count ? light / count : 128;
+      setLook({
+        tone: mean < 60 ? ' tone-dark' : mean > 225 ? ' tone-light' : '',
+        color: vivid > count * 0.08 ? `rgb(${sum.map(v => Math.round(v / vivid)).join(', ')})` : null,
+      });
     };
     img.src = src;
     return () => void (img.onload = null);
   }, [src]);
-  return <img className={`favicon${tone}`} src={src} alt="" draggable={false} />;
+  return look;
 }
 
 function SidebarTabRow({ tab, index, icon, active, grouped = false }: { tab: Tab; index: number; icon: string | null | undefined; active: boolean; grouped?: boolean }) {
