@@ -30,6 +30,28 @@ public sealed class Settings
     public string HomePage { get; set; } = DefaultHomePage;
     /// <summary>Langue de l'interface : "system" (celle de Windows), "fr" ou "en".</summary>
     public string Language { get; set; } = "system";
+    /// <summary>Raccourcis de la carte latérale. Ceux-ci sont proposés au départ ; l'utilisateur les modifie ou les retire.</summary>
+    public List<SiteShortcut> Shortcuts { get; set; } =
+    [
+        new() { Url = "https://github.com", Name = "GitHub" },
+        new() { Url = "https://www.youtube.com", Name = "YouTube" },
+        new() { Url = "https://devbenin.bj", Name = "DevBenin" },
+    ];
+}
+
+/// <summary>Raccourci vers un site : son adresse, un nom facultatif, et l'icône du site (en data:) une fois connue.</summary>
+public sealed class SiteShortcut
+{
+    public string Url { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string? Icon { get; set; }
+
+    /// <summary>Le site d'une adresse, sans « www. » ; vide si ce n'est pas une adresse.</summary>
+    public static string DomainOf(string? url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Host.Length == 0) return "";
+        return uri.Host.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? uri.Host[4..].ToLowerInvariant() : uri.Host.ToLowerInvariant();
+    }
 }
 
 public sealed class Session

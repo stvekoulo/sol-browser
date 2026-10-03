@@ -38,7 +38,7 @@ public sealed class BrowserController
         _pages.RuntimeChanged += Refresh;
         _pages.NewTabRequested += url => { Open(url); Refresh(); };
         _pages.Loaded += RecordVisit;
-        _pages.FaviconChanged += (id, data) => { _favicons[id] = data; PostFavicon(id); };
+        _pages.FaviconChanged += (id, data) => { _favicons[id] = data; PostFavicon(id); LearnShortcutIcon(id, data); };
         _pages.ContextMenuRequested += OpenContextMenu;
         _pages.StatusChanged += (id, text) =>
         {
@@ -97,6 +97,8 @@ public sealed class BrowserController
                 return;
             case "settings.text": if (id == "home") SetHomePage(c.Input!); return;
             case "dock.size": if (_dockShown) _dock.SetSize(c.Width!.Value, c.Height!.Value); return;
+            case "shortcut.menu": OpenShortcutMenu(c.Index!.Value, c.X!.Value, c.Y!.Value); return;
+            case "shortcut.update": UpdateShortcut(id, c.Title!); break;
             case "tab.menu": OpenTabMenu(id, c.X!.Value, c.Y!.Value); return;
             case "permission.answer": AnswerPermission(c.Index != 0); return;
             case "permissions.clear": _permissions.Clear(); if (_settingsOpen) _popup.Post(SettingsJson()); return;
@@ -114,7 +116,11 @@ public sealed class BrowserController
                     _pages.Navigate(_suggestTab, _suggestions[i].Url);
                 break;
             case "ui.ready":
-                if (_tabs.Tabs.Count == 0) RestoreSession();
+                if (_tabs.Tabs.Count == 0)
+                {
+                    RestoreSession();
+                    foreach (var shortcut in _settings.Shortcuts.Where(s => s.Icon is null)) _ = FetchShortcutIconAsync(shortcut);
+                }
                 foreach (var tabId in _favicons.Keys) PostFavicon(tabId);
                 break;
             case "tab.open": Open(c.Url is null ? _settings.HomePage : Resolve(c.Url)); break;
@@ -568,7 +574,12 @@ public sealed class BrowserController
         }
     }
 
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(2) };
+    // Certains sites refusent une requête sans agent : celui-ci ne dit rien de l'ordinateur.
+    private static readonly HttpClient Http = new()
+    {
+        Timeout = TimeSpan.FromSeconds(4),
+        DefaultRequestHeaders = { { "User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Navigateur" } },
+    };
     private int _suggestSeq;
 
     // Menus affichés dans la vue posée sur la page : un libellé et son action ; un libellé vide est un séparateur.
@@ -609,6 +620,7 @@ public sealed class BrowserController
                 KeepPairAdjacent();
             }),
             .. GroupEntries(tab),
+            .. ShortcutEntry(tab),
             ("", null),
             (T("Fermer l'onglet", "Close tab"), () => Close(id)),
             (T("Fermer les autres onglets", "Close other tabs"), () =>
@@ -616,6 +628,87 @@ public sealed class BrowserController
                 foreach (var other in _tabs.Tabs.Where(t => t.Id != id && !t.Pinned).Select(t => t.Id).ToList()) Close(other);
             }),
         ]);
+    }
+
+    // Raccourcis de la carte latérale : enregistrés dans les réglages, modifiables et retirables par clic droit.
+    private SiteShortcut? ShortcutFor(string? url) =>
+        SiteShortcut.DomainOf(url) is { Length: > 0 } domain ? _settings.Shortcuts.FirstOrDefault(s => SiteShortcut.DomainOf(s.Url) == domain) : null;
+
+    private void SaveShortcuts()
+    {
+        JsonFileStore.Save(AppPaths.Settings, _settings);
+        Refresh();
+    }
+
+    // Entrée du menu d'un onglet : son site rejoint les raccourcis, s'il n'y est pas déjà.
+    private List<(string Label, Action? Run)> ShortcutEntry(Tab tab)
+    {
+        if (!IsWeb(tab.Url) || ShortcutFor(tab.Url) is not null) return [];
+        return [(T("Ajouter aux raccourcis", "Add to shortcuts"), () =>
+        {
+            var name = tab.Title.Split(" - ")[0].Split(" · ")[0].Split(" | ")[0].Trim();
+            _settings.Shortcuts.Add(new SiteShortcut { Url = tab.Url, Name = name.Length is > 0 and <= 20 ? name : "", Icon = _favicons.GetValueOrDefault(tab.Id) });
+            SaveShortcuts();
+        })];
+    }
+
+    private void OpenShortcutMenu(int index, double x, double y)
+    {
+        if (index < 0 || index >= _settings.Shortcuts.Count) return;
+        var shortcut = _settings.Shortcuts[index];
+        ShowMenu(x, y,
+        [
+            (T("Modifier le raccourci", "Edit shortcut"), () => _afterMenu = () => AskName(T("Modifier le raccourci", "Edit shortcut"),
+                T("Adresse du site ouvert par ce raccourci.", "Address of the site this shortcut opens."),
+                "https://…", T("Enregistrer", "Save"), shortcut.Url, "shortcut.update", index.ToString())),
+            (T("Retirer le raccourci", "Remove shortcut"), () => { _settings.Shortcuts.Remove(shortcut); SaveShortcuts(); }),
+        ]);
+    }
+
+    private void UpdateShortcut(string id, string input)
+    {
+        if (!int.TryParse(id, out var index) || index < 0 || index >= _settings.Shortcuts.Count) return;
+        var url = Resolve(input);
+        if (!IsWeb(url) || SiteShortcut.DomainOf(url).Length == 0) return; // seulement une adresse web
+        var shortcut = _settings.Shortcuts[index];
+        if (SiteShortcut.DomainOf(url) != SiteShortcut.DomainOf(shortcut.Url)) (shortcut.Name, shortcut.Icon) = ("", null);
+        shortcut.Url = url;
+        SaveShortcuts();
+        if (shortcut.Icon is null) _ = FetchShortcutIconAsync(shortcut);
+    }
+
+    // Un onglet vient d'afficher l'icône de son site : le raccourci de ce site la prend (c'est la plus fidèle).
+    private void LearnShortcutIcon(string tabId, string? data)
+    {
+        if (data is null || data.Length > MaxShortcutIcon * 2) return;
+        if (ShortcutFor(_tabs.Tabs.FirstOrDefault(t => t.Id == tabId)?.Url) is not { } shortcut || shortcut.Icon == data) return;
+        shortcut.Icon = data;
+        SaveShortcuts();
+    }
+
+    private const int MaxShortcutIcon = 100_000; // octets
+
+    // Site jamais visité : son icône est demandée à l'adresse habituelle, /favicon.ico. Rien d'autre n'est envoyé.
+    private async Task FetchShortcutIconAsync(SiteShortcut shortcut)
+    {
+        if (!IsWeb(shortcut.Url) || !Uri.TryCreate(shortcut.Url, UriKind.Absolute, out var site)) return;
+        try
+        {
+            using var response = await Http.GetAsync(new Uri(site, "/favicon.ico"));
+            var type = response.Content.Headers.ContentType?.MediaType ?? "";
+            if (!response.IsSuccessStatusCode || !type.StartsWith("image/", StringComparison.OrdinalIgnoreCase)) return;
+            if (response.Content.Headers.ContentLength is > MaxShortcutIcon) return;
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+            // Entre-temps, un onglet a pu fournir l'icône, ou le raccourci a pu changer de site ou disparaître.
+            if (bytes.Length is 0 or > MaxShortcutIcon || shortcut.Icon is not null || !_settings.Shortcuts.Contains(shortcut)) return;
+            if (SiteShortcut.DomainOf(shortcut.Url) != SiteShortcut.DomainOf(site.AbsoluteUri)) return;
+            shortcut.Icon = $"data:{type};base64,{Convert.ToBase64String(bytes)}";
+            SaveShortcuts();
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+        {
+            // hors ligne ou site sans icône : le raccourci garde sa lettre, jusqu'à la première visite
+        }
     }
 
     private void Activate(string id)
@@ -887,6 +980,7 @@ public sealed class BrowserController
             }),
             groups = _tabs.Groups.Select(g => new { id = g.Id, name = g.Name, color = g.Color, icon = g.Icon, collapsed = g.Collapsed }),
             activeId = _tabs.ActiveId,
+            shortcuts = _settings.Shortcuts.Select(s => new { url = s.Url, name = s.Name, icon = s.Icon }),
             profile = ProfileName(AppPaths.Profile),
             split = new { primaryId = _split.PrimaryId, secondaryId = _split.SecondaryId, ratio = _split.Ratio, visible = showSplit },
             maximized = Presenter?.State == OverlappedPresenterState.Maximized,

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { formatDomain, onState, send, type State, type Tab } from './bridge';
 import { t, useLang } from './i18n';
-import { CopyIcon, DevBeninLogo, GithubLogo, Icon, LockIcon, YoutubeLogo } from './Icons';
+import { CopyIcon, Icon, LockIcon } from './Icons';
 import { startSlotDrag, useVerticalDrag } from './useVerticalDrag';
 
 type Icons = Record<string, string | null | undefined>;
@@ -167,7 +167,7 @@ export default function Sidebar() {
         </button>
       </div>
 
-      <PinnedStrip tabs={tabs} icons={icons} activeId={activeId} />
+      <PinnedStrip shortcuts={state.shortcuts} tabs={tabs} icons={icons} activeId={activeId} />
 
       <div className="sidebar-tabs" role="tablist" aria-orientation="vertical">
         {normalItems}
@@ -186,41 +186,41 @@ export default function Sidebar() {
   );
 }
 
-// Raccourcis proposés par défaut : toujours là, que l'utilisateur ait épinglé des onglets ou non.
-const SHORTCUTS = [
-  { name: 'GitHub', url: 'https://github.com', Logo: GithubLogo },
-  { name: 'YouTube', url: 'https://www.youtube.com', Logo: YoutubeLogo },
-  { name: 'DevBenin', url: 'https://devbenin.bj', Logo: DevBeninLogo },
-];
-
-// Deux rangées de pilules : les raccourcis par défaut, puis les onglets épinglés par l'utilisateur.
-function PinnedStrip({ tabs, icons, activeId }: { tabs: Tab[]; icons: Icons; activeId: string | null }) {
+// Deux rangées de pilules : les raccourcis (modifiables et retirables par clic droit), puis les onglets épinglés.
+function PinnedStrip({ shortcuts, tabs, icons, activeId }: { shortcuts: State['shortcuts']; tabs: Tab[]; icons: Icons; activeId: string | null }) {
   const pinnedTabs = tabs.filter(tab => tab.pinned);
   const activeDomain = formatDomain(tabs.find(tab => tab.id === activeId)?.url ?? '');
   return (
     <>
-      <div className="pinned-row" aria-label={t('Accès rapides', 'Shortcuts')}>
-        {SHORTCUTS.map(({ name, url, Logo }, idx) => {
-          const domain = formatDomain(url);
-          // Le site est déjà ouvert : on y retourne. Sinon il s'ouvre dans un nouvel onglet, sans remplacer la page en cours.
-          const open = tabs.find(tab => formatDomain(tab.url) === domain);
-          const wide = idx === SHORTCUTS.length - 1;
-          return (
-            <button
-              key={url}
-              className={`pinned-pill ${wide ? 'wide' : 'circle'}${activeDomain === domain ? ' active' : ''}`}
-              title={name}
-              onMouseDown={e => {
-                if (e.button === 0) send(open ? { type: 'tab.activate', id: open.id } : { type: 'tab.open', url });
-                if (e.button === 1) send({ type: 'tab.open', url });
-              }}
-            >
-              <Logo />
-              {wide && <span>{name}</span>}
-            </button>
-          );
-        })}
-      </div>
+      {shortcuts.length > 0 && (
+        <div className="pinned-row" aria-label={t('Accès rapides', 'Shortcuts')}>
+          {shortcuts.map(({ name, url, icon }, index) => {
+            const domain = formatDomain(url);
+            const label = name || domain;
+            // Le site est déjà ouvert : on y retourne. Sinon il s'ouvre dans un nouvel onglet, sans remplacer la page en cours.
+            const open = tabs.find(tab => formatDomain(tab.url) === domain);
+            const wide = index === shortcuts.length - 1 && shortcuts.length <= 3;
+            return (
+              <button
+                key={`${index}-${url}`}
+                className={`pinned-pill ${wide ? 'wide' : 'circle'}${activeDomain === domain ? ' active' : ''}`}
+                title={label}
+                onContextMenu={e => {
+                  e.preventDefault();
+                  send({ type: 'shortcut.menu', index, x: e.clientX + OFFSET_X, y: e.clientY + OFFSET_Y });
+                }}
+                onMouseDown={e => {
+                  if (e.button === 0) send(open ? { type: 'tab.activate', id: open.id } : { type: 'tab.open', url });
+                  if (e.button === 1) send({ type: 'tab.open', url });
+                }}
+              >
+                {icon ? <img className="favicon" src={icon} alt="" draggable={false} /> : <span className="favicon letter">{label[0]?.toUpperCase()}</span>}
+                {wide && <span>{label}</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
       {pinnedTabs.length > 0 && (
         <div className="pinned-row" aria-label={t('Onglets épinglés', 'Pinned tabs')}>
           {pinnedTabs.map((tab, idx) => {

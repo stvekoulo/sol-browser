@@ -432,7 +432,7 @@ function NameForm({ rootRef, ask }: { rootRef: RefObject<HTMLDivElement | null>;
       >
         <label htmlFor="name-input" className="name-form-title">{ask.title}</label>
         {ask.hint && <p className="row-sub">{ask.hint}</p>}
-        <input id="name-input" autoFocus maxLength={40} placeholder={ask.placeholder} spellCheck={false} value={name} onChange={e => setName(e.target.value)} onFocus={e => e.target.select()} />
+        <input id="name-input" autoFocus maxLength={300} placeholder={ask.placeholder} spellCheck={false} value={name} onChange={e => setName(e.target.value)} onFocus={e => e.target.select()} />
         <div className="name-form-actions">
           <button type="button" className="pill-action" onClick={() => send({ type: 'popup.close' })}>{t('Annuler', 'Cancel')}</button>
           <button type="submit" className="pill-action primary" disabled={!name.trim()}>{ask.submit}</button>

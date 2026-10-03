@@ -20,6 +20,7 @@ export type State = {
   tabs: Tab[];
   groups: TabGroup[];
   activeId: string | null;
+  shortcuts: { url: string; name: string; icon: string | null }[]; // raccourcis de la carte latérale
   // Paire d'onglets scindés ; visible quand l'onglet actif est l'un des deux.
   split: { primaryId: string | null; secondaryId: string | null; ratio: number; visible: boolean };
   profile: string; // nom affiché du profil de cette fenêtre

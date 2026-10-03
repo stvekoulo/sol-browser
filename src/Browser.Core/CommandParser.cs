@@ -30,6 +30,7 @@ public static class CommandParser
         ["group.toggle"] = ["id"], ["group.menu"] = ["id", "x", "y"], ["group.update"] = ["id", "title"],
         ["profile.menu"] = ["x", "y"],
         ["profile.switch"] = ["id"], ["profile.delete"] = ["id"], ["profile.new"] = [], ["profile.create"] = ["title"],
+        ["shortcut.menu"] = ["index", "x", "y"], ["shortcut.update"] = ["id", "title"],
         ["ui.ready"] = [],
     };
 
