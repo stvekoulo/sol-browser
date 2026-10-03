@@ -188,33 +188,30 @@ export default function Sidebar() {
 
 // Deux rangées de pilules : les raccourcis (modifiables et retirables par clic droit), puis les onglets épinglés.
 function PinnedStrip({ shortcuts, tabs, icons, activeId }: { shortcuts: State['shortcuts']; tabs: Tab[]; icons: Icons; activeId: string | null }) {
-  const pinnedTabs = tabs.filter(tab => tab.pinned);
-  const activeDomain = formatDomain(tabs.find(tab => tab.id === activeId)?.url ?? '');
+  const pinnedTabs = tabs.filter(tab => tab.pinned && !shortcuts.some(s => s.tabId === tab.id));
   return (
     <>
       {shortcuts.length > 0 && (
         <div className="pinned-row" aria-label={t('Accès rapides', 'Shortcuts')}>
-          {shortcuts.map(({ name, url, icon }, index) => {
-            const domain = formatDomain(url);
-            const label = name || domain;
-            // Le site est déjà ouvert : on y retourne. Sinon il s'ouvre dans un nouvel onglet, sans remplacer la page en cours.
-            const open = tabs.find(tab => formatDomain(tab.url) === domain);
+          {shortcuts.map(({ name, url, icon, tabId }, index) => {
+            const label = name || formatDomain(url);
             const wide = index === shortcuts.length - 1 && shortcuts.length <= 3;
             return (
               <button
                 key={`${index}-${url}`}
-                className={`pinned-pill ${wide ? 'wide' : 'circle'}${activeDomain === domain ? ' active' : ''}`}
+                className={`pinned-pill ${wide ? 'wide' : 'circle'}${tabId && tabId === activeId ? ' active' : ''}${tabId ? ' loaded' : ''}`}
                 title={label}
                 onContextMenu={e => {
                   e.preventDefault();
                   send({ type: 'shortcut.menu', index, x: e.clientX + OFFSET_X, y: e.clientY + OFFSET_Y });
                 }}
                 onMouseDown={e => {
-                  if (e.button === 0) send(open ? { type: 'tab.activate', id: open.id } : { type: 'tab.open', url });
-                  if (e.button === 1) send({ type: 'tab.open', url });
+                  // La page s'ouvre dans le raccourci lui-même, sans ligne dans la liste des onglets. Clic du milieu : elle se ferme.
+                  if (e.button === 0) send({ type: 'shortcut.open', index });
+                  if (e.button === 1 && tabId) send({ type: 'tab.close', id: tabId });
                 }}
               >
-                {icon ? <img className="favicon" src={icon} alt="" draggable={false} /> : <span className="favicon letter">{label[0]?.toUpperCase()}</span>}
+                {icon ? <ShortcutIcon src={icon} /> : <span className="favicon letter">{label[0]?.toUpperCase()}</span>}
                 {wide && <span>{label}</span>}
               </button>
             );
@@ -250,6 +247,34 @@ function PinnedStrip({ shortcuts, tabs, icons, activeId }: { shortcuts: State['s
       )}
     </>
   );
+}
+
+// Icône d'un raccourci. Une icône toute sombre (GitHub…) est illisible sur le thème sombre, et une toute claire
+// sur le thème clair : sa clarté est mesurée une fois, et la feuille de style l'inverse dans le thème où elle disparaît.
+function ShortcutIcon({ src }: { src: string }) {
+  const [tone, setTone] = useState('');
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 16;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.drawImage(img, 0, 0, 16, 16);
+      const px = ctx.getImageData(0, 0, 16, 16).data;
+      let sum = 0, count = 0;
+      for (let i = 0; i < px.length; i += 4) {
+        if (px[i + 3] < 128) continue; // pixels transparents ignorés
+        sum += 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+        count++;
+      }
+      const light = count ? sum / count : 128;
+      setTone(light < 60 ? ' tone-dark' : light > 225 ? ' tone-light' : '');
+    };
+    img.src = src;
+    return () => void (img.onload = null);
+  }, [src]);
+  return <img className={`favicon${tone}`} src={src} alt="" draggable={false} />;
 }
 
 function SidebarTabRow({ tab, index, icon, active, grouped = false }: { tab: Tab; index: number; icon: string | null | undefined; active: boolean; grouped?: boolean }) {

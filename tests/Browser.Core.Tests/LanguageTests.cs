@@ -27,6 +27,15 @@ public class LanguageTests
     public void Shortcut_domain_ignores_www_and_case(string? url, string expected) =>
         Assert.Equal(expected, SiteShortcut.DomainOf(url));
 
+    [Theory]
+    [InlineData("https://fr.wikipedia.org/wiki/Blink", "Wikipedia")]
+    [InlineData("https://devbenin.bj", "Devbenin")]
+    [InlineData("https://www.bbc.co.uk/news", "Bbc")]
+    [InlineData("http://localhost:3000", "Localhost")]
+    [InlineData("about:blank", "")]
+    public void Shortcut_name_comes_from_the_domain(string url, string expected) =>
+        Assert.Equal(expected, SiteShortcut.NameOf(url));
+
     [Fact]
     public void Error_pages_exist_in_both_languages()
     {

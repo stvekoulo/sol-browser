@@ -52,6 +52,19 @@ public sealed class SiteShortcut
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Host.Length == 0) return "";
         return uri.Host.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? uri.Host[4..].ToLowerInvariant() : uri.Host.ToLowerInvariant();
     }
+
+    /// <summary>
+    /// Nom d'un site d'après son adresse, en attendant celui que le site annonce : « fr.wikipedia.org » donne « Wikipedia ».
+    /// </summary>
+    public static string NameOf(string? url)
+    {
+        var labels = DomainOf(url).Split('.', StringSplitOptions.RemoveEmptyEntries);
+        if (labels.Length == 0) return "";
+        // ponytail: suffixes en deux parties (« co.uk », « com.br ») reconnus par une courte liste, pas par la liste publique complète.
+        var skip = labels.Length >= 3 && labels[^2] is "co" or "com" or "org" or "net" or "gov" or "ac" or "edu" ? 3 : 2;
+        var label = labels[Math.Max(0, labels.Length - skip)];
+        return char.ToUpperInvariant(label[0]) + label[1..];
+    }
 }
 
 public sealed class Session

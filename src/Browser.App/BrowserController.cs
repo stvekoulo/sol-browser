@@ -38,6 +38,7 @@ public sealed class BrowserController
         _pages.RuntimeChanged += Refresh;
         _pages.NewTabRequested += url => { Open(url); Refresh(); };
         _pages.Loaded += RecordVisit;
+        _pages.Loaded += id => _ = LearnShortcutNameAsync(id);
         _pages.FaviconChanged += (id, data) => { _favicons[id] = data; PostFavicon(id); LearnShortcutIcon(id, data); };
         _pages.ContextMenuRequested += OpenContextMenu;
         _pages.StatusChanged += (id, text) =>
@@ -99,6 +100,7 @@ public sealed class BrowserController
             case "dock.size": if (_dockShown) _dock.SetSize(c.Width!.Value, c.Height!.Value); return;
             case "shortcut.menu": OpenShortcutMenu(c.Index!.Value, c.X!.Value, c.Y!.Value); return;
             case "shortcut.update": UpdateShortcut(id, c.Title!); break;
+            case "shortcut.open": OpenShortcut(c.Index!.Value); break;
             case "tab.menu": OpenTabMenu(id, c.X!.Value, c.Y!.Value); return;
             case "permission.answer": AnswerPermission(c.Index != 0); return;
             case "permissions.clear": _permissions.Clear(); if (_settingsOpen) _popup.Post(SettingsJson()); return;
@@ -477,6 +479,7 @@ public sealed class BrowserController
         _pages.Remove(id);
         _favicons.Remove(id);
         _split.OnTabClosed(id);
+        foreach (var shortcut in _shortcutTabs.Where(p => p.Value == id).Select(p => p.Key).ToList()) _shortcutTabs.Remove(shortcut);
         // Dernier onglet fermé : la fenêtre reste ouverte sur un onglet vide. Elle ne se ferme que par son bouton.
         if (_tabs.Tabs.Count == 0) Open(_settings.HomePage);
     }
@@ -634,6 +637,35 @@ public sealed class BrowserController
     private SiteShortcut? ShortcutFor(string? url) =>
         SiteShortcut.DomainOf(url) is { Length: > 0 } domain ? _settings.Shortcuts.FirstOrDefault(s => SiteShortcut.DomainOf(s.Url) == domain) : null;
 
+    // Page ouverte « dans » un raccourci : un onglet sans ligne dans la liste, que seul son raccourci affiche.
+    // Il n'est pas enregistré dans la session : le raccourci le rouvre au prochain clic.
+    private readonly Dictionary<SiteShortcut, string> _shortcutTabs = new();
+
+    private void OpenShortcut(int index)
+    {
+        if (index < 0 || index >= _settings.Shortcuts.Count) return;
+        var shortcut = _settings.Shortcuts[index];
+        if (_shortcutTabs.TryGetValue(shortcut, out var open)) Activate(open);
+        else _shortcutTabs[shortcut] = Open(shortcut.Url, pinned: true).Id; // épinglé : jamais groupé, épargné par « fermer les autres »
+    }
+
+    // Le site annonce son nom (« GitHub », « YouTube »…) : le raccourci le prend à la place du nom tiré de l'adresse.
+    private async Task LearnShortcutNameAsync(string tabId)
+    {
+        if (ShortcutFor(_tabs.Tabs.FirstOrDefault(t => t.Id == tabId)?.Url) is not { } shortcut || _pages.CoreOf(tabId) is not { } core) return;
+        try
+        {
+            var raw = await core.ExecuteScriptAsync(
+                """(document.querySelector('meta[property="og:site_name"]') || document.querySelector('meta[name="application-name"]'))?.content || '' """);
+            // Texte venu de la page : gardé court et sans caractère de contrôle, affiché comme du texte.
+            var name = new string((JsonSerializer.Deserialize<string>(raw) ?? "").Where(ch => !char.IsControl(ch)).ToArray()).Trim();
+            if (name.Length is 0 or > 24 || name == shortcut.Name || !_settings.Shortcuts.Contains(shortcut)) return;
+            shortcut.Name = name;
+            SaveShortcuts();
+        }
+        catch (Exception) { /* page fermée ou script refusé : le nom reste celui de l'adresse */ }
+    }
+
     private void SaveShortcuts()
     {
         JsonFileStore.Save(AppPaths.Settings, _settings);
@@ -646,9 +678,9 @@ public sealed class BrowserController
         if (!IsWeb(tab.Url) || ShortcutFor(tab.Url) is not null) return [];
         return [(T("Ajouter aux raccourcis", "Add to shortcuts"), () =>
         {
-            var name = tab.Title.Split(" - ")[0].Split(" · ")[0].Split(" | ")[0].Trim();
-            _settings.Shortcuts.Add(new SiteShortcut { Url = tab.Url, Name = name.Length is > 0 and <= 20 ? name : "", Icon = _favicons.GetValueOrDefault(tab.Id) });
+            _settings.Shortcuts.Add(new SiteShortcut { Url = tab.Url, Name = SiteShortcut.NameOf(tab.Url), Icon = _favicons.GetValueOrDefault(tab.Id) });
             SaveShortcuts();
+            _ = LearnShortcutNameAsync(tab.Id);
         })];
     }
 
@@ -656,12 +688,19 @@ public sealed class BrowserController
     {
         if (index < 0 || index >= _settings.Shortcuts.Count) return;
         var shortcut = _settings.Shortcuts[index];
+        var open = _shortcutTabs.GetValueOrDefault(shortcut);
         ShowMenu(x, y,
         [
+            .. open is null ? [] : new (string, Action?)[] { (T("Fermer la page du raccourci", "Close the shortcut's page"), () => Close(open)), ("", null) },
             (T("Modifier le raccourci", "Edit shortcut"), () => _afterMenu = () => AskName(T("Modifier le raccourci", "Edit shortcut"),
                 T("Adresse du site ouvert par ce raccourci.", "Address of the site this shortcut opens."),
                 "https://…", T("Enregistrer", "Save"), shortcut.Url, "shortcut.update", index.ToString())),
-            (T("Retirer le raccourci", "Remove shortcut"), () => { _settings.Shortcuts.Remove(shortcut); SaveShortcuts(); }),
+            (T("Retirer le raccourci", "Remove shortcut"), () =>
+            {
+                if (open is not null) Close(open);
+                _settings.Shortcuts.Remove(shortcut);
+                SaveShortcuts();
+            }),
         ]);
     }
 
@@ -671,8 +710,9 @@ public sealed class BrowserController
         var url = Resolve(input);
         if (!IsWeb(url) || SiteShortcut.DomainOf(url).Length == 0) return; // seulement une adresse web
         var shortcut = _settings.Shortcuts[index];
-        if (SiteShortcut.DomainOf(url) != SiteShortcut.DomainOf(shortcut.Url)) (shortcut.Name, shortcut.Icon) = ("", null);
+        if (SiteShortcut.DomainOf(url) != SiteShortcut.DomainOf(shortcut.Url)) (shortcut.Name, shortcut.Icon) = (SiteShortcut.NameOf(url), null);
         shortcut.Url = url;
+        if (_shortcutTabs.TryGetValue(shortcut, out var open)) _pages.Navigate(open, url);
         SaveShortcuts();
         if (shortcut.Icon is null) _ = FetchShortcutIconAsync(shortcut);
     }
@@ -946,12 +986,12 @@ public sealed class BrowserController
 
     private void SaveSession()
     {
-        var tabs = _tabs.Tabs.ToList();
+        var tabs = _tabs.Tabs.Where(t => !_shortcutTabs.ContainsValue(t.Id)).ToList();
         int? IndexOf(string? id) => tabs.FindIndex(t => t.Id == id) is >= 0 and var i ? i : null;
         JsonFileStore.Save(AppPaths.Session, new Session
         {
             Urls = tabs.Select(t => t.Url).ToList(),
-            PinnedCount = _tabs.PinnedCount,
+            PinnedCount = tabs.Count(t => t.Pinned),
             Groups = _tabs.Groups.Select(g => new SessionGroup { Name = g.Name, Color = g.Color, Icon = g.Icon, Collapsed = g.Collapsed }).ToList(),
             GroupOf = tabs.Select(t => t.GroupId is null ? (int?)null : _tabs.Groups.ToList().FindIndex(g => g.Id == t.GroupId)).ToList(),
             ActiveIndex = IndexOf(_tabs.ActiveId) ?? 0,
@@ -980,7 +1020,7 @@ public sealed class BrowserController
             }),
             groups = _tabs.Groups.Select(g => new { id = g.Id, name = g.Name, color = g.Color, icon = g.Icon, collapsed = g.Collapsed }),
             activeId = _tabs.ActiveId,
-            shortcuts = _settings.Shortcuts.Select(s => new { url = s.Url, name = s.Name, icon = s.Icon }),
+            shortcuts = _settings.Shortcuts.Select(s => new { url = s.Url, name = s.Name, icon = s.Icon, tabId = _shortcutTabs.GetValueOrDefault(s) }),
             profile = ProfileName(AppPaths.Profile),
             split = new { primaryId = _split.PrimaryId, secondaryId = _split.SecondaryId, ratio = _split.Ratio, visible = showSplit },
             maximized = Presenter?.State == OverlappedPresenterState.Maximized,
