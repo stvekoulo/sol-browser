@@ -11,6 +11,9 @@ public static class AddressInput
         var text = input.Trim();
         if (Schemes.Any(s => text.StartsWith(s, StringComparison.OrdinalIgnoreCase))) return text;
 
+        // « :3000 » : le serveur de développement de cet ordinateur.
+        if (text.Length is >= 2 and <= 6 && text[0] == ':' && text[1..].All(char.IsAsciiDigit)) return "http://localhost" + text;
+
         if (!text.Contains(' '))
         {
             var host = text.Split('/', 2)[0].Split(':', 2)[0];

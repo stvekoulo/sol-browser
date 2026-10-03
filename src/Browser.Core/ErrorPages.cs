@@ -36,6 +36,10 @@ public static class ErrorPages
         var shown = WebUtility.HtmlEncode(url);
         var isWeb = Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme is "https" or "http";
         // Un site dont l'identité n'est pas prouvée : pas de bouton pour passer outre.
+        // Serveur de développement pas encore démarré : la page se retente toute seule (balise meta, aucun script).
+        var local = isWeb && uri!.IsLoopback && kind is not ("certificate" or "crash");
+        var refresh = local ? $"""<meta http-equiv="refresh" content="3;url={shown}">""" : "";
+        var waiting = local ? $"<p>{(lang == "fr" ? "Serveur local : nouvel essai automatique toutes les 3 secondes." : "Local server: retrying automatically every 3 seconds.")}</p>" : "";
         var retry = isWeb && kind != "certificate" ? $"""<a class="retry" href="{shown}">{(lang == "fr" ? "Réessayer" : "Try again")}</a>""" : "";
         return $$"""
             <!doctype html>
@@ -43,6 +47,7 @@ public static class ErrorPages
             <head>
             <meta charset="utf-8">
             <meta name="color-scheme" content="light dark">
+            {{refresh}}
             <title>{{WebUtility.HtmlEncode(title)}}</title>
             <style>
               /* Une page ordinaire : du texte sur le fond de la page, sans cadre. */
@@ -68,6 +73,7 @@ public static class ErrorPages
             <main>
               <h1>{{WebUtility.HtmlEncode(title)}}</h1>
               <p>{{WebUtility.HtmlEncode(text)}}</p>
+              {{waiting}}
               <code>{{shown}}</code>
               {{retry}}
             </main>

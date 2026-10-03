@@ -25,6 +25,26 @@ public class RemainingShellTests : IDisposable
         Assert.Equal("Travail", Profiles.NameOf(_dir, id));
     }
 
+    [Theory]
+    [InlineData(":3000", "http://localhost:3000")]
+    [InlineData(" :5173 ", "http://localhost:5173")]
+    [InlineData("localhost:8080/api", "http://localhost:8080/api")]
+    [InlineData(":", "https://s.test/?q=%3A")]
+    [InlineData(":abc", "https://s.test/?q=%3Aabc")]
+    [InlineData(":1234567", "https://s.test/?q=%3A1234567")]
+    public void A_bare_port_opens_the_local_development_server(string input, string expected) =>
+        Assert.Equal(expected, AddressInput.Resolve(input, "https://s.test/?q={0}"));
+
+    [Fact]
+    public void A_local_server_error_page_retries_by_itself_without_script()
+    {
+        var html = ErrorPages.Html("http://localhost:3000/", "offline", "fr");
+        Assert.Contains("""<meta http-equiv="refresh" content="3;url=http://localhost:3000/">""", html);
+        Assert.DoesNotContain("<script", html);
+        Assert.DoesNotContain("http-equiv=\"refresh\"", ErrorPages.Html("https://exemple.test/", "offline", "fr"));
+        Assert.DoesNotContain("http-equiv=\"refresh\"", ErrorPages.Html("https://localhost/", "certificate", "fr"));
+    }
+
     [Fact]
     public void Forget_removes_one_site_and_leaves_the_others()
     {

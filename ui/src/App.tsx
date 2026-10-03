@@ -274,6 +274,11 @@ function AddressPill({ tab, focused, grow }: { tab: Tab | undefined; focused: bo
             {tab.device}
           </button>
         )}
+        {tab?.device && (
+          <button className="inline-btn" aria-label={t("Pivoter l'appareil", 'Rotate device')} title={t("Pivoter l'appareil", 'Rotate device')} onClick={() => send({ type: 'device.rotate', id: tab.id })}>
+            <Icon d="M5 2.5h5.5a1 1 0 0 1 1 1V8M4 6.5h3.5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1zM13.5 6.5l-2 2-2-2" size={14} />
+          </button>
+        )}
         {tab && tab.zoom !== 100 && (
           <button className="zoom-chip" aria-label={t(`Zoom ${tab.zoom} %, revenir à 100 %`, `Zoom ${tab.zoom}%, reset to 100%`)} title={t('Revenir à 100 %', 'Reset to 100%')} onClick={() => send({ type: 'zoom.reset', id: tab.id })}>
             {tab.zoom} %
