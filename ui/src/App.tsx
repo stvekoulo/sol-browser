@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { onMessage, onState, send, type State, type Tab } from './bridge';
 
 export default function App() {
@@ -71,44 +71,112 @@ export default function App() {
 
 type Icons = Record<string, string | null | undefined>;
 
-// Onglet en cours de glisser-déposer (un seul à la fois).
-let draggedTab: string | null = null;
+// Glisser d'onglet en cours : l'onglet suit la souris, les autres glissent pour lui faire place.
+// grab : où l'onglet a été saisi ; x : dernière position de la souris ; pending : place demandée à l'hôte.
+let drag: { id: string; grab: number; start: number; x: number; pending: number; moved: boolean } | null = null;
+
+const SLIDE = 'transform 160ms cubic-bezier(0.2, 0, 0, 1)';
+const tabElements = () => [...document.querySelectorAll<HTMLElement>('[data-tab-id]')];
+
+// Fait glisser un onglet jusqu'à sa place, puis rend la main aux transitions de la feuille de style.
+function slideHome(el: HTMLElement) {
+  el.style.transition = SLIDE;
+  el.style.transform = '';
+  el.addEventListener('transitionend', () => (el.style.transition = ''), { once: true });
+}
+
+// Place l'onglet saisi sous la souris. Les positions sont celles de la mise en page (offsetLeft),
+// que les transformations en cours ne modifient pas.
+function followMouse() {
+  const mine = drag && tabElements().find(el => el.dataset.tabId === drag!.id);
+  const strip = mine?.offsetParent as HTMLElement | null;
+  if (!drag || !mine || !strip) return null;
+  const left = Math.max(0, Math.min(drag.x - drag.grab - strip.getBoundingClientRect().left, strip.clientWidth - mine.offsetWidth));
+  mine.style.transition = 'none';
+  mine.style.transform = `translateX(${left - mine.offsetLeft}px)`;
+  mine.classList.add('dragging');
+  return { mine, left };
+}
 
 function TitleBar({ state, icons }: { state: State; icons: Icons }) {
   // Seul le fond de la barre déplace la fenêtre, pas les onglets ni les boutons.
-  const drag = (e: MouseEvent) => {
+  const dragWindow = (e: MouseEvent) => {
     if (e.button === 0 && e.target === e.currentTarget) send({ type: 'window.drag' });
   };
   const maximize = (e: MouseEvent) => {
     if (e.target === e.currentTarget) send({ type: 'window.maximize' });
   };
 
-  // Réordonner : tant que le bouton reste enfoncé, l'onglet saisi prend la place de celui dont la souris
-  // dépasse le milieu. (Le glisser-déposer HTML ne fonctionne pas dans ce type de vue.)
+  // Réordonner : l'onglet saisi suit la souris en continu ; il change de place dans la liste quand son
+  // centre dépasse le milieu d'un voisin. (Le glisser-déposer HTML ne fonctionne pas dans ce type de vue.)
   useEffect(() => {
+    const stop = () => {
+      const mine = drag && tabElements().find(el => el.dataset.tabId === drag!.id);
+      drag = null;
+      if (!mine) return;
+      slideHome(mine);
+      mine.classList.remove('dragging');
+    };
     const move = (e: globalThis.MouseEvent) => {
-      if (!draggedTab) return;
-      if (e.buttons !== 1) return void (draggedTab = null);
-      const all = [...document.querySelectorAll<HTMLElement>('[data-tab-id]')];
-      const mine = all.find(el => el.dataset.tabId === draggedTab);
-      if (!mine) return void (draggedTab = null);
+      if (!drag) return;
+      if (!(e.buttons & 1)) return stop();
+      // Un simple clic ne déclenche pas de glisser : il faut bouger de quelques pixels.
+      if (!drag.moved && Math.abs(e.clientX - drag.start) < 5) return;
+      drag.moved = true;
+      drag.x = e.clientX;
+      const placed = followMouse();
+      if (!placed) return void (drag = null);
+
+      const { mine, left } = placed;
       const from = Number(mine.dataset.tabIndex);
-      for (const el of all) {
+      if (drag.pending !== -1) return; // une demande est en route : on attend la réponse de l'hôte
+      const center = left + mine.offsetWidth / 2;
+      let target = from;
+      for (const el of tabElements()) {
+        if (el === mine) continue;
         const to = Number(el.dataset.tabIndex);
-        const box = el.getBoundingClientRect();
-        const middle = box.left + box.width / 2;
-        const crossed = to > from ? e.clientX > middle && e.clientX < box.right + 40 : e.clientX < middle && e.clientX > box.left - 40;
-        if (to !== from && crossed) return void send({ type: 'tab.move', id: draggedTab, index: to });
+        const middle = el.offsetLeft + el.offsetWidth / 2;
+        if (to > from && center > middle) target = Math.max(target, to);
+        if (to < from && center < middle) target = Math.min(target, to);
+      }
+      if (target !== from) {
+        drag.pending = target;
+        send({ type: 'tab.move', id: drag.id, index: target });
       }
     };
-    const stop = () => (draggedTab = null);
+    // Fin du glisser : bouton relâché, ou souris sortie de la barre (le relâchement n'arriverait pas ici).
     window.addEventListener('mousemove', move);
     window.addEventListener('mouseup', stop);
+    document.documentElement.addEventListener('mouseleave', stop);
+    window.addEventListener('blur', stop);
     return () => {
       window.removeEventListener('mousemove', move);
       window.removeEventListener('mouseup', stop);
+      document.documentElement.removeEventListener('mouseleave', stop);
+      window.removeEventListener('blur', stop);
     };
   }, []);
+
+  // Après chaque nouvel ordre reçu de l'hôte : l'onglet saisi reste sous la souris, et ceux qui ont changé
+  // de place y glissent depuis leur ancienne position au lieu de sauter.
+  const lefts = useRef(new Map<string, number>());
+  useLayoutEffect(() => {
+    if (drag) drag.pending = -1;
+    const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    for (const el of tabElements()) {
+      const id = el.dataset.tabId!;
+      const before = lefts.current.get(id);
+      const now = el.offsetLeft;
+      lefts.current.set(id, now);
+      if (drag?.moved && id === drag.id) followMouse();
+      else if (drag?.moved && !still && before !== undefined && before !== now) {
+        el.style.transition = 'none';
+        el.style.transform = `translateX(${before - now}px)`;
+        el.getBoundingClientRect(); // applique la position de départ avant de lancer la transition
+        slideHome(el);
+      }
+    }
+  });
 
   const { tabs, split, activeId } = state;
   const items: ReactNode[] = [];
@@ -129,7 +197,7 @@ function TitleBar({ state, icons }: { state: State; icons: Icons }) {
   }
 
   return (
-    <header className="titlebar" onMouseDown={drag} onDoubleClick={maximize}>
+    <header className="titlebar" onMouseDown={dragWindow} onDoubleClick={maximize}>
       <div className="lights">
         <button className="light close" aria-label="Fermer" onClick={() => send({ type: 'window.close' })} />
         <button className="light minimize" aria-label="Réduire" onClick={() => send({ type: 'window.minimize' })} />
@@ -139,7 +207,7 @@ function TitleBar({ state, icons }: { state: State; icons: Icons }) {
           onClick={() => send({ type: 'window.maximize' })}
         />
       </div>
-      <div className="tabs" role="tablist" onMouseDown={drag} onDoubleClick={maximize}>
+      <div className="tabs" role="tablist" onMouseDown={dragWindow} onDoubleClick={maximize}>
         {items}
         <button className="icon new-tab" aria-label="Nouvel onglet" onClick={() => send({ type: 'tab.open' })}>
           <Icon d="M8 3v10M3 8h10" />
@@ -162,7 +230,11 @@ function TabItem({ tab, index, icon, active }: { tab: Tab; index: number; icon: 
       onMouseDown={e => {
         if (e.button === 0) {
           send({ type: 'tab.activate', id: tab.id });
-          draggedTab = tab.id; // le glisser est suivi dans TitleBar
+          // Le glisser est suivi dans TitleBar. Les deux moitiés d'une vue scindée ne se déplacent pas seules.
+          const el = e.currentTarget;
+          drag = el.closest('.tab-group')
+            ? null
+            : { id: tab.id, grab: e.clientX - el.getBoundingClientRect().left, start: e.clientX, x: e.clientX, pending: -1, moved: false };
         }
         if (e.button === 1) send({ type: 'tab.close', id: tab.id });
       }}
