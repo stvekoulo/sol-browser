@@ -70,6 +70,16 @@ public static partial class Profiles
         return id;
     }
 
+    /// <summary>Change le nom affiché d'un profil ; son dossier et ses données ne bougent pas. Jamais le profil par défaut.</summary>
+    public static bool Rename(string baseDir, string id, string name)
+    {
+        if (id == Default || !IsValid(id) || Clean(name) is not { Length: > 0 } clean) return false;
+        var dir = DataDir(baseDir, id);
+        if (!Directory.Exists(dir)) return false;
+        File.WriteAllText(Path.Combine(dir, NameFile), clean);
+        return true;
+    }
+
     /// <summary>Supprime un profil et toutes ses données. Jamais le profil par défaut.</summary>
     public static bool Delete(string baseDir, string id)
     {

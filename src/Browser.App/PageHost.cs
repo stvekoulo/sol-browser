@@ -26,6 +26,11 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
     public bool CanGoBack(string id) => Core(id)?.CanGoBack ?? false;
     public bool CanGoForward(string id) => Core(id)?.CanGoForward ?? false;
 
+    // Onglets endormis (rouverts d'une session) : aucune vue, aucune page chargée tant qu'ils ne sont pas affichés.
+    private readonly Dictionary<string, Tab> _asleep = new();
+
+    public void AddAsleep(Tab tab) => _asleep[tab.Id] = tab;
+
     public async void Add(Tab tab)
     {
         var view = new WebView2 { Visibility = Visibility.Collapsed };
@@ -187,6 +192,7 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
 
     public void Remove(string id)
     {
+        _asleep.Remove(id);
         if (!_views.Remove(id, out var view)) return;
         _loading.Remove(id);
         _blurScriptIds.Remove(id);
@@ -213,6 +219,9 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
 
     public void ApplyLayout(string? activeId, string? secondaryId, double ratio)
     {
+        // Un onglet endormi qu'on affiche se réveille : sa vue est créée et sa page chargée maintenant.
+        foreach (var id in new[] { activeId, secondaryId })
+            if (id is not null && _asleep.Remove(id, out var tab)) Add(tab);
         var split = secondaryId is not null && _views.ContainsKey(secondaryId);
         primary.Width = new GridLength(split ? ratio : 1, GridUnitType.Star);
         divider.Width = new GridLength(split ? 8 : 0);

@@ -72,6 +72,8 @@ public sealed class SiteShortcut
 public sealed class Session
 {
     public List<string> Urls { get; set; } = new();
+    /// <summary>Titre de chaque adresse de <see cref="Urls"/> : affiché tant que la page n'a pas été rechargée.</summary>
+    public List<string> Titles { get; set; } = new();
     /// <summary>Les premières adresses de <see cref="Urls"/> sont des onglets épinglés.</summary>
     public int PinnedCount { get; set; }
     public int ActiveIndex { get; set; }

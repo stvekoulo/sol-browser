@@ -26,7 +26,19 @@ public sealed class PermissionStore(string path)
         JsonFileStore.Save(path, Answers);
     }
 
+    /// <summary>Oublie les réponses données à un site : il redemandera.</summary>
+    public void Forget(string origin)
+    {
+        foreach (var key in Answers.Keys.Where(k => k.StartsWith(origin + " ", StringComparison.Ordinal)).ToList()) Answers.Remove(key);
+        JsonFileStore.Save(path, Answers);
+    }
+
     public int Count => Answers.Count;
+
+    /// <summary>Toutes les réponses retenues, site par site.</summary>
+    public IReadOnlyList<(string Origin, string Kind, bool Allowed)> All =>
+        Answers.Where(p => p.Key.Contains(' ')).Select(p => (p.Key[..p.Key.LastIndexOf(' ')], p.Key[(p.Key.LastIndexOf(' ') + 1)..], p.Value))
+            .OrderBy(a => a.Item1, StringComparer.Ordinal).ToList();
 
     // L'origine (schéma + hôte + port) ne contient jamais d'espace : la clé est sans ambiguïté.
     private static string Key(string origin, string kind) => $"{origin} {kind}";

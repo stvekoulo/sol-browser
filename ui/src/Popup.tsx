@@ -11,14 +11,14 @@ type Content =
   | { popup: 'library'; bookmarks: Item[]; history: Item[] }
   | { popup: 'menu'; items: string[] }
   | { popup: 'downloads'; items: Download[] }
-  | { popup: 'settings'; zoom: number; theme: number; language: number; home: string; permissions: number; tint: Setting[]; items: Setting[] }
+  | { popup: 'settings'; zoom: number; theme: number; language: number; home: string; engine: number; engines: string[]; sites: { origin: string; host: string; summary: string }[]; permissions: number; tint: Setting[]; items: Setting[] }
   | { popup: 'profiles'; items: Profile[] }
   | { popup: 'group-edit'; create: boolean; id: string; name: string; color: string; icon: string; presets: string[] }
   | { popup: 'shortcut-edit'; id: string; name: string; url: string }
   | { popup: 'permission'; site: string; what: string; secure: boolean }
   | { popup: 'prompt'; title: string; hint: string; placeholder: string; submit: string; value: string; command: string; id: string | null };
 
-type Profile = { id: string; name: string; current: boolean; deletable: boolean };
+type Profile = { id: string; name: string; current: boolean; renamable: boolean; deletable: boolean };
 
 type Setting = { key: string; label: string; hint: string; on: boolean };
 
@@ -205,6 +205,22 @@ export default function Popup() {
             ))}
           </div>
         </div>
+        <div className="theme-row">
+          <span className="row-title">{t('Moteur de recherche', 'Search engine')}</span>
+          <div className="popup-segment" role="radiogroup" aria-label={t('Moteur de recherche', 'Search engine')}>
+            {content.engines.map((label, index) => (
+              <button
+                key={label}
+                role="radio"
+                aria-checked={content.engine === index}
+                className={`popup-seg-btn${content.engine === index ? ' active' : ''}`}
+                onClick={() => send({ type: 'settings.set', id: 'engine', index })}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
         <HomeField key={content.home} home={content.home} />
         <TintSettings items={content.tint} />
         <div className="popup-list">
@@ -237,6 +253,21 @@ export default function Popup() {
             </span>
             <button className="pill-action" disabled={content.permissions === 0} onClick={() => send({ type: 'permissions.clear' })}>{t('Tout oublier', 'Forget all')}</button>
           </div>
+          {content.sites.length > 0 && (
+            <div className="setting-sub">
+              {content.sites.map(site => (
+                <div key={site.origin} className="setting-row static">
+                  <span className="setting-text" title={site.origin}>
+                    <span className="row-title">{site.host}</span>
+                    <span className="row-sub">{site.summary}</span>
+                  </span>
+                  <button className="pill-action" aria-label={t(`Oublier les réponses données à ${site.host}`, `Forget the answers given to ${site.host}`)} onClick={() => send({ type: 'permissions.forget', id: site.origin })}>
+                    {t('Oublier', 'Forget')}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -398,6 +429,11 @@ function ProfileList({ rootRef, items }: { rootRef: RefObject<HTMLDivElement | n
               <span className="row-title">{p.name}</span>
               {p.current && <span className="row-pill">{t('Actif', 'Active')}</span>}
             </button>
+            {p.renamable && (
+              <button className="profile-edit" aria-label={t(`Renommer le profil ${p.name}`, `Rename profile ${p.name}`)} title={t('Renommer', 'Rename')} onClick={() => send({ type: 'profile.edit', id: p.id })}>
+                <Icon d="M10.5 3.5l2 2-6.5 6.5-2.5.5.5-2.5z" size={12} />
+              </button>
+            )}
             {p.deletable &&
               (confirming === p.id ? (
                 <button className="pill-action danger" onClick={() => send({ type: 'profile.delete', id: p.id })}>

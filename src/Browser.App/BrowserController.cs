@@ -94,6 +94,7 @@ public sealed class BrowserController
             case "settings.set":
                 if (id == "theme") SetTheme(c.Index!.Value);
                 else if (id == "language") SetLanguage(c.Index!.Value);
+                else if (id == "engine") SetEngine(c.Index!.Value);
                 else SetSetting(id, c.Index != 0);
                 return;
             case "settings.text": if (id == "home") SetHomePage(c.Input!); return;
@@ -103,10 +104,18 @@ public sealed class BrowserController
             case "shortcut.open": OpenShortcut(c.Index!.Value); break;
             case "tab.menu": OpenTabMenu(id, c.X!.Value, c.Y!.Value); return;
             case "permission.answer": AnswerPermission(c.Index != 0); return;
+            case "permissions.forget": _permissions.Forget(id); if (_settingsOpen) _popup.Post(SettingsJson()); return;
             case "permissions.clear": _permissions.Clear(); if (_settingsOpen) _popup.Post(SettingsJson()); return;
             case "profile.menu": OpenProfileMenu(c.X!.Value, c.Y!.Value); return;
             case "profile.new": AskProfileName(); return;
             case "profile.create": SwitchProfile(Profiles.Create(AppPaths.BaseDir, c.Title!)); return;
+            case "profile.edit":
+                if (id != Profiles.Default && Profiles.List(AppPaths.BaseDir).Contains(id))
+                    AskName(T("Renommer le profil", "Rename profile"), "", T("Nom du profil", "Profile name"), T("Renommer", "Rename"), Profiles.NameOf(AppPaths.BaseDir, id), "profile.rename", id);
+                return;
+            case "profile.rename":
+                if (Profiles.Rename(AppPaths.BaseDir, id, c.Title!) && id == AppPaths.Profile) _window.Title = $"Navigateur — {ProfileName(id)}";
+                break;
             case "profile.switch": SwitchProfile(id); return;
             case "profile.delete": DeleteProfile(id); return;
             case "capture.menu": OpenCaptureMenu(c.X!.Value, c.Y!.Value); return;
@@ -307,6 +316,15 @@ public sealed class BrowserController
         theme = Math.Max(0, Array.IndexOf(Themes, _settings.Theme)),
         language = Math.Max(0, Array.IndexOf(Languages, _settings.Language)),
         home = _settings.HomePage,
+        engine = Math.Max(0, Array.FindIndex(Engines, e => e.Search == _settings.SearchUrlTemplate)),
+        engines = Engines.Select(e => e.Name),
+        // Réponses retenues, site par site : chacune peut être oubliée séparément.
+        sites = _permissions.All.GroupBy(a => a.Origin).Select(g => new
+        {
+            origin = g.Key,
+            host = Uri.TryCreate(g.Key, UriKind.Absolute, out var site) ? site.Host : g.Key,
+            summary = string.Join(" · ", g.Select(a => T($"{KindName(a.Kind)} : {(a.Allowed ? "autorisé" : "refusé")}", $"{KindName(a.Kind)}: {(a.Allowed ? "allowed" : "denied")}"))),
+        }),
         permissions = _permissions.Count, // réponses retenues aux demandes d'accès des sites
         // Sous-menu : où la couleur du site teinte l'interface.
         tint = new[]
@@ -321,7 +339,7 @@ public sealed class BrowserController
             new { key = "scrollbars", label = T("Barre de défilement fine", "Thin scrollbar"), hint = T("Apparaît seulement pendant le défilement", "Only appears while scrolling"), on = !_settings.HideScrollbars },
             new { key = "blur", label = T("Flou progressif en bas des pages", "Progressive blur at the bottom of pages"), hint = "", on = _settings.BlurEnabled },
             new { key = "floatingDownloads", label = T("Téléchargements en bas à droite", "Downloads at the bottom right"), hint = T("Sinon, uniquement dans le panneau de la barre", "Otherwise, only in the toolbar panel"), on = _settings.FloatingDownloads },
-            new { key = "onlineSuggestions", label = T("Suggestions de recherche Google", "Google search suggestions"), hint = T("Envoie à Google ce qui est tapé dans la barre d'adresse", "Sends what you type in the address bar to Google"), on = _settings.OnlineSuggestions },
+            new { key = "onlineSuggestions", label = T("Suggestions de recherche", "Search suggestions"), hint = T("Envoie au moteur de recherche ce qui est tapé dans la barre d'adresse", "Sends what you type in the address bar to the search engine"), on = _settings.OnlineSuggestions },
             new { key = "passwords", label = T("Enregistrer les mots de passe", "Save passwords"), hint = T("Stockage chiffré du moteur, sur cet ordinateur", "Encrypted engine storage, on this computer"), on = _settings.SavePasswords },
         },
     });
@@ -344,6 +362,30 @@ public sealed class BrowserController
         JsonFileStore.Save(AppPaths.Settings, _settings);
         _pages.ApplySettings(); // les sites reçoivent aussi la préférence clair ou sombre
         _bridge.BroadcastTheme();
+        if (_settingsOpen) _popup.Post(SettingsJson());
+    }
+
+    private static string KindName(string kind) => kind switch
+    {
+        "Microphone" => T("Micro", "Microphone"), "Camera" => T("Caméra", "Camera"), "Geolocation" => T("Position", "Location"),
+        "ClipboardRead" => T("Presse-papiers", "Clipboard"), "MultipleAutomaticDownloads" => T("Téléchargements multiples", "Multiple downloads"),
+        "FileReadWrite" => T("Fichiers", "Files"), "OtherSensors" => T("Capteurs", "Sensors"),
+        _ => kind,
+    };
+
+    // Moteurs de recherche proposés : adresse de recherche, et adresse des complétions (même format de réponse pour les trois).
+    private static readonly (string Name, string Search, string Suggest)[] Engines =
+    [
+        ("Google", "https://www.google.com/search?q={0}", "https://suggestqueries.google.com/complete/search?client=firefox&ie=utf-8&oe=utf-8&q={0}"),
+        ("DuckDuckGo", "https://duckduckgo.com/?q={0}", "https://duckduckgo.com/ac/?q={0}&type=list"),
+        ("Bing", "https://www.bing.com/search?q={0}", "https://api.bing.com/osjson.aspx?query={0}"),
+    ];
+
+    private void SetEngine(int index)
+    {
+        if (index < 0 || index >= Engines.Length) return;
+        (_settings.SearchUrlTemplate, _settings.SuggestUrlTemplate) = (Engines[index].Search, Engines[index].Suggest);
+        JsonFileStore.Save(AppPaths.Settings, _settings);
         if (_settingsOpen) _popup.Post(SettingsJson());
     }
 
@@ -466,10 +508,11 @@ public sealed class BrowserController
     private static bool IsWeb(string url) =>
         url.StartsWith("https://", StringComparison.Ordinal) || url.StartsWith("http://", StringComparison.Ordinal);
 
-    private Tab Open(string url, bool activate = true, bool pinned = false)
+    private Tab Open(string url, bool activate = true, bool pinned = false, bool asleep = false)
     {
         var tab = _tabs.Open(url, activate, pinned);
-        _pages.Add(tab);
+        if (asleep) _pages.AddAsleep(tab);
+        else _pages.Add(tab);
         return tab;
     }
 
@@ -850,6 +893,7 @@ public sealed class BrowserController
             name = ProfileName(id),
             current = id == AppPaths.Profile,
             // Ni le profil par défaut, ni celui de cette fenêtre, ni un profil ouvert dans une autre fenêtre.
+            renamable = id != Profiles.Default,
             deletable = id != Profiles.Default && id != AppPaths.Profile && !IsProfileOpen(id),
         }),
     });
@@ -982,13 +1026,15 @@ public sealed class BrowserController
             _db.RecordVisit(tab.Url, tab.Title, DateTimeOffset.UtcNow);
     }
 
-    // ponytail: tous les onglets restaurés chargent leur page tout de suite ; le chargement paresseux vient au chantier légèreté.
+    // Les onglets rouverts restent endormis : seul celui qu'on affiche charge sa page (voir PageHost.AddAsleep).
     private void RestoreSession()
     {
         var session = JsonFileStore.Load<Session>(AppPaths.Session);
-        var tabs = session.Urls.Select((url, i) => Open(url, activate: false, pinned: i < session.PinnedCount)).ToList();
+        var tabs = session.Urls.Select((url, i) => Open(url, activate: false, pinned: i < session.PinnedCount, asleep: true)).ToList();
         if (tabs.Count == 0) { Open(_settings.HomePage); return; }
         foreach (var tab in tabs) _restored.Add(tab.Id);
+        for (var i = 0; i < tabs.Count && i < session.Titles.Count; i++)
+            if (session.Titles[i].Length > 0) _tabs.Update(tabs[i].Id, title: session.Titles[i]);
         // Pages qui étaient ouvertes dans un raccourci : elles y retournent.
         for (var i = 0; i < tabs.Count && i < session.ShortcutOf.Count; i++)
             if (tabs[i].Pinned && session.ShortcutOf[i] is { } rank && rank >= 0 && rank < _settings.Shortcuts.Count)
@@ -1020,6 +1066,7 @@ public sealed class BrowserController
         JsonFileStore.Save(AppPaths.Session, new Session
         {
             Urls = tabs.Select(t => t.Url).ToList(),
+            Titles = tabs.Select(t => t.Title).ToList(),
             PinnedCount = _tabs.PinnedCount,
             ShortcutOf = tabs.Select(t => _settings.Shortcuts.FindIndex(s => _shortcutTabs.GetValueOrDefault(s) == t.Id) is >= 0 and var rank ? rank : (int?)null).ToList(),
             Groups = _tabs.Groups.Select(g => new SessionGroup { Name = g.Name, Color = g.Color, Icon = g.Icon, Collapsed = g.Collapsed }).ToList(),

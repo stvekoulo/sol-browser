@@ -25,11 +25,12 @@ public static class CommandParser
         ["downloads.open"] = ["x", "y"],
         ["window.minimize"] = [], ["window.maximize"] = [], ["window.close"] = [], ["window.drag"] = [],
         ["zoom.in"] = [], ["zoom.out"] = [], ["zoom.reset"] = [],
-        ["permission.answer"] = ["index"], ["permissions.clear"] = [],
+        ["permission.answer"] = ["index"], ["permissions.clear"] = [], ["permissions.forget"] = ["id"],
         ["group.new"] = ["id"], ["group.create"] = ["id", "title"], ["group.add"] = ["id", "query"], ["group.remove"] = ["id"],
         ["group.toggle"] = ["id"], ["group.menu"] = ["id", "x", "y"], ["group.update"] = ["id", "title"],
         ["profile.menu"] = ["x", "y"],
         ["profile.switch"] = ["id"], ["profile.delete"] = ["id"], ["profile.new"] = [], ["profile.create"] = ["title"],
+        ["profile.edit"] = ["id"], ["profile.rename"] = ["id", "title"],
         ["shortcut.menu"] = ["index", "x", "y"], ["shortcut.open"] = ["index"], ["shortcut.update"] = ["id", "title", "input"],
         ["ui.ready"] = [],
     };

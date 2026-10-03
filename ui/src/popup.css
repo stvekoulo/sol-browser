@@ -352,6 +352,8 @@
 .profile-pick:hover:not(:disabled) { background: var(--bg-pill-solid-hover); box-shadow: var(--shadow-pill-elevated); }
 .profile-row.current .profile-pick { background: var(--bg-pill-solid); box-shadow: var(--shadow-pill-elevated); }
 .profile-pick .row-badge { font-size: 11px; font-weight: 600; }
+.profile-edit { width: 26px; height: 26px; flex: none; border-radius: 50%; display: grid; place-items: center; color: var(--text-dim); }
+.profile-edit:hover { background: var(--bg-tab-hover); color: var(--text); }
 .profile-delete { width: 26px; height: 26px; flex: none; border-radius: 50%; display: grid; place-items: center; color: var(--text-dim); }
 .profile-delete:hover { background: rgba(229, 72, 77, 0.12); color: #e5484d; }
 .pill-action.danger { flex: none; background: #e5484d; color: #ffffff; }
