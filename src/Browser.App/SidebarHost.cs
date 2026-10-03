@@ -10,7 +10,17 @@ namespace Browser.App;
 /// </summary>
 public sealed class SidebarHost(WebView2 sidebar, ColumnDefinition column, Action<string> post)
 {
-    private const double Width = 296;
+    public const double MinWidth = 220, MaxWidth = 520;
+
+    /// <summary>Largeur de la carte ouverte, réglable par l'utilisateur.</summary>
+    public double Width { get; private set; } = 296;
+
+    /// <summary>Change la largeur de la carte ; la colonne suit tout de suite si la carte y est épinglée.</summary>
+    public void Resize(double width)
+    {
+        Width = Math.Clamp(Math.Round(width), MinWidth, MaxWidth);
+        if (_pinned && column.Width.Value > 0) column.Width = new GridLength(Width);
+    }
     private const float CardRadius = 22; // rayon de la carte (--radius-card)
     private const double CardMargin = 10; // marge de la carte dans sa colonne (sidebar.css)
     private const double EdgeZone = 16; // largeur de la bande, au bord gauche, qui fait apparaître la carte fermée

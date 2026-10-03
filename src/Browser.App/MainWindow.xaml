@@ -15,6 +15,8 @@
         <ColumnDefinition Width="*" />
       </Grid.ColumnDefinitions>
       <WebView2 x:Name="Sidebar" Grid.Column="0" />
+      <!-- Bord droit de la carte latérale : le tirer change sa largeur. Dans la marge de la carte, donc sur rien d'utile. -->
+      <local:DividerGrip x:Name="SidebarGrip" Grid.Column="0" Width="8" HorizontalAlignment="Right" Background="Transparent" />
       <Grid x:Name="Pages" Grid.Column="1">
         <Grid.ColumnDefinitions>
           <ColumnDefinition x:Name="PrimaryColumn" Width="*" />

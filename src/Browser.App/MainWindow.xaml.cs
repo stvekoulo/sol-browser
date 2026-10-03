@@ -95,6 +95,8 @@ public sealed partial class MainWindow : Window
         var dock = new DockHost(DockFrame, Dock, dockBridge);
         _controller = new BrowserController(this, pages, bridge, popup, dock, settings);
         WireDivider();
+        _sidebar.Resize(settings.SidebarWidth);
+        WireSidebarGrip(settings);
         WireGestures();
 
         var uiFolder = Path.Combine(AppContext.BaseDirectory, "ui");
@@ -219,6 +221,32 @@ public sealed partial class MainWindow : Window
             e.Handled = true;
             _dividerTimer ??= CreateDividerTimer();
             _dividerTimer.Start();
+        };
+    }
+
+    // Bord droit de la carte latérale : même scrutation de la souris que le séparateur. La largeur choisie est
+    // enregistrée au relâchement.
+    private void WireSidebarGrip(Settings settings)
+    {
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+        timer.Tick += (_, _) =>
+        {
+            var button = GetSystemMetrics(23 /* SM_SWAPBUTTON */) != 0 ? 0x02 : 0x01;
+            if ((GetAsyncKeyState(button) & 0x8000) == 0)
+            {
+                timer.Stop();
+                settings.SidebarWidth = _sidebar!.Width;
+                JsonFileStore.Save(AppPaths.Settings, settings);
+                return;
+            }
+            if (!GetCursorPos(out var point) || !ScreenToClient(_hwnd, ref point)) return;
+            // Le curseur est en pixels de l'écran, la carte en unités d'affichage.
+            _sidebar!.Resize(point.X / Root.XamlRoot.RasterizationScale + 3);
+        };
+        SidebarGrip.PointerPressed += (_, e) =>
+        {
+            e.Handled = true;
+            timer.Start();
         };
     }
 

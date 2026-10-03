@@ -30,6 +30,8 @@ public sealed class Settings
     public string HomePage { get; set; } = DefaultHomePage;
     /// <summary>Langue de l'interface : "system" (celle de Windows), "fr" ou "en".</summary>
     public string Language { get; set; } = "system";
+    /// <summary>Largeur de la carte latérale, réglée en tirant son bord droit.</summary>
+    public double SidebarWidth { get; set; } = 296;
     /// <summary>Écrans affichés côte à côte par la comparaison d'écrans ; vide : le choix par défaut.</summary>
     public List<string> CompareDevices { get; set; } = new();
     /// <summary>Raccourcis de la carte latérale. Ceux-ci sont proposés au départ ; l'utilisateur les modifie ou les retire.</summary>
