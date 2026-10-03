@@ -15,6 +15,7 @@ public sealed class BrowserController
     private readonly PopupHost _popup;
     private readonly Settings _settings;
     private readonly BrowserDb _db;
+    private readonly CaptureService _capture;
     private readonly TabManager _tabs = new();
     private readonly SplitLayout _split = new();
     private readonly HashSet<string> _restored = new(); // onglets dont le premier chargement vient de la session
@@ -29,6 +30,7 @@ public sealed class BrowserController
         (_window, _pages, _bridge, _popup, _settings) = (window, pages, bridge, popup, settings);
         Directory.CreateDirectory(AppPaths.DataDir);
         _db = new BrowserDb(AppPaths.Database);
+        _capture = new CaptureService(window);
 
         _pages.PageChanged += (id, url, title) => { _tabs.Update(id, url, title); Refresh(); };
         _pages.RuntimeChanged += Refresh;
@@ -72,6 +74,8 @@ public sealed class BrowserController
                 if (_suggesting) _popup.Post(JsonSerializer.Serialize(new { select = c.Index }));
                 return;
             case "menu.pick": PickMenuItem(c.Index!.Value); return;
+            case "tab.menu": OpenTabMenu(id, c.X!.Value, c.Y!.Value); return;
+            case "capture.menu": OpenCaptureMenu(c.X!.Value, c.Y!.Value); return;
             case "window.close": _window.Close(); return;
             case "window.drag": BeginDrag(); return;
 
@@ -162,9 +166,9 @@ public sealed class BrowserController
     {
         _suggesting = false;
         _downloadsOpen = false;
-        // Un menu contextuel en attente doit toujours être rendu au moteur, même sans choix.
-        _menu?.Deferral.Complete();
-        _menu = null;
+        var dismissed = _menuDismissed;
+        (_menu, _menuDismissed) = (null, null);
+        dismissed?.Invoke();
         _popup.Hide();
     }
 
@@ -190,9 +194,9 @@ public sealed class BrowserController
     private static bool IsWeb(string url) =>
         url.StartsWith("https://", StringComparison.Ordinal) || url.StartsWith("http://", StringComparison.Ordinal);
 
-    private Tab Open(string url, bool activate = true)
+    private Tab Open(string url, bool activate = true, bool pinned = false)
     {
-        var tab = _tabs.Open(url, activate);
+        var tab = _tabs.Open(url, activate, pinned);
         _pages.Add(tab);
         return tab;
     }
@@ -275,11 +279,67 @@ public sealed class BrowserController
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(2) };
     private int _suggestSeq;
 
-    // Menu du clic droit : le moteur fournit ses commandes (copier, coller, inspecter…), on les affiche dans notre vue.
-    private sealed record PendingMenu(Microsoft.Web.WebView2.Core.CoreWebView2ContextMenuRequestedEventArgs Args,
-        Windows.Foundation.Deferral Deferral, List<(string Label, int? CommandId, string? Own)> Items, string? LinkUrl);
-    private PendingMenu? _menu;
+    // Menus affichés dans la vue posée sur la page : un libellé et son action ; un libellé vide est un séparateur.
+    private List<(string Label, Action? Run)>? _menu;
+    private Action? _menuDismissed; // appelé à la fermeture du menu, avec ou sans choix
 
+    private void ShowMenu(double x, double y, List<(string Label, Action? Run)> items, Action? dismissed = null)
+    {
+        HidePopup();
+        (_menu, _menuDismissed) = (items, dismissed);
+        _popup.Show(x, y, 260, JsonSerializer.Serialize(new { popup = "menu", items = items.Select(i => i.Label) }), focus: true);
+    }
+
+    private void PickMenuItem(int index)
+    {
+        if (_menu is not { } menu || index < 0 || index >= menu.Count) return;
+        menu[index].Run?.Invoke(); // avant la fermeture : une commande du moteur doit être choisie avant de lui rendre la main
+        HidePopup();
+        Refresh();
+    }
+
+    // Clic droit sur un onglet de la barre.
+    private void OpenTabMenu(string id, double x, double y)
+    {
+        if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is not { } tab) return;
+        // Les deux onglets d'une vue scindée s'épinglent ensemble.
+        var ids = _split.Contains(id) ? new[] { _split.PrimaryId!, _split.SecondaryId! } : [id];
+        var block = ids.Length > 1;
+        ShowMenu(x, y,
+        [
+            (tab.Pinned ? (block ? "Détacher les deux pages" : "Détacher l'onglet") : (block ? "Épingler les deux pages" : "Épingler l'onglet"), () =>
+            {
+                foreach (var tabId in ids) _tabs.SetPinned(tabId, !tab.Pinned);
+                KeepPairAdjacent();
+            }),
+            ("", null),
+            ("Fermer l'onglet", () => Close(id)),
+            ("Fermer les autres onglets", () =>
+            {
+                foreach (var other in _tabs.Tabs.Where(t => t.Id != id && !t.Pinned).Select(t => t.Id).ToList()) Close(other);
+            }),
+        ]);
+    }
+
+    // Bouton de capture d'écran de la barre d'outils.
+    private void OpenCaptureMenu(double x, double y)
+    {
+        if (DateTime.UtcNow - _libraryClosedAt < TimeSpan.FromMilliseconds(350)) return; // reclic sur l'icône : reste fermé
+        ShowMenu(x - 260, y,
+        [
+            ("Capturer une zone", () => Capture("region")),
+            ("Capturer la partie visible", () => Capture("visible")),
+            ("Capturer la page entière", () => Capture("full")),
+        ]);
+    }
+
+    private void Capture(string mode)
+    {
+        if (_tabs.Tabs.FirstOrDefault(t => t.Id == _tabs.ActiveId) is { } tab && _pages.CoreOf(tab.Id) is { } core)
+            _ = _capture.RunAsync(core, mode, tab.Title);
+    }
+
+    // Clic droit dans une page : le moteur fournit ses commandes (copier, coller, inspecter…), on les affiche dans notre vue.
     private static readonly HashSet<string> NativeCommands =
     [
         "back", "forward", "reload", "cut", "copy", "paste", "selectAll",
@@ -289,43 +349,33 @@ public sealed class BrowserController
 
     private void OpenContextMenu(double x, double y, Microsoft.Web.WebView2.Core.CoreWebView2ContextMenuRequestedEventArgs e)
     {
-        HidePopup();
-        var items = new List<(string Label, int? CommandId, string? Own)>();
+        var items = new List<(string Label, Action? Run)>();
         var link = e.ContextMenuTarget.HasLinkUri ? e.ContextMenuTarget.LinkUri : null;
         if (link is not null && IsWeb(link))
         {
-            items.Add(("Ouvrir le lien dans un nouvel onglet", null, "tab"));
-            items.Add(("Ouvrir le lien en vue scindée", null, "split"));
-            items.Add(("", null, null));
+            items.Add(("Ouvrir le lien dans un nouvel onglet", () => Open(link)));
+            items.Add(("Ouvrir le lien en vue scindée", () => Split(Open(link, activate: false).Id)));
+            items.Add(("", null));
         }
         foreach (var item in e.MenuItems)
         {
             if (item.Kind == Microsoft.Web.WebView2.Core.CoreWebView2ContextMenuItemKind.Separator)
             {
-                if (items.Count > 0 && items[^1].Label != "") items.Add(("", null, null));
+                if (items.Count > 0 && items[^1].Label != "") items.Add(("", null));
             }
             else if (item.Kind == Microsoft.Web.WebView2.Core.CoreWebView2ContextMenuItemKind.Command && item.IsEnabled && NativeCommands.Contains(item.Name))
-                items.Add((item.Label.Replace("&", ""), item.CommandId, null));
+            {
+                var commandId = item.CommandId;
+                items.Add((item.Label.Replace("&", ""), () => e.SelectedCommandId = commandId));
+            }
         }
-        while (items.Count > 0 && items[^1].Label == "") items.RemoveAt(items.Count - 1);
-        if (items.Count == 0) return;
+        if (items.Count > 0 && items[^1].Label != "") items.Add(("", null));
+        items.Add(("Capturer une zone", () => Capture("region")));
 
+        // Le moteur attend notre réponse : il est toujours libéré à la fermeture du menu, avec ou sans choix.
         e.Handled = true;
-        _menu = new PendingMenu(e, e.GetDeferral(), items, link);
-        _popup.Show(x, y, 260, JsonSerializer.Serialize(new { popup = "menu", items = items.Select(i => i.Label) }), focus: true);
-    }
-
-    private void PickMenuItem(int index)
-    {
-        if (_menu is not { } menu || index < 0 || index >= menu.Items.Count) return;
-        var (_, commandId, own) = menu.Items[index];
-        if (commandId is int id) menu.Args.SelectedCommandId = id;
-        HidePopup(); // rend la main au moteur, qui exécute la commande choisie
-        if (own is null || menu.LinkUrl is null) return;
-
-        var tab = Open(menu.LinkUrl, activate: own == "tab");
-        if (own == "split") Split(tab.Id);
-        Refresh();
+        var deferral = e.GetDeferral();
+        ShowMenu(x, y, items, deferral.Complete);
     }
 
     private void OpenLibrary(double x, double y)
@@ -354,7 +404,7 @@ public sealed class BrowserController
     private void RestoreSession()
     {
         var session = JsonFileStore.Load<Session>(AppPaths.Session);
-        var tabs = session.Urls.Select(url => Open(url, activate: false)).ToList();
+        var tabs = session.Urls.Select((url, i) => Open(url, activate: false, pinned: i < session.PinnedCount)).ToList();
         if (tabs.Count == 0) { Open(_settings.HomeUrl); return; }
         foreach (var tab in tabs) _restored.Add(tab.Id);
 
@@ -372,6 +422,7 @@ public sealed class BrowserController
         JsonFileStore.Save(AppPaths.Session, new Session
         {
             Urls = tabs.Select(t => t.Url).ToList(),
+            PinnedCount = _tabs.PinnedCount,
             ActiveIndex = IndexOf(_tabs.ActiveId) ?? 0,
             PrimaryIndex = IndexOf(_split.PrimaryId),
             SecondaryIndex = IndexOf(_split.SecondaryId),
@@ -387,7 +438,7 @@ public sealed class BrowserController
         {
             tabs = _tabs.Tabs.Select(t => new
             {
-                id = t.Id, url = t.Url, title = t.Title,
+                id = t.Id, url = t.Url, title = t.Title, pinned = t.Pinned,
                 loading = _pages.IsLoading(t.Id),
                 canGoBack = _pages.CanGoBack(t.Id),
                 canGoForward = _pages.CanGoForward(t.Id),

@@ -65,6 +65,57 @@ public class TabManagerTests
     }
 
     [Fact]
+    public void Pinning_moves_the_tab_to_the_end_of_the_pinned_zone()
+    {
+        var m = new TabManager();
+        var a = m.Open("https://a.test");
+        var b = m.Open("https://b.test");
+        var c = m.Open("https://c.test");
+        Assert.True(m.SetPinned(c.Id, true));
+        Assert.True(m.SetPinned(b.Id, true));
+        Assert.Equal(new[] { c.Id, b.Id, a.Id }, m.Tabs.Select(t => t.Id));
+        Assert.Equal(2, m.PinnedCount);
+    }
+
+    [Fact]
+    public void Unpinning_moves_the_tab_to_the_start_of_the_other_tabs()
+    {
+        var m = new TabManager();
+        var a = m.Open("https://a.test");
+        var b = m.Open("https://b.test");
+        var c = m.Open("https://c.test");
+        m.SetPinned(a.Id, true);
+        m.SetPinned(b.Id, true);
+        Assert.True(m.SetPinned(a.Id, false));
+        Assert.Equal(new[] { b.Id, a.Id, c.Id }, m.Tabs.Select(t => t.Id));
+        Assert.False(m.SetPinned("nope", true));
+    }
+
+    [Fact]
+    public void Move_keeps_tabs_inside_their_zone()
+    {
+        var m = new TabManager();
+        var a = m.Open("https://a.test");
+        var b = m.Open("https://b.test");
+        var c = m.Open("https://c.test");
+        m.SetPinned(a.Id, true);
+        m.Move(a.Id, 2); // un épinglé ne sort pas de la tête
+        Assert.Equal(new[] { a.Id, b.Id, c.Id }, m.Tabs.Select(t => t.Id));
+        m.Move(c.Id, 0); // un onglet ordinaire ne passe pas devant les épinglés
+        Assert.Equal(new[] { a.Id, c.Id, b.Id }, m.Tabs.Select(t => t.Id));
+    }
+
+    [Fact]
+    public void Opening_a_pinned_tab_places_it_after_the_pinned_ones()
+    {
+        var m = new TabManager();
+        var a = m.Open("https://a.test");
+        var p = m.Open("https://p.test", activate: false, pinned: true);
+        Assert.Equal(new[] { p.Id, a.Id }, m.Tabs.Select(t => t.Id));
+        Assert.True(m.Tabs[0].Pinned);
+    }
+
+    [Fact]
     public void ReopenClosed_restores_last_closed_url()
     {
         var m = new TabManager();

@@ -46,6 +46,17 @@ export default function App() {
         )}
         <button
           className="icon"
+          aria-label="Capture d'écran"
+          title="Capture d'écran"
+          onClick={e => {
+            const box = e.currentTarget.getBoundingClientRect();
+            send({ type: 'capture.menu', x: box.right, y: box.bottom + 6 });
+          }}
+        >
+          <Icon d="M2.5 5.5h2l1-1.5h5l1 1.5h2v7h-11zM8 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4" />
+        </button>
+        <button
+          className="icon"
           aria-label="Favoris et historique"
           title="Favoris et historique"
           onClick={e => {
@@ -189,7 +200,7 @@ function TitleBar({ state, icons }: { state: State; icons: Icons }) {
     // Les deux onglets d'une vue scindée s'affichent comme un seul onglet en deux moitiés.
     if (next && tab.id === split.primaryId && next.id === split.secondaryId) {
       items.push(
-        <div key={tab.id} className={`tab-group${split.visible ? ' active' : ''}`} data-slot-id={tab.id} data-slot-first={i} data-slot-last={i + 1}>
+        <div key={tab.id} className={`tab-group${split.visible ? ' active' : ''}${tab.pinned ? ' pinned' : ''}`} data-slot-id={tab.id} data-slot-first={i} data-slot-last={i + 1}>
           <TabItem tab={tab} index={i} icon={icons[tab.id]} active={tab.id === activeId} grouped />
           <TabItem tab={next} index={i + 1} icon={icons[next.id]} active={next.id === activeId} grouped />
         </div>,
@@ -229,9 +240,13 @@ function TabItem({ tab, index, icon, active, grouped = false }: { tab: Tab; inde
     <div
       role="tab"
       aria-selected={active}
-      className={`tab${active ? ' active' : ''}`}
+      className={`tab${active ? ' active' : ''}${tab.pinned ? ' pinned' : ''}`}
       title={label}
       {...slot}
+      onContextMenu={e => {
+        e.preventDefault();
+        send({ type: 'tab.menu', id: tab.id, x: e.clientX, y: e.clientY });
+      }}
       onMouseDown={e => {
         if (e.button === 0) {
           send({ type: 'tab.activate', id: tab.id });
@@ -242,16 +257,27 @@ function TabItem({ tab, index, icon, active, grouped = false }: { tab: Tab; inde
         if (e.button === 1) send({ type: 'tab.close', id: tab.id });
       }}
     >
-      {tab.loading ? <span className="spinner" aria-hidden /> : icon ? <img className="favicon" src={icon} alt="" draggable={false} /> : null}
-      <span className="tab-title">{label}</span>
-      <button
-        className="icon tab-close"
-        aria-label={`Fermer ${label}`}
-        onMouseDown={e => e.stopPropagation()}
-        onClick={() => send({ type: 'tab.close', id: tab.id })}
-      >
-        <Icon d="M4 4l8 8M12 4l-8 8" />
-      </button>
+      {tab.loading ? (
+        <span className="spinner" aria-hidden />
+      ) : icon ? (
+        <img className="favicon" src={icon} alt="" draggable={false} />
+      ) : tab.pinned ? (
+        // Un onglet épinglé n'a pas de titre : sans icône de site, son initiale le distingue.
+        <span className="favicon letter" aria-hidden>{label[0]?.toUpperCase()}</span>
+      ) : null}
+      {!tab.pinned && (
+        <>
+          <span className="tab-title">{label}</span>
+          <button
+            className="icon tab-close"
+            aria-label={`Fermer ${label}`}
+            onMouseDown={e => e.stopPropagation()}
+            onClick={() => send({ type: 'tab.close', id: tab.id })}
+          >
+            <Icon d="M4 4l8 8M12 4l-8 8" />
+          </button>
+        </>
+      )}
     </div>
   );
 }

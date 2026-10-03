@@ -3,6 +3,7 @@ export type Tab = {
   id: string;
   url: string;
   title: string;
+  pinned: boolean;
   loading: boolean;
   canGoBack: boolean;
   canGoForward: boolean;

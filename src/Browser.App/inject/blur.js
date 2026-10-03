@@ -21,6 +21,7 @@
       root.appendChild(band);
     }
     document.documentElement.appendChild(host);
+    window.__navBlurHost = host; // le navigateur masque les bandes le temps d'une capture d'écran
   };
   if (document.documentElement) build();
   else document.addEventListener('DOMContentLoaded', build, { once: true });

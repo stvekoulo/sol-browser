@@ -6,6 +6,8 @@ public sealed class Settings
 {
     public string SearchUrlTemplate { get; set; } = "https://www.google.com/search?q={0}";
     public bool BlurEnabled { get; set; } = true;
+    /// <summary>Propose d'enregistrer les mots de passe et les remplit ; le stockage chiffré est celui du moteur.</summary>
+    public bool SavePasswords { get; set; } = true;
     /// <summary>Envoie la saisie de la barre d'adresse au moteur de recherche pour obtenir des complétions.</summary>
     public bool OnlineSuggestions { get; set; } = true;
     public string SuggestUrlTemplate { get; set; } = "https://suggestqueries.google.com/complete/search?client=firefox&ie=utf-8&oe=utf-8&q={0}";
@@ -15,6 +17,8 @@ public sealed class Settings
 public sealed class Session
 {
     public List<string> Urls { get; set; } = new();
+    /// <summary>Les premières adresses de <see cref="Urls"/> sont des onglets épinglés.</summary>
+    public int PinnedCount { get; set; }
     public int ActiveIndex { get; set; }
     public int? PrimaryIndex { get; set; }
     public int? SecondaryIndex { get; set; }

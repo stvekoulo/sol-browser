@@ -51,7 +51,7 @@ public sealed partial class MainWindow : Window
             ? File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "blur.js"))
             : null;
 
-        var pages = new PageHost(Pages, PrimaryColumn, DividerColumn, SecondaryColumn, blur);
+        var pages = new PageHost(Pages, PrimaryColumn, DividerColumn, SecondaryColumn, blur, settings.SavePasswords);
         var bridge = new UiBridge(Ui);
         var popupBridge = new UiBridge(Popup, "index.html#popup");
         var popup = new PopupHost(PopupFrame, Popup, popupBridge);

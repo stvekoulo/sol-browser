@@ -6,7 +6,7 @@ using Microsoft.Web.WebView2.Core;
 namespace Browser.App;
 
 /// <summary>Une WebView2 par onglet. Aucun canal vers l'hôte n'est ouvert sur ces vues.</summary>
-public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDefinition divider, ColumnDefinition secondary, string? injectedScript)
+public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDefinition divider, ColumnDefinition secondary, string? injectedScript, bool savePasswords)
 {
     private readonly Dictionary<string, WebView2> _views = new();
     private readonly HashSet<string> _loading = new();
@@ -76,12 +76,13 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
     }
 
     // Une page web est du contenu non fiable : aucun pont vers l'hôte, aucune permission accordée d'office.
-    private static void Harden(CoreWebView2 core)
+    private void Harden(CoreWebView2 core)
     {
         var s = core.Settings;
         s.AreHostObjectsAllowed = false;
         s.IsWebMessageEnabled = false;
-        s.IsPasswordAutosaveEnabled = false;
+        // Mots de passe : gestionnaire du moteur (proposition d'enregistrement, stockage chiffré, remplissage).
+        s.IsPasswordAutosaveEnabled = savePasswords;
         s.IsGeneralAutofillEnabled = false;
         s.IsReputationCheckingRequired = true; // SmartScreen
         // ponytail: tout est refusé tant qu'il n'y a pas d'invite ; à remplacer par une demande à l'utilisateur
@@ -120,6 +121,8 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
             if (column >= 0) Grid.SetColumn(view, column);
         }
     }
+
+    public CoreWebView2? CoreOf(string id) => Core(id);
 
     private CoreWebView2? Core(string id) =>
         _views.TryGetValue(id, out var view) ? view.CoreWebView2 : null;
