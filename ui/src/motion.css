@@ -1,0 +1,21 @@
+/* Mouvement de l'interface. Courbe et durée : --ease-out et --fast de theme.css. */
+
+/* Retour de pression : le bouton s'enfonce légèrement, pour confirmer que le clic est pris. */
+:where(button.pill-surface, .pill-icon-btn, .segment-btn, .inline-btn, .pinned-pill, .pill-action, .sidebar-new-tab, .sidebar-url-btn, .dock-mini-btn):active:not(:disabled) {
+  transform: scale(0.97);
+  transition: transform 120ms var(--ease-out);
+}
+
+/* Un onglet qui arrive dans la liste apparaît en fondu au lieu de surgir. Opacité seule : la liste ne bouge pas. */
+.sidebar-tab, .sidebar-split-group {
+  transition: background var(--fast) var(--ease-out), box-shadow var(--fast) var(--ease-out), opacity 140ms var(--ease-out);
+}
+@starting-style {
+  .sidebar-tab, .sidebar-split-group { opacity: 0; }
+}
+
+/* Mouvement réduit : on garde les fondus, on retire les déplacements et mises à l'échelle. */
+@media (prefers-reduced-motion: reduce) {
+  :where(button.pill-surface, .pill-icon-btn, .segment-btn, .inline-btn, .pinned-pill, .pill-action, .sidebar-new-tab, .sidebar-url-btn, .dock-mini-btn):active:not(:disabled) { transform: none; }
+  .pinned-pill:hover { transform: none; }
+}

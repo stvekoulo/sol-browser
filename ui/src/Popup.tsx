@@ -48,6 +48,11 @@ export default function Popup() {
         setLibTab(next.bookmarks.length > 0 ? 'bookmarks' : 'history');
       setContent(next);
     });
+    // Diagnostic temporaire : ce que la vraie souris envoie à cette vue, lisible par le port de débogage.
+    const log: unknown[] = ((window as unknown as { __log: unknown[] }).__log = []);
+    for (const type of ['pointerdown', 'mousedown', 'mouseup', 'click', 'focus', 'blur', 'mouseover'])
+      window.addEventListener(type, e => log.length < 300 && log.push([Math.round(performance.now()), type, (e.target as Element)?.className ?? 'window', document.hasFocus()]), true);
+
     const close = () => send({ type: 'popup.close' });
     // Perdre le curseur referme la vue, mais pas tout de suite : un clic dans la vue lui fait perdre puis
     // reprendre le curseur, et une fermeture immédiate avalerait ce clic.

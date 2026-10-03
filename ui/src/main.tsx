@@ -7,6 +7,7 @@ import './theme.css';
 import './app.css';
 import './sidebar.css';
 import './popup.css';
+import './motion.css';
 
 // Le même bundle sert la barre supérieure, la carte latérale (#sidebar), les menus (#popup) et l'encart (#dock).
 const hash = location.hash;

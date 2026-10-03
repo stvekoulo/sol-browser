@@ -61,6 +61,7 @@ public sealed partial class MainWindow : Window
         var dock = new DockHost(DockFrame, Dock, dockBridge);
         _controller = new BrowserController(this, pages, bridge, popup, dock, settings);
         WireDivider();
+        WireGestures();
 
         var uiFolder = Path.Combine(AppContext.BaseDirectory, "ui");
         await bridge.InitAsync(uiFolder, _controller.Execute);
@@ -68,6 +69,40 @@ public sealed partial class MainWindow : Window
         await dockBridge.InitAsync(uiFolder, _controller.Execute);
         popup.Hide();
         dock.Hide();
+    }
+
+    // Gestes : boutons latéraux de la souris, et balayage horizontal à deux doigts du pavé tactile, pour page
+    // précédente et page suivante. Le moteur ne reconnaît pas ce balayage dans ce type de vue : on le lit ici.
+    private double _swipe;
+    private DateTime _swipeAt;
+    private bool _swipeDone;
+
+    private void WireGestures()
+    {
+        // handledEventsToo : les vues web marquent ces événements comme traités, on les observe quand même.
+        Root.AddHandler(UIElement.PointerPressedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler((_, e) =>
+        {
+            var p = e.GetCurrentPoint(Root);
+            DebugLog.Write($"pression x={p.Position.X:0} y={p.Position.Y:0} source={e.OriginalSource?.GetType().Name}:{(e.OriginalSource as FrameworkElement)?.Name} gauche={p.Properties.IsLeftButtonPressed} x1={p.Properties.IsXButton1Pressed} x2={p.Properties.IsXButton2Pressed}");
+            if (p.Properties.IsXButton1Pressed) _controller?.Shortcut("nav.back");
+            else if (p.Properties.IsXButton2Pressed) _controller?.Shortcut("nav.forward");
+        }), true);
+
+        Root.AddHandler(UIElement.PointerWheelChangedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler((_, e) =>
+        {
+            var p = e.GetCurrentPoint(Root).Properties;
+            if (!p.IsHorizontalMouseWheel) return;
+            var now = DateTime.UtcNow;
+            if ((now - _swipeAt).TotalMilliseconds > 350) { _swipe = 0; _swipeDone = false; } // nouveau geste
+            _swipeAt = now;
+            _swipe += p.MouseWheelDelta;
+            DebugLog.Write($"molette horizontale delta={p.MouseWheelDelta} cumul={_swipe:0}");
+            // ponytail: seuil fixe, et une page qui défile elle-même horizontalement déclenche aussi le geste ;
+            // à affiner en ne réagissant qu'en bout de défilement.
+            if (_swipeDone || Math.Abs(_swipe) < 480) return;
+            _swipeDone = true;
+            _controller?.Shortcut(_swipe < 0 ? "nav.back" : "nav.forward");
+        }), true);
     }
 
     // Séparateur de la vue scindée : scrutation directe de la souris tant que le bouton est enfoncé.

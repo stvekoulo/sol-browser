@@ -53,6 +53,7 @@ public sealed class BrowserController
     public void Execute(Command c)
     {
         var id = c.Id ?? "";
+        if (c.Type is not ("popup.size" or "dock.size" or "split.resize")) DebugLog.Write($"commande {c.Type} {c.Id} {c.Index}");
         switch (c.Type)
         {
             // Vue posée sur la page : ces commandes ne changent pas l'état des onglets.
@@ -200,7 +201,7 @@ public sealed class BrowserController
         const double width = 340;
         HidePopup();
         _downloadsOpen = true;
-        _popup.Show(x - width, y, width, DownloadsJson(_downloads), focus: true);
+        _popup.Show(x - width, y, width, DownloadsJson(_downloads), focus: true, animate: true, anchorRight: true);
     }
 
     // Panneau de réglages : des interrupteurs, appliqués tout de suite et enregistrés.
@@ -225,7 +226,7 @@ public sealed class BrowserController
         const double width = 340;
         HidePopup();
         _settingsOpen = true;
-        _popup.Show(x - width, y, width, SettingsJson(), focus: true);
+        _popup.Show(x - width, y, width, SettingsJson(), focus: true, animate: true, anchorRight: true);
     }
 
     private void SetSetting(string key, bool on)
@@ -380,11 +381,11 @@ public sealed class BrowserController
     private List<(string Label, Action? Run)>? _menu;
     private Action? _menuDismissed; // appelé à la fermeture du menu, avec ou sans choix
 
-    private void ShowMenu(double x, double y, List<(string Label, Action? Run)> items, Action? dismissed = null)
+    private void ShowMenu(double x, double y, List<(string Label, Action? Run)> items, Action? dismissed = null, bool anchorRight = false)
     {
         HidePopup();
         (_menu, _menuDismissed) = (items, dismissed);
-        _popup.Show(x, y, 260, JsonSerializer.Serialize(new { popup = "menu", items = items.Select(i => i.Label) }), focus: true);
+        _popup.Show(x, y, 260, JsonSerializer.Serialize(new { popup = "menu", items = items.Select(i => i.Label) }), focus: true, animate: true, anchorRight: anchorRight);
     }
 
     private void PickMenuItem(int index)
@@ -427,7 +428,7 @@ public sealed class BrowserController
             ("Capturer une zone", () => Capture("region")),
             ("Capturer la partie visible", () => Capture("visible")),
             ("Capturer la page entière", () => Capture("full")),
-        ]);
+        ], anchorRight: true);
     }
 
     private void Capture(string mode)
@@ -487,7 +488,7 @@ public sealed class BrowserController
             popup = "library",
             bookmarks = _db.Bookmarks().Select(b => new { url = b.Url, title = b.Title }),
             history = _db.RecentHistory(12).Select(v => new { url = v.Url, title = v.Title }),
-        }), focus: true); // la vue prend le curseur : la perdre la referme
+        }), focus: true, animate: true, anchorRight: true); // la vue prend le curseur : la perdre la referme
     }
 
     private void RecordVisit(string id)

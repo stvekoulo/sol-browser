@@ -24,10 +24,15 @@ public sealed class PopupHost
         _frame.LayoutUpdated += (_, _) => ApplyRoundedClip();
     }
 
-    public void Show(double x, double y, double width, string contentJson, bool focus)
+    private bool _animate, _anchorRight;
+
+    /// <param name="animate">Apparition animée. Jamais pour les suggestions, qui changent à chaque touche.</param>
+    /// <param name="anchorRight">La vue est accrochée par son coin haut droit (panneau d'un bouton de la barre).</param>
+    public void Show(double x, double y, double width, string contentJson, bool focus, bool animate = false, bool anchorRight = false)
     {
         _frame.Width = Math.Clamp(width, 160, 900);
         (_x, _y) = (x, y);
+        (_animate, _anchorRight) = (animate, anchorRight);
         _pending = true;
         _focus = focus;
         _bridge.Post(contentJson);
@@ -49,6 +54,7 @@ public sealed class PopupHost
         _frame.UpdateLayout();
         ApplyRoundedClip();
 
+        if (_pending && _animate) FloatIn.Play(_frame, _anchorRight ? (float)_frame.Width : 0, 0);
         if (_pending && _focus) _view.Focus(FocusState.Programmatic);
         _pending = false;
     }

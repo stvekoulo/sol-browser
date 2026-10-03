@@ -24,9 +24,11 @@ public sealed class DockHost
 
     public void SetSize(double width, double height)
     {
+        var appearing = !Visible;
         _frame.Width = Math.Clamp(width, 44, 360);
         _frame.Height = Math.Clamp(height, 44, 420);
         _frame.Visibility = Visibility.Visible;
+        if (appearing) FloatIn.Play(_frame, (float)_frame.Width, (float)_frame.Height); // depuis son coin bas droit
         _frame.UpdateLayout();
         RoundedClip.Apply(_frame, _view, Radius);
     }
