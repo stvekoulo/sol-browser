@@ -472,6 +472,13 @@ function ProfileList({ rootRef, items }: { rootRef: RefObject<HTMLDivElement | n
         </span>
         <span className="row-title">{t('Nouveau profil', 'New profile')}</span>
       </button>
+      <button className="row" title={t('Aucun cookie, aucune connexion ni historique des autres profils ; tout est effacé à la fermeture de la fenêtre.', 'No cookies, sign-ins or history from other profiles; everything is erased when the window closes.')} onClick={() => send({ type: 'profile.isolated' })}>
+        <span className="row-badge" aria-hidden>
+          <Icon d="M8 1.8L3 3.9v4.2c0 3.2 2.1 5.6 5 6.4 2.9-.8 5-3.2 5-6.4V3.9L8 1.8z" size={13} />
+        </span>
+        <span className="row-title">{t('Nouvelle fenêtre isolée', 'New isolated window')}</span>
+        <span className="row-pill">{t('Jetable', 'Disposable')}</span>
+      </button>
     </div>
   );
 }

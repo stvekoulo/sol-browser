@@ -56,6 +56,7 @@ public sealed class BrowserController
         _window.AppWindow.Changed += (_, e) => { if (e.DidPresenterChange || e.DidSizeChange) Refresh(); };
         _window.Closed += (_, _) => { SaveSession(); _db.Dispose(); };
         ApplyComparison();
+        Profiles.DeleteClosedTemporary(AppPaths.BaseDir, IsProfileOpen); // sessions isolées dont la fenêtre est fermée
     }
 
     private static string T(string fr, string en) => Language.T(fr, en);
@@ -134,6 +135,11 @@ public sealed class BrowserController
             case "profile.rename":
                 if (Profiles.Rename(AppPaths.BaseDir, id, c.Title!) && id == AppPaths.Profile) _window.Title = $"Navigateur — {ProfileName(id)}";
                 break;
+            // Session isolée : un profil jetable dans une nouvelle fenêtre, à côté de celle-ci.
+            case "profile.isolated":
+                HidePopup();
+                OpenProfile(Profiles.CreateTemporary(AppPaths.BaseDir, T("Session isolée", "Isolated session")), replace: false);
+                return;
             case "profile.switch": SwitchProfile(id); return;
             case "profile.delete": DeleteProfile(id); return;
             case "capture.menu": OpenCaptureMenu(c.X!.Value, c.Y!.Value); return;
@@ -912,13 +918,14 @@ public sealed class BrowserController
     private string ProfilesJson() => JsonSerializer.Serialize(new
     {
         popup = "profiles",
-        items = Profiles.List(AppPaths.BaseDir).Select(id => new
+        // Les sessions isolées des autres fenêtres ne sont pas des profils où l'on revient.
+        items = Profiles.List(AppPaths.BaseDir).Where(id => id == AppPaths.Profile || !Profiles.IsTemporary(AppPaths.BaseDir, id)).Select(id => new
         {
             id,
             name = ProfileName(id),
             current = id == AppPaths.Profile,
             // Ni le profil par défaut, ni celui de cette fenêtre, ni un profil ouvert dans une autre fenêtre.
-            renamable = id != Profiles.Default,
+            renamable = id != Profiles.Default && !Profiles.IsTemporary(AppPaths.BaseDir, id),
             deletable = id != Profiles.Default && id != AppPaths.Profile && !IsProfileOpen(id),
         }),
     });
@@ -952,15 +959,19 @@ public sealed class BrowserController
 
     // Changer de profil : une fenêtre du nouveau profil prend la place de celle-ci, au même endroit.
     // (Les données d'un profil sont fixées au démarrage du moteur : on ne peut pas en changer en cours de route.)
-    private void SwitchProfile(string id)
+    private void SwitchProfile(string id) => OpenProfile(id, replace: true);
+
+    // replace : la nouvelle fenêtre prend la place de celle-ci. Sinon elle s'ouvre à côté, légèrement décalée.
+    private void OpenProfile(string id, bool replace)
     {
         if (id == AppPaths.Profile || !Profiles.List(AppPaths.BaseDir).Contains(id)) return;
         if (Environment.ProcessPath is not { } exe) return;
         var app = _window.AppWindow;
+        var shift = replace ? 0 : 36;
         var start = new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = false };
         start.ArgumentList.Add($"--profile={id}");
-        start.ArgumentList.Add($"--bounds={app.Position.X},{app.Position.Y},{app.Size.Width},{app.Size.Height}");
-        if (Presenter?.State == OverlappedPresenterState.Maximized) start.ArgumentList.Add("--maximized");
+        start.ArgumentList.Add($"--bounds={app.Position.X + shift},{app.Position.Y + shift},{app.Size.Width},{app.Size.Height}");
+        if (replace && Presenter?.State == OverlappedPresenterState.Maximized) start.ArgumentList.Add("--maximized");
         // La nouvelle fenêtre repart de l'environnement d'origine, pas de celui que ce profil s'est réglé.
         foreach (var (variable, value) in App.LaunchEnvironment)
         {
@@ -969,7 +980,7 @@ public sealed class BrowserController
         }
         try { System.Diagnostics.Process.Start(start); }
         catch (System.ComponentModel.Win32Exception) { return; } // rien ne s'est ouvert : on garde cette fenêtre
-        _window.Close();
+        if (replace) _window.Close();
     }
 
     // Bouton de capture d'écran de la barre d'outils.

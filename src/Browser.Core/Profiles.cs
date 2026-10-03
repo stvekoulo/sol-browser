@@ -70,6 +70,34 @@ public static partial class Profiles
         return id;
     }
 
+    private const string TemporaryFile = "temporary";
+
+    /// <summary>
+    /// Crée un profil jetable : une session isolée (ni cookies, ni historique, ni connexions des autres profils),
+    /// dont toutes les données sont supprimées une fois sa fenêtre fermée (voir <see cref="DeleteClosedTemporary"/>).
+    /// </summary>
+    public static string CreateTemporary(string baseDir, string name)
+    {
+        var id = Create(baseDir, "temp-" + Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(4)).ToLowerInvariant());
+        var dir = DataDir(baseDir, id);
+        File.WriteAllText(Path.Combine(dir, NameFile), Clean(name) is { Length: > 0 } clean ? clean : id);
+        File.WriteAllText(Path.Combine(dir, TemporaryFile), "");
+        return id;
+    }
+
+    public static bool IsTemporary(string baseDir, string id) =>
+        id != Default && IsValid(id) && File.Exists(Path.Combine(DataDir(baseDir, id), TemporaryFile));
+
+    /// <summary>Supprime les profils jetables dont la fenêtre est fermée. Un dossier encore tenu sera repris la prochaine fois.</summary>
+    public static void DeleteClosedTemporary(string baseDir, Func<string, bool> isOpen)
+    {
+        foreach (var id in List(baseDir).Where(id => IsTemporary(baseDir, id) && !isOpen(id)))
+        {
+            try { Delete(baseDir, id); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        }
+    }
+
     /// <summary>Change le nom affiché d'un profil ; son dossier et ses données ne bougent pas. Jamais le profil par défaut.</summary>
     public static bool Rename(string baseDir, string id, string name)
     {

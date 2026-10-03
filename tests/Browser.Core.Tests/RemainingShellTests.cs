@@ -46,6 +46,23 @@ public class RemainingShellTests : IDisposable
     }
 
     [Fact]
+    public void A_temporary_profile_is_deleted_once_its_window_is_closed_and_ordinary_profiles_are_kept()
+    {
+        var kept = Profiles.Create(_dir, "Travail");
+        var open = Profiles.CreateTemporary(_dir, "Session isolée");
+        var closed = Profiles.CreateTemporary(_dir, "Session isolée");
+        Assert.True(Profiles.IsTemporary(_dir, open));
+        Assert.False(Profiles.IsTemporary(_dir, kept));
+        Assert.False(Profiles.IsTemporary(_dir, Profiles.Default));
+        Assert.Equal("Session isolée", Profiles.NameOf(_dir, open));
+        Assert.NotEqual(open, closed);
+
+        Profiles.DeleteClosedTemporary(_dir, id => id == open);
+        Assert.Equal([Profiles.Default, open, kept], Profiles.List(_dir).OrderBy(id => id == Profiles.Default ? "" : id.StartsWith("temp-") ? "a" : "b"));
+        Assert.False(Directory.Exists(Profiles.DataDir(_dir, closed)));
+    }
+
+    [Fact]
     public void Forget_removes_one_site_and_leaves_the_others()
     {
         var file = Path.Combine(_dir, "permissions.json");
