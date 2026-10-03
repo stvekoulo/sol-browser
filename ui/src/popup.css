@@ -336,3 +336,32 @@
   font-variant-numeric: tabular-nums;
 }
 .dock-mini-btn:hover { background: var(--bg-pill-solid-hover); }
+
+/* Panneau des profils */
+.profile-row { display: flex; align-items: center; gap: 4px; }
+.profile-pick {
+  flex: 1; min-width: 0; height: 36px; padding: 0 10px 0 7px;
+  display: flex; align-items: center; gap: 9px;
+  border-radius: var(--radius-pill); text-align: left; color: var(--text);
+}
+.profile-pick:hover:not(:disabled) { background: var(--bg-pill-solid-hover); box-shadow: var(--shadow-pill-elevated); }
+.profile-row.current .profile-pick { background: var(--bg-pill-solid); box-shadow: var(--shadow-pill-elevated); }
+.profile-pick .row-badge { font-size: 11px; font-weight: 600; }
+.profile-delete { width: 26px; height: 26px; flex: none; border-radius: 50%; display: grid; place-items: center; color: var(--text-dim); }
+.profile-delete:hover { background: rgba(229, 72, 77, 0.12); color: #e5484d; }
+.pill-action.danger { flex: none; background: #e5484d; color: #ffffff; }
+
+/* Saisie d'un nom (nouveau profil) */
+.name-form { display: flex; flex-direction: column; gap: 10px; padding: 10px 8px 6px; }
+.name-form-title { font-size: 14px; font-weight: 600; }
+.name-form .row-sub { margin: 0; line-height: 1.35; }
+.name-form input {
+  height: 38px; padding: 0 14px;
+  border: 0; border-radius: var(--radius-pill);
+  background: var(--bg-pill-solid); box-shadow: var(--shadow-pill-elevated);
+  font: inherit; color: var(--text); user-select: text;
+}
+.name-form input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.name-form-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.name-form-actions .pill-action { height: 30px; padding: 0 14px; }
+.pill-action:disabled { opacity: 0.45; }

@@ -24,6 +24,9 @@ export default function Sidebar() {
       if (e.event === 'favicon' && e.id) setIcons(all => ({ ...all, [e.id!]: e.data }));
       if (e.event === 'status') setStatus(e.text ?? '');
       // L'hôte fait entrer ou sortir la carte : le mouvement est joué ici, par son contenu.
+      // Flottante (au survol, ou le temps d'une animation) : la vue se réduit à la carte, sans marge autour.
+      if (e.event === 'sidebar-enter' || e.event === 'sidebar-leave') document.body.classList.add('floating');
+      if (e.event === 'sidebar-docked') document.body.classList.remove('floating');
       if (e.event === 'sidebar-enter') setMotion(m => ({ way: 'entering', run: m.run + 1 }));
       if (e.event === 'sidebar-leave') setMotion(m => ({ way: 'leaving', run: m.run + 1 }));
     });

@@ -10,32 +10,78 @@ namespace Browser.App;
 public sealed class UiBridge(WebView2 view, string page = "index.html", WebView2? sidebar = null, ColumnDefinition? sidebarColumn = null, PageHost? pages = null)
 {
     private const string Origin = "https://ui.navigateur/";
+    // Lit les couleurs de la page active : son fond, et sa couleur d'accent (celle qui fait son identité).
+    // L'accent vient, dans l'ordre : de la balise theme-color du site, puis de la couleur vive la plus présente
+    // parmi son en-tête, ses boutons et ses liens. Un site sans couleur vive n'a pas d'accent.
     private const string ThemeProbeScript = """
         (() => {
           if (location.href === 'about:blank') {
             document.documentElement.style.background = '#eef0e2';
-            return { bg: 'rgb(238, 240, 226)', dark: false };
+            return { bg: 'rgb(238, 240, 226)', dark: false, accent: null };
           }
           const parse = s => {
             const m = s && s.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
             return m ? [+m[1], +m[2], +m[3], m[4] === undefined ? 1 : +m[4]] : null;
           };
+          // Résout n'importe quelle couleur CSS (nom, hex, hsl…) sans rien ajouter à la page.
+          const ctx = document.createElement('canvas').getContext('2d');
+          const resolve = css => {
+            if (!css || !ctx) return null;
+            ctx.fillStyle = '#000'; ctx.fillStyle = css;
+            const v = ctx.fillStyle;
+            if (v.startsWith('#')) return [parseInt(v.slice(1, 3), 16), parseInt(v.slice(3, 5), 16), parseInt(v.slice(5, 7), 16), 1];
+            return parse(v);
+          };
+          const lum = ([r, g, b]) => (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+          const sat = ([r, g, b]) => { const max = Math.max(r, g, b), min = Math.min(r, g, b); return max === 0 ? 0 : (max - min) / max; };
+
           const els = [];
           for (const x of [window.innerWidth * 0.5, window.innerWidth * 0.25, 24]) {
             let el = document.elementFromPoint(x, 12);
             while (el) { els.push(el); el = el.parentElement; }
           }
           els.push(document.querySelector('ytd-app'), document.querySelector('main'), document.body, document.documentElement);
+          let bg = [255, 255, 255];
           for (const el of els) {
             if (!el) continue;
             const c = parse(getComputedStyle(el).backgroundColor);
-            if (c && c[3] > 0.15) {
-              const [r, g, b] = c;
-              const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-              return { bg: `rgb(${r}, ${g}, ${b})`, dark: lum < 0.42 };
-            }
+            if (c && c[3] > 0.15) { bg = c.slice(0, 3); break; }
           }
-          return { bg: 'rgb(255, 255, 255)', dark: false };
+
+          // Couleur d'accent : chaque couleur vive rencontrée reçoit un poids, la plus lourde l'emporte.
+          const votes = new Map();
+          const vote = (c, weight) => {
+            if (!c || c[3] < 0.5 || sat(c) < 0.35 || lum(c) < 0.12 || lum(c) > 0.92) return;
+            const key = c.slice(0, 3).map(v => Math.round(v / 24) * 24).join(',');
+            const entry = votes.get(key) || { c: c.slice(0, 3), w: 0 };
+            entry.w += weight * (0.5 + sat(c));
+            votes.set(key, entry);
+          };
+          const meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) vote(resolve(meta.content), 12);
+          if (sat(bg) >= 0.35) vote([...bg, 1], 10); // une page déjà colorée est sa propre couleur
+          const sample = (selector, weight, limit) => {
+            let n = 0;
+            for (const el of document.querySelectorAll(selector)) {
+              if (n >= limit) break;
+              const box = el.getBoundingClientRect();
+              if (box.width < 8 || box.height < 8 || box.bottom < 0 || box.top > innerHeight) continue;
+              n++;
+              const style = getComputedStyle(el);
+              vote(parse(style.backgroundColor), weight * Math.min(3, (box.width * box.height) / 4000 + 0.5));
+              vote(parse(style.color), weight * 0.4);
+              if (el instanceof SVGElement) vote(parse(style.fill), weight * 0.6);
+            }
+          };
+          sample('header, nav, [role="banner"]', 3, 6);
+          sample('button, [role="button"], input[type="submit"], a[class*="btn"], a[class*="button"]', 2, 24);
+          sample('header svg, nav svg, [class*="logo"] svg, [class*="logo"]', 2, 8);
+          sample('a[href]', 1, 30);
+          let best = null;
+          for (const entry of votes.values()) if (!best || entry.w > best.w) best = entry;
+
+          const rgb = c => `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
+          return { bg: rgb(bg), dark: lum(bg) < 0.42, accent: best ? rgb(best.c) : null };
         })()
         """;
 
@@ -147,7 +193,8 @@ public sealed class UiBridge(WebView2 view, string page = "index.html", WebView2
             // Le fond de la fenêtre suit aussi la page : pas d'éclair sombre derrière une vue en cours de chargement.
             if (System.Text.RegularExpressions.Regex.Match(bg, @"rgb\((\d+), (\d+), (\d+)\)") is { Success: true } m)
                 PageColorChanged?.Invoke(byte.Parse(m.Groups[1].Value), byte.Parse(m.Groups[2].Value), byte.Parse(m.Groups[3].Value));
-            s_lastThemeMsg = JsonSerializer.Serialize(new { @event = "theme", bg, dark });
+            var accent = doc.RootElement.TryGetProperty("accent", out var accentValue) && accentValue.ValueKind == JsonValueKind.String ? accentValue.GetString() : null;
+            s_lastThemeMsg = JsonSerializer.Serialize(new { @event = "theme", bg, dark, accent });
             view.CoreWebView2?.PostWebMessageAsJson(s_lastThemeMsg);
             sidebar?.CoreWebView2?.PostWebMessageAsJson(s_lastThemeMsg);
             foreach (var floating in _floating) floating.Post(s_lastThemeMsg);

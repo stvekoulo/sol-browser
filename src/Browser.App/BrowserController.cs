@@ -90,6 +90,10 @@ public sealed class BrowserController
             case "dock.size": if (_dockShown) _dock.SetSize(c.Width!.Value, c.Height!.Value); return;
             case "tab.menu": OpenTabMenu(id, c.X!.Value, c.Y!.Value); return;
             case "profile.menu": OpenProfileMenu(c.X!.Value, c.Y!.Value); return;
+            case "profile.new": AskProfileName(); return;
+            case "profile.create": SwitchProfile(Profiles.Create(AppPaths.BaseDir, c.Title!)); return;
+            case "profile.switch": SwitchProfile(id); return;
+            case "profile.delete": DeleteProfile(id); return;
             case "capture.menu": OpenCaptureMenu(c.X!.Value, c.Y!.Value); return;
             case "window.close": _window.Close(); return;
             case "window.drag": BeginDrag(); return;
@@ -115,7 +119,7 @@ public sealed class BrowserController
             case "nav.reload": _pages.Reload(id); break;
             case "nav.stop": _pages.Stop(id); break;
             case "split.open": Split(c.Id); break;
-            case "split.close": _split.Close(); break;
+            case "split.close": CloseSplit(); break;
             case "split.resize": _split.Resize(c.Ratio!.Value); break;
             case "bookmark.add": if (IsWeb(c.Url!)) _db.AddBookmark(c.Url!, c.Title!); break;
             case "bookmark.remove": _db.RemoveBookmark(c.Url!); break;
@@ -274,6 +278,7 @@ public sealed class BrowserController
         _suggesting = false;
         _downloadsOpen = false;
         _settingsOpen = false;
+        _profilesOpen = false;
         var dismissed = _menuDismissed;
         (_menu, _menuDismissed) = (null, null);
         dismissed?.Invoke();
@@ -335,12 +340,26 @@ public sealed class BrowserController
         if (_tabs.Tabs.Count == 0) _window.Close();
     }
 
+    // Onglet vide ouvert seulement pour remplir la moitié droite d'une vue scindée.
+    private string? _splitBlankTab;
+
+    private void CloseSplit()
+    {
+        var blank = _splitBlankTab;
+        _splitBlankTab = null;
+        _split.Close();
+        // Resté vide : il n'a servi à rien, il repart avec la vue scindée.
+        if (blank is not null && _tabs.Tabs.Count > 1 && _tabs.Tabs.FirstOrDefault(t => t.Id == blank) is { Url: "about:blank" or "" })
+            Close(blank);
+    }
+
     // Scinde l'onglet actif avec l'onglet donné, ou avec un nouvel onglet si aucun n'est donné.
     private void Split(string? otherId)
     {
         if (_tabs.ActiveId is not { } active) return;
         if (otherId is not null && (otherId == active || _tabs.Tabs.All(t => t.Id != otherId))) return;
         var other = otherId ?? Open(_settings.HomeUrl, activate: false).Id;
+        _splitBlankTab = otherId is null ? other : null;
 
         _split.Open(active, other);
         KeepPairAdjacent();
@@ -458,29 +477,66 @@ public sealed class BrowserController
         ]);
     }
 
-    // Profils : chacun a sa fenêtre et ses données. Le menu en ouvre un autre ou en crée un.
+    // Profils : chacun a ses données. Le panneau en change, en crée ou en supprime.
+    private bool _profilesOpen;
+
+    private string ProfilesJson() => JsonSerializer.Serialize(new
+    {
+        popup = "profiles",
+        items = Profiles.List(AppPaths.BaseDir).Select(id => new
+        {
+            id,
+            name = Profiles.NameOf(AppPaths.BaseDir, id),
+            current = id == AppPaths.Profile,
+            // Ni le profil par défaut, ni celui de cette fenêtre, ni un profil ouvert dans une autre fenêtre.
+            deletable = id != Profiles.Default && id != AppPaths.Profile && !IsProfileOpen(id),
+        }),
+    });
+
     private void OpenProfileMenu(double x, double y)
     {
         if (ClosesPanel("profile")) return;
-        var profiles = Profiles.List(AppPaths.BaseDir);
-        var items = profiles
-            .Select(name => (name == AppPaths.Profile ? $"{Profiles.Display(name)} (cette fenêtre)" : $"Ouvrir {Profiles.Display(name)}",
-                name == AppPaths.Profile ? (Action?)null : () => LaunchProfile(name)))
-            .ToList();
-        items.Add(("", null));
-        items.Add(("Nouveau profil", () =>
-        {
-            var name = Profiles.NextName(profiles);
-            Directory.CreateDirectory(Profiles.DataDir(AppPaths.BaseDir, name));
-            LaunchProfile(name);
-        }));
-        ShowMenu(x - 260, y, items);
+        HidePopup();
+        _profilesOpen = true;
+        _popup.Show(x - 300, y, 300, ProfilesJson(), focus: true);
     }
 
-    private static void LaunchProfile(string name)
+    // Fenêtre de saisie du nom, au milieu de la fenêtre.
+    private void AskProfileName()
     {
-        if (Environment.ProcessPath is not { } exe || !Profiles.IsValid(name)) return;
-        var start = new System.Diagnostics.ProcessStartInfo(exe, $"--profile={name}") { UseShellExecute = false };
+        HidePopup();
+        const double width = 340;
+        var window = (FrameworkElement)_window.Content;
+        _popup.Show((window.ActualWidth - width) / 2, Math.Max(90, window.ActualHeight / 2 - 140), width,
+            """{"popup":"profile-new"}""", focus: true);
+    }
+
+    private void DeleteProfile(string id)
+    {
+        if (id == AppPaths.Profile || IsProfileOpen(id)) return;
+        try { Profiles.Delete(AppPaths.BaseDir, id); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { /* fichiers encore utilisés : le profil reste */ }
+        if (_profilesOpen) _popup.Post(ProfilesJson());
+    }
+
+    private static bool IsProfileOpen(string id)
+    {
+        if (!Mutex.TryOpenExisting($"Navigateur.Profil.{id}", out var held)) return false;
+        held.Dispose();
+        return true;
+    }
+
+    // Changer de profil : une fenêtre du nouveau profil prend la place de celle-ci, au même endroit.
+    // (Les données d'un profil sont fixées au démarrage du moteur : on ne peut pas en changer en cours de route.)
+    private void SwitchProfile(string id)
+    {
+        if (id == AppPaths.Profile || !Profiles.List(AppPaths.BaseDir).Contains(id)) return;
+        if (Environment.ProcessPath is not { } exe) return;
+        var app = _window.AppWindow;
+        var start = new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = false };
+        start.ArgumentList.Add($"--profile={id}");
+        start.ArgumentList.Add($"--bounds={app.Position.X},{app.Position.Y},{app.Size.Width},{app.Size.Height}");
+        if (Presenter?.State == OverlappedPresenterState.Maximized) start.ArgumentList.Add("--maximized");
         // La nouvelle fenêtre repart de l'environnement d'origine, pas de celui que ce profil s'est réglé.
         foreach (var (variable, value) in App.LaunchEnvironment)
         {
@@ -488,7 +544,8 @@ public sealed class BrowserController
             else start.Environment[variable] = value;
         }
         try { System.Diagnostics.Process.Start(start); }
-        catch (System.ComponentModel.Win32Exception) { /* exécutable introuvable ou refusé : rien ne s'ouvre */ }
+        catch (System.ComponentModel.Win32Exception) { return; } // rien ne s'est ouvert : on garde cette fenêtre
+        _window.Close();
     }
 
     // Bouton de capture d'écran de la barre d'outils.
@@ -617,7 +674,7 @@ public sealed class BrowserController
                 bookmarked = (t.Id == _tabs.ActiveId || (showSplit && _split.Contains(t.Id))) && _db.IsBookmarked(t.Url),
             }),
             activeId = _tabs.ActiveId,
-            profile = Profiles.Display(AppPaths.Profile),
+            profile = Profiles.NameOf(AppPaths.BaseDir, AppPaths.Profile),
             split = new { primaryId = _split.PrimaryId, secondaryId = _split.SecondaryId, ratio = _split.Ratio, visible = showSplit },
             maximized = Presenter?.State == OverlappedPresenterState.Maximized,
             downloads = new

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { formatDomain, onMessage, send } from './bridge';
 import { DownloadCard, type Download } from './Downloads';
 import { Icon } from './Icons';
@@ -9,7 +9,11 @@ type Content =
   | { popup: 'library'; bookmarks: Item[]; history: Item[] }
   | { popup: 'menu'; items: string[] }
   | { popup: 'downloads'; items: Download[] }
-  | { popup: 'settings'; zoom: number; items: Setting[] };
+  | { popup: 'settings'; zoom: number; items: Setting[] }
+  | { popup: 'profiles'; items: Profile[] }
+  | { popup: 'profile-new' };
+
+type Profile = { id: string; name: string; current: boolean; deletable: boolean };
 
 type Setting = { key: string; label: string; hint: string; on: boolean };
 
@@ -178,6 +182,12 @@ export default function Popup() {
       </div>
     );
 
+  if (content.popup === 'profiles')
+    return <ProfileList key={opening} rootRef={root} items={content.items} />;
+
+  if (content.popup === 'profile-new')
+    return <ProfileNameForm key={opening} rootRef={root} />;
+
   const open = (item: Item) => send({ type: 'tab.open', url: item.url });
   const items = libTab === 'bookmarks' ? content.bookmarks : content.history;
 
@@ -229,6 +239,75 @@ export default function Popup() {
           ))
         )}
       </div>
+    </div>
+  );
+}
+
+// Panneau des profils : en choisir un, en créer un, en supprimer un (en deux clics, la suppression est définitive).
+function ProfileList({ rootRef, items }: { rootRef: RefObject<HTMLDivElement | null>; items: Profile[] }) {
+  const [confirming, setConfirming] = useState<string | null>(null);
+  return (
+    <div ref={rootRef} className="popup arriving">
+      <div className="popup-header">
+        <span className="popup-header-title">Profils</span>
+      </div>
+      <div className="popup-list">
+        {items.map(p => (
+          <div key={p.id} className={`profile-row${p.current ? ' current' : ''}`}>
+            <button
+              className="profile-pick"
+              disabled={p.current}
+              title={p.current ? 'Profil de cette fenêtre' : `Passer au profil ${p.name}`}
+              onClick={() => send({ type: 'profile.switch', id: p.id })}
+            >
+              <span className="row-badge" aria-hidden>{p.name[0]?.toUpperCase()}</span>
+              <span className="row-title">{p.name}</span>
+              {p.current && <span className="row-pill">Actif</span>}
+            </button>
+            {p.deletable &&
+              (confirming === p.id ? (
+                <button className="pill-action danger" onClick={() => send({ type: 'profile.delete', id: p.id })}>
+                  Supprimer
+                </button>
+              ) : (
+                <button className="profile-delete" aria-label={`Supprimer le profil ${p.name}`} title="Supprimer ce profil et ses données" onClick={() => setConfirming(p.id)}>
+                  <Icon d="M4.5 4.5l7 7M11.5 4.5l-7 7" size={12} />
+                </button>
+              ))}
+          </div>
+        ))}
+      </div>
+      <hr />
+      <button className="row" onClick={() => send({ type: 'profile.new' })}>
+        <span className="row-badge" aria-hidden>
+          <Icon d="M8 3.5v9M3.5 8h9" size={13} />
+        </span>
+        <span className="row-title">Nouveau profil</span>
+      </button>
+    </div>
+  );
+}
+
+// Saisie du nom d'un nouveau profil.
+function ProfileNameForm({ rootRef }: { rootRef: RefObject<HTMLDivElement | null> }) {
+  const [name, setName] = useState('');
+  return (
+    <div ref={rootRef} className="popup arriving">
+      <form
+        className="name-form"
+        onSubmit={e => {
+          e.preventDefault();
+          if (name.trim()) send({ type: 'profile.create', title: name.trim() });
+        }}
+      >
+        <label htmlFor="profile-name" className="name-form-title">Nouveau profil</label>
+        <p className="row-sub">Ses onglets, son historique, ses favoris et ses mots de passe restent séparés des autres profils.</p>
+        <input id="profile-name" autoFocus maxLength={40} placeholder="Nom du profil" spellCheck={false} value={name} onChange={e => setName(e.target.value)} />
+        <div className="name-form-actions">
+          <button type="button" className="pill-action" onClick={() => send({ type: 'popup.close' })}>Annuler</button>
+          <button type="submit" className="pill-action primary" disabled={!name.trim()}>Créer et ouvrir</button>
+        </div>
+      </form>
     </div>
   );
 }

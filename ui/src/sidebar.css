@@ -190,3 +190,6 @@
 .sidebar-status.shown { opacity: 1; }
 .sidebar-status svg { flex: none; }
 .sidebar-status span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+/* Carte flottante au-dessus de la page : la vue a exactement sa taille, la page reste visible tout autour. */
+.sidebar-body.floating .sidebar-card { margin: 0; height: 100%; }

@@ -37,9 +37,10 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        Title = AppPaths.Profile == Profiles.Default ? "Navigateur" : $"Navigateur — {Profiles.Display(AppPaths.Profile)}";
+        Title = AppPaths.Profile == Profiles.Default ? "Navigateur" : $"Navigateur — {Profiles.NameOf(AppPaths.BaseDir, AppPaths.Profile)}";
         // Pas de barre de titre système : l'interface dessine la sienne. La bordure reste, pour le redimensionnement.
         if (AppWindow.Presenter is OverlappedPresenter presenter) presenter.SetBorderAndTitleBar(true, false);
+        PlaceLikePreviousWindow();
 
         // Les touches tapées dans une page partent dans le processus du moteur et n'atteignent pas la fenêtre.
         // Les raccourcis sont donc enregistrés auprès de Windows, uniquement tant que la fenêtre est active.
@@ -50,6 +51,22 @@ public sealed partial class MainWindow : Window
         Closed += (_, _) => SetShortcuts(false);
 
         _ = InitAsync();
+    }
+
+    // Après un changement de profil, la nouvelle fenêtre prend la place de l'ancienne (--bounds=x,y,largeur,hauteur).
+    private void PlaceLikePreviousWindow()
+    {
+        var args = Environment.GetCommandLineArgs();
+        const string prefix = "--bounds=";
+        var parts = args.FirstOrDefault(a => a.StartsWith(prefix, StringComparison.Ordinal))?[prefix.Length..].Split(',');
+        if (parts is { Length: 4 } && parts.All(p => int.TryParse(p, out _)))
+        {
+            var n = parts.Select(int.Parse).ToArray();
+            // Valeurs plausibles seulement : une fenêtre minuscule ou hors de portée serait introuvable.
+            if (n[2] is >= 400 and <= 10000 && n[3] is >= 300 and <= 10000 && Math.Abs(n[0]) < 20000 && Math.Abs(n[1]) < 20000)
+                AppWindow.MoveAndResize(new Windows.Graphics.RectInt32(n[0], n[1], n[2], n[3]));
+        }
+        if (args.Contains("--maximized") && AppWindow.Presenter is OverlappedPresenter presenter) presenter.Maximize();
     }
 
     private async Task InitAsync()

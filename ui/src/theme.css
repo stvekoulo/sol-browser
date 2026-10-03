@@ -13,12 +13,17 @@
   /* Couleur dynamique injectée par l'hôte selon la page active */
   --page-bg: #eef0e2;
 
+  /* Teinte des surfaces : le fond de la page, coloré par l'accent du site (bleu d'un réseau social, rouge
+     d'un site vidéo…). Sans accent, c'est simplement le fond de la page. */
+  --tint: color-mix(in srgb, var(--page-bg) 78%, var(--page-accent, var(--page-bg)) 22%);
+  --tint-soft: color-mix(in srgb, var(--page-bg) 88%, var(--page-accent, var(--page-bg)) 12%);
+
   /* Surface de la carte latérale : fusionne la teinte de la page avec un voile givré */
   --bg-sidebar-card: linear-gradient(
     165deg,
-    color-mix(in srgb, var(--page-bg) 68%, #ffffff 32%) 0%,
-    color-mix(in srgb, var(--page-bg) 82%, #dde0ce 18%) 55%,
-    color-mix(in srgb, var(--page-bg) 74%, #cfd3be 26%) 100%
+    color-mix(in srgb, var(--tint) 68%, #ffffff 32%) 0%,
+    color-mix(in srgb, var(--tint) 82%, #dde0ce 18%) 55%,
+    color-mix(in srgb, var(--tint) 74%, #cfd3be 26%) 100%
   );
   --border-card: rgba(255, 255, 255, 0.78);
   --shadow-card:
@@ -26,18 +31,18 @@
     0 10px 26px rgba(0, 0, 0, 0.06),
     0 0 0 0.5px rgba(0, 0, 0, 0.06);
 
-  --bg-popup: color-mix(in srgb, var(--page-bg) 45%, #ffffff 55%);
+  --bg-popup: color-mix(in srgb, var(--tint) 45%, #ffffff 55%);
 
   /* Capsules translucides de la barre supérieure */
   --bg-glass-pill: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--page-bg) 28%, rgba(255, 255, 255, 0.88)) 0%,
-    color-mix(in srgb, var(--page-bg) 48%, rgba(255, 255, 255, 0.68)) 100%
+    color-mix(in srgb, var(--tint-soft) 28%, rgba(255, 255, 255, 0.88)) 0%,
+    color-mix(in srgb, var(--tint-soft) 48%, rgba(255, 255, 255, 0.68)) 100%
   );
   --bg-glass-pill-hover: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--page-bg) 16%, rgba(255, 255, 255, 0.96)) 0%,
-    color-mix(in srgb, var(--page-bg) 32%, rgba(255, 255, 255, 0.82)) 100%
+    color-mix(in srgb, var(--tint-soft) 16%, rgba(255, 255, 255, 0.96)) 0%,
+    color-mix(in srgb, var(--tint-soft) 32%, rgba(255, 255, 255, 0.82)) 100%
   );
 
   /* Pilules flottantes surélevées (URL sidebar, favoris G/X/Youtube, onglet actif) */
@@ -49,7 +54,7 @@
   --text-dim: rgba(24, 24, 27, 0.58);
   --border: rgba(0, 0, 0, 0.07);
   --border-strong: rgba(0, 0, 0, 0.12);
-  --accent: #0a84ff;
+  --accent: var(--page-accent, #0a84ff);
 
   --shadow-glass-pill:
     inset 0 1px 0 rgba(255, 255, 255, 0.92),
@@ -75,9 +80,9 @@
 
   --bg-sidebar-card: linear-gradient(
     165deg,
-    color-mix(in srgb, var(--page-bg) 82%, #ffffff 18%) 0%,
-    color-mix(in srgb, var(--page-bg) 90%, #ffffff 10%) 55%,
-    color-mix(in srgb, var(--page-bg) 94%, #ffffff 6%) 100%
+    color-mix(in srgb, var(--tint) 82%, #ffffff 18%) 0%,
+    color-mix(in srgb, var(--tint) 90%, #ffffff 10%) 55%,
+    color-mix(in srgb, var(--tint) 94%, #ffffff 6%) 100%
   );
   --border-card: rgba(255, 255, 255, 0.12);
   --shadow-card:
@@ -85,7 +90,7 @@
     0 12px 28px rgba(0, 0, 0, 0.42),
     0 0 0 0.5px rgba(255, 255, 255, 0.08);
 
-  --bg-popup: color-mix(in srgb, var(--page-bg) 78%, #27272a 22%);
+  --bg-popup: color-mix(in srgb, var(--tint) 78%, #27272a 22%);
 
   --bg-glass-pill: linear-gradient(
     180deg,
@@ -106,7 +111,7 @@
   --text-dim: rgba(244, 244, 246, 0.6);
   --border: rgba(255, 255, 255, 0.09);
   --border-strong: rgba(255, 255, 255, 0.16);
-  --accent: #409cff;
+  --accent: var(--page-accent, #409cff);
 
   --shadow-glass-pill:
     inset 0 1px 0 rgba(255, 255, 255, 0.18),

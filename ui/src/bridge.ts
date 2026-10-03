@@ -56,6 +56,7 @@ export type HostEvent = {
   open?: boolean;
   bg?: string;
   dark?: boolean;
+  accent?: string | null;
 };
 
 export function onMessage(callback: (data: unknown) => void) {
@@ -64,6 +65,9 @@ export function onMessage(callback: (data: unknown) => void) {
     if (ev && ev.event === 'theme' && ev.bg) {
       document.documentElement.style.setProperty('--page-bg', ev.bg);
       document.documentElement.dataset.theme = ev.dark ? 'dark' : 'light';
+      // Couleur d'accent du site : teinte les surfaces de l'interface. Absente, elles gardent la couleur du fond.
+      if (ev.accent) document.documentElement.style.setProperty('--page-accent', ev.accent);
+      else document.documentElement.style.removeProperty('--page-accent');
       return;
     }
     callback(e.data);

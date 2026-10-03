@@ -40,15 +40,63 @@ public class ProfilesTests : IDisposable
     }
 
     [Fact]
-    public void NextName_takes_the_first_free_number()
+    public void Create_derives_a_folder_name_and_keeps_the_typed_name()
     {
-        Assert.Equal("profil-2", Profiles.NextName(["defaut"]));
-        Assert.Equal("profil-3", Profiles.NextName(["defaut", "profil-2", "profil-4"]));
+        var id = Profiles.Create(_dir, "  Travail & Études  ");
+        Assert.Equal("travail-etudes", id);
+        Assert.True(Directory.Exists(Path.Combine(_dir, "profiles", id)));
+        Assert.Equal("Travail & Études", Profiles.NameOf(_dir, id));
+        Assert.Equal(new[] { "defaut", "travail-etudes" }, Profiles.List(_dir));
+    }
+
+    [Fact]
+    public void Create_never_reuses_an_existing_or_reserved_folder()
+    {
+        Assert.Equal("perso", Profiles.Create(_dir, "Perso"));
+        Assert.Equal("perso-2", Profiles.Create(_dir, "perso"));
+        Assert.Equal("defaut-2", Profiles.Create(_dir, "Défaut"));
     }
 
     [Theory]
-    [InlineData("defaut", "Défaut")]
-    [InlineData("profil-2", "Profil 2")]
-    [InlineData("travail", "travail")]
-    public void Display_gives_the_shown_name(string name, string shown) => Assert.Equal(shown, Profiles.Display(name));
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("../..")]
+    [InlineData("日本語")]
+    public void Create_copes_with_names_that_give_no_usable_folder_name(string name)
+    {
+        var id = Profiles.Create(_dir, name);
+        Assert.True(Profiles.IsValid(id));
+        Assert.StartsWith(Path.Combine(_dir, "profiles"), Path.GetFullPath(Profiles.DataDir(_dir, id)));
+        Assert.NotEqual("", Profiles.NameOf(_dir, id));
+    }
+
+    [Fact]
+    public void NameOf_falls_back_when_no_name_was_stored()
+    {
+        Directory.CreateDirectory(Path.Combine(_dir, "profiles", "ancien"));
+        Assert.Equal("ancien", Profiles.NameOf(_dir, "ancien"));
+        Assert.Equal("Défaut", Profiles.NameOf(_dir, Profiles.Default));
+    }
+
+    [Fact]
+    public void Delete_removes_a_created_profile_with_its_data()
+    {
+        var id = Profiles.Create(_dir, "Jetable");
+        File.WriteAllText(Path.Combine(Profiles.DataDir(_dir, id), "session.json"), "{}");
+        Assert.True(Profiles.Delete(_dir, id));
+        Assert.False(Directory.Exists(Profiles.DataDir(_dir, id)));
+        Assert.False(Profiles.Delete(_dir, id));
+    }
+
+    [Theory]
+    [InlineData("defaut")]
+    [InlineData("..")]
+    [InlineData("../..")]
+    [InlineData("inconnu")]
+    public void Delete_refuses_the_default_profile_and_anything_that_is_not_a_profile(string id)
+    {
+        File.WriteAllText(Path.Combine(_dir, "browser.db"), "données du profil par défaut");
+        Assert.False(Profiles.Delete(_dir, id));
+        Assert.True(File.Exists(Path.Combine(_dir, "browser.db")));
+    }
 }
