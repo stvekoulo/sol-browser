@@ -11,7 +11,7 @@ type Content =
   | { popup: 'library'; bookmarks: Item[]; history: Item[] }
   | { popup: 'menu'; items: string[] }
   | { popup: 'downloads'; items: Download[] }
-  | { popup: 'settings'; zoom: number; theme: number; language: number; home: string; engine: number; engines: string[]; sites: { origin: string; host: string; summary: string }[]; permissions: number; tint: Setting[]; items: Setting[] }
+  | { popup: 'settings'; zoom: number; theme: number; language: number; home: string; ublock: string | null; engine: number; engines: string[]; sites: { origin: string; host: string; summary: string }[]; permissions: number; tint: Setting[]; items: Setting[] }
   | { popup: 'profiles'; items: Profile[] }
   | { popup: 'group-edit'; create: boolean; id: string; name: string; color: string; icon: string; presets: string[] }
   | { popup: 'shortcut-edit'; id: string; name: string; url: string }
@@ -245,6 +245,15 @@ export default function Popup() {
               <span className={`switch${s.on ? ' on' : ''}`} aria-hidden />
             </button>
           ))}
+          {content.ublock && (
+            <div className="setting-row static">
+              <span className="setting-text">
+                <span className="row-title">uBlock Origin Lite {content.ublock}</span>
+                <span className="row-sub">{t('Listes de filtres et sites sans filtrage. Logiciel libre (GPLv3), mis à jour automatiquement.', 'Filter lists and sites without filtering. Free software (GPLv3), updated automatically.')}</span>
+              </span>
+              <button className="pill-action" onClick={() => send({ type: 'blocker.options' })}>{t('Ouvrir', 'Open')}</button>
+            </div>
+          )}
           <div className="setting-row static">
             <span className="setting-text">
               <span className="row-title">{t('Accès accordés aux sites', 'Site permissions')}</span>

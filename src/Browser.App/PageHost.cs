@@ -42,7 +42,8 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
 
         var core = view.CoreWebView2;
         Harden(core);
-        Shield(core, tab.Id);
+        if (!await AdBlock.ExtensionInstalled) Shield(core);
+        if (!_views.ContainsKey(tab.Id)) return;
         await ApplySettingsAsync(tab.Id, core);
         if (!_views.ContainsKey(tab.Id)) return;
 
@@ -55,7 +56,6 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
         {
             // Toute navigation autre que l'affichage de notre page d'erreur remet l'onglet dans son état normal.
             if (!_showingError.Remove(tab.Id)) _errorUrl.Remove(tab.Id);
-            _blocked.Remove(tab.Id); // nouvelle page : le compteur repart de zéro
             _target[tab.Id] = _errorUrl.GetValueOrDefault(tab.Id, e.Uri);
             _loading.Add(tab.Id);
             RuntimeChanged?.Invoke();
@@ -203,44 +203,25 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
         };
     }
 
-    // Bloqueur de publicités et de traqueurs : une requête vers un domaine de la liste, venue d'un autre site, reçoit
-    // une réponse vide au lieu de partir sur le réseau. La page que l'utilisateur ouvre lui-même n'est jamais bloquée.
+    // Blocage propre au navigateur, posé seulement quand uBlock Origin Lite manque : une requête vers un domaine de la
+    // liste, venue d'un autre site, reçoit une réponse vide au lieu de partir sur le réseau. (Avec l'extension, ce
+    // filtre ferait passer chaque requête par le navigateur pour rien.)
     public BlockList? Blocker { get; set; }
-    private readonly Dictionary<string, int> _blocked = new();
-    private bool _blockedPending;
 
-    /// <summary>Nombre de requêtes bloquées sur la page affichée par l'onglet.</summary>
-    public int BlockedOn(string id) => _blocked.GetValueOrDefault(id);
-
-    private void Shield(CoreWebView2 core, string? countFor)
+    private void Shield(CoreWebView2 core)
     {
         core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
         core.WebResourceRequested += (_, e) =>
         {
             if (!settings.BlockAds || Blocker is not { } list) return;
-            // Le document de l'onglet lui-même (adresse tapée, lien cliqué, redirection) passe toujours.
-            if (e.ResourceContext == CoreWebView2WebResourceContext.Document && countFor is not null && _target.GetValueOrDefault(countFor) == e.Request.Uri) return;
-            if (!list.Blocks(e.Request.Uri, core.Source)) return;
-            e.Response = core.Environment.CreateWebResourceResponse(null, 403, "Blocked", "");
-            if (countFor is null) return;
-            _blocked[countFor] = _blocked.GetValueOrDefault(countFor) + 1;
-            BlockedSoon();
+            // Un document passe toujours : c'est la page que l'utilisateur ouvre (ou un cadre, laissé à ses propres requêtes).
+            if (e.ResourceContext == CoreWebView2WebResourceContext.Document) return;
+            if (list.Blocks(e.Request.Uri, core.Source)) e.Response = core.Environment.CreateWebResourceResponse(null, 403, "Blocked", "");
         };
-    }
-
-    // Les blocages arrivent par rafales : l'interface est prévenue deux fois par seconde au plus.
-    private async void BlockedSoon()
-    {
-        if (_blockedPending) return;
-        _blockedPending = true;
-        await Task.Delay(500);
-        _blockedPending = false;
-        RuntimeChanged?.Invoke();
     }
 
     public void Remove(string id)
     {
-        _blocked.Remove(id);
         _asleep.Remove(id);
         if (_views.TryGetValue(id, out var closing)) ClearSims(id, closing);
         if (!_views.Remove(id, out var view)) return;
@@ -445,7 +426,7 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
         await view.EnsureCoreWebView2Async(await AdBlock.EnvironmentAsync());
         var core = view.CoreWebView2;
         Harden(core);
-        Shield(core, countFor: null);
+        if (!await AdBlock.ExtensionInstalled) Shield(core);
         core.Settings.AreDefaultContextMenusEnabled = false;
         core.Settings.IsStatusBarEnabled = false;
         core.NewWindowRequested += (_, e) => { e.Handled = true; NewTabRequested?.Invoke(e.Uri); };

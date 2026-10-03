@@ -115,6 +115,8 @@ public sealed class BrowserController
             case "network.detail":
                 if (_network.Shown is { } inspected && _pages.CoreOf(inspected) is { } inspectedCore) _ = _network.PostDetailAsync(inspected, inspectedCore, id);
                 return;
+            // Réglages d'uBlock Origin Lite (listes de filtres, sites sans filtrage) : sa propre page, dans un onglet.
+            case "blocker.options": if (AdBlock.ExtensionId is { } extension) Open($"chrome-extension://{extension}/dashboard.html"); break;
             case "device.compare": SetComparison(id, c.Query!); return;
             case "device.rotate": _pages.RotateDevice(id); return;
             case "device.set": _pages.SetDevice(id, c.Query!.Length == 0 ? null : c.Query); HidePopup(); return;
@@ -332,6 +334,7 @@ public sealed class BrowserController
         theme = Math.Max(0, Array.IndexOf(Themes, _settings.Theme)),
         language = Math.Max(0, Array.IndexOf(Languages, _settings.Language)),
         home = _settings.HomePage,
+        ublock = AdBlock.ExtensionId is null ? null : AdBlock.ExtensionVersion, // version installée ; null : extension absente
         engine = Math.Max(0, Array.FindIndex(Engines, e => e.Search == _settings.SearchUrlTemplate)),
         engines = Engines.Select(e => e.Name),
         // Réponses retenues, site par site : chacune peut être oubliée séparément.
@@ -352,7 +355,7 @@ public sealed class BrowserController
         },
         items = new[]
         {
-            new { key = "blocker", label = T("Bloquer les publicités et les traqueurs", "Block ads and trackers"), hint = T("Liste de domaines connus, mise à jour chaque semaine", "List of known domains, updated weekly"), on = _settings.BlockAds },
+            new { key = "blocker", label = T("Bloquer les publicités et les traqueurs", "Block ads and trackers"), hint = AdBlock.ExtensionId is null ? T("Liste de domaines connus, mise à jour chaque semaine", "List of known domains, updated weekly") : T("Avec uBlock Origin Lite, intégré au navigateur", "With uBlock Origin Lite, built into the browser"), on = _settings.BlockAds },
             new { key = "scrollbars", label = T("Barre de défilement fine", "Thin scrollbar"), hint = T("Apparaît seulement pendant le défilement", "Only appears while scrolling"), on = !_settings.HideScrollbars },
             new { key = "blur", label = T("Flou progressif en bas des pages", "Progressive blur at the bottom of pages"), hint = "", on = _settings.BlurEnabled },
             new { key = "floatingDownloads", label = T("Téléchargements en bas à droite", "Downloads at the bottom right"), hint = T("Sinon, uniquement dans le panneau de la barre", "Otherwise, only in the toolbar panel"), on = _settings.FloatingDownloads },
@@ -1200,7 +1203,6 @@ public sealed class BrowserController
             {
                 id = t.Id, url = t.Url, title = t.Title, pinned = t.Pinned,
                 groupId = t.GroupId,
-                blocked = _pages.BlockedOn(t.Id), // publicités et traqueurs bloqués sur cette page
                 device = _pages.DeviceOf(t.Id) is { } simulated ? DeviceLabel(simulated) : null, // simulateur : appareil affiché
                 zoom = (int)Math.Round(_pages.ZoomOf(t.Id) * 100),
                 loading = _pages.IsLoading(t.Id),
@@ -1211,6 +1213,7 @@ public sealed class BrowserController
             }),
             groups = _tabs.Groups.Select(g => new { id = g.Id, name = g.Name, color = g.Color, icon = g.Icon, collapsed = g.Collapsed }),
             activeId = _tabs.ActiveId,
+            shield = _settings.BlockAds, // blocage des publicités et des traqueurs en service
             shortcuts = _settings.Shortcuts.Select(s => new { url = s.Url, name = s.Name, icon = s.Icon, tabId = _shortcutTabs.GetValueOrDefault(s) }),
             profile = ProfileName(AppPaths.Profile),
             split = new { primaryId = _split.PrimaryId, secondaryId = _split.SecondaryId, ratio = _split.Ratio, visible = showSplit },

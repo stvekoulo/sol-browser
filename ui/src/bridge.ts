@@ -7,7 +7,6 @@ export type Tab = {
   title: string;
   pinned: boolean;
   groupId: string | null;
-  blocked: number; // publicités et traqueurs bloqués sur la page
   device: string | null; // simulateur : nom de l'appareil affiché
   zoom: number; // en pour cent
   loading: boolean;
@@ -22,6 +21,7 @@ export type State = {
   tabs: Tab[];
   groups: TabGroup[];
   activeId: string | null;
+  shield: boolean; // blocage des publicités et des traqueurs en service
   // Raccourcis de la carte latérale ; tabId : l'onglet ouvert dans le raccourci, qui n'a pas de ligne dans la liste.
   shortcuts: { url: string; name: string; icon: string | null; tabId: string | null }[];
   // Paire d'onglets scindés ; visible quand l'onglet actif est l'un des deux.

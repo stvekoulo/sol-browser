@@ -189,5 +189,5 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Nombre de publicités et de traqueurs bloqués, à côté du bouclier. */
-.blocked-count { margin-left: 3px; font-size: 10.5px; font-weight: 600; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+/* Bouclier : plein quand le blocage des publicités est en service, estompé quand il est coupé. */
+.address-lead.unshielded .shield-icon { opacity: 0.35; }

@@ -103,6 +103,7 @@ export default function App() {
             key={tab?.id ?? i}
             tab={tab}
             focused={tab?.id === state.activeId}
+            shield={state.shield}
             grow={!split.visible ? 1 : i === 0 ? split.ratio : 1 - split.ratio}
           />
         ))}
@@ -182,7 +183,7 @@ export default function App() {
 }
 
 // Pilule d'adresse centrale : affiche le domaine centré au repos, et l'URL complète à l'édition.
-function AddressPill({ tab, focused, grow }: { tab: Tab | undefined; focused: boolean; grow: number }) {
+function AddressPill({ tab, focused, grow, shield }: { tab: Tab | undefined; focused: boolean; grow: number; shield: boolean }) {
   const rawUrl = !tab || tab.url === 'about:blank' ? '' : tab.url;
   const domain = formatDomain(rawUrl);
   const [text, setText] = useState(rawUrl);
@@ -217,11 +218,10 @@ function AddressPill({ tab, focused, grow }: { tab: Tab | undefined; focused: bo
   return (
     <div ref={pillRef} className={`address-pill${focused ? ' focused' : ''}${editing ? ' editing' : ''}`} style={{ flexGrow: grow }}>
       <span
-        className="address-lead"
-        title={tab?.blocked ? t(`${tab.blocked} publicité${tab.blocked > 1 ? 's' : ''} ou traqueur${tab.blocked > 1 ? 's' : ''} bloqué${tab.blocked > 1 ? 's' : ''} sur cette page`, `${tab.blocked} ad${tab.blocked > 1 ? 's' : ''} or tracker${tab.blocked > 1 ? 's' : ''} blocked on this page`) : undefined}
+        className={`address-lead${shield ? '' : ' unshielded'}`}
+        title={shield ? t('Publicités et traqueurs bloqués', 'Ads and trackers blocked') : t('Blocage des publicités coupé (Réglages)', 'Ad blocking is off (Settings)')}
       >
         {tab?.loading ? <span className="spinner" /> : <ShieldIcon />}
-        {!!tab?.blocked && <span className="blocked-count">{tab.blocked > 99 ? '99+' : tab.blocked}</span>}
       </span>
 
       <form

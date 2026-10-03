@@ -78,6 +78,7 @@ public sealed partial class MainWindow : Window
     private async Task InitAsync()
     {
         var settings = JsonFileStore.Load<Settings>(AppPaths.Settings);
+        AdBlock.PrepareExtension(); // avant la création du moteur
         var blur = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "blur.js"));
 
         UiBridge.Settings = settings;
@@ -112,7 +113,8 @@ public sealed partial class MainWindow : Window
         WireGestures();
 
         await bridge.InitAsync(uiFolder, _controller.Execute);
-        _ = AdBlock.ApplyExtensionAsync(Ui.CoreWebView2.Profile, settings.BlockAds);
+        await AdBlock.ApplyExtensionAsync(Ui.CoreWebView2.Profile, settings.BlockAds);
+        if (settings.BlockAds) _ = AdBlock.UpdateExtensionAsync();
         await popupBridge.InitAsync(uiFolder, _controller.Execute);
         await dockBridge.InitAsync(uiFolder, _controller.Execute);
         popup.Hide();
