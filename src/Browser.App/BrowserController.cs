@@ -442,7 +442,8 @@ public sealed class BrowserController
         _pages.Remove(id);
         _favicons.Remove(id);
         _split.OnTabClosed(id);
-        if (_tabs.Tabs.Count == 0) _window.Close();
+        // Dernier onglet fermé : la fenêtre reste ouverte sur un onglet vide. Elle ne se ferme que par son bouton.
+        if (_tabs.Tabs.Count == 0) Open(_settings.HomeUrl);
     }
 
     // Onglet vide ouvert seulement pour remplir la moitié droite d'une vue scindée.

@@ -35,19 +35,22 @@ public static class ErrorPages
             <meta name="color-scheme" content="light dark">
             <title>{{WebUtility.HtmlEncode(title)}}</title>
             <style>
-              html { height: 100%; font: 15px/1.5 Inter, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; background: #f4f4f6; color: #18181b; }
-              body { min-height: 100%; margin: 0; display: grid; place-items: center; }
-              main { width: min(460px, calc(100% - 48px)); padding: 32px; border-radius: 22px; background: #ffffff; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08), 0 0 0 0.5px rgba(0, 0, 0, 0.08); }
-              h1 { margin: 0 0 8px; font-size: 20px; line-height: 1.25; }
-              p { margin: 0 0 14px; color: rgba(24, 24, 27, 0.7); }
-              code { display: block; margin: 0 0 20px; padding: 9px 12px; border-radius: 12px; background: rgba(0, 0, 0, 0.05); font: 12.5px/1.4 ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
-              .retry { display: inline-block; padding: 8px 18px; border-radius: 999px; background: #0a84ff; color: #ffffff; font-weight: 500; text-decoration: none; }
-              .retry:focus-visible { outline: 2px solid #0a84ff; outline-offset: 2px; }
+              /* Une page ordinaire : du texte sur le fond de la page, sans cadre. */
+              html { font: 16px/1.6 Inter, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; background: #ffffff; color: #1d1d1f; }
+              body { margin: 0; }
+              main { max-width: 640px; margin: 0 auto; padding: 14vh 32px 48px; }
+              h1 { margin: 0 0 12px; font-size: 30px; font-weight: 650; line-height: 1.2; letter-spacing: -0.01em; }
+              p { margin: 0 0 20px; font-size: 17px; color: #515154; }
+              code { display: block; margin: 0 0 28px; font: 14px/1.5 ui-monospace, Consolas, monospace; color: #6e6e73; overflow-wrap: anywhere; }
+              .retry { color: #0066cc; font-weight: 500; text-decoration: none; }
+              .retry:hover { text-decoration: underline; }
+              .retry:focus-visible { outline: 2px solid #0066cc; outline-offset: 3px; border-radius: 3px; }
               @media (prefers-color-scheme: dark) {
-                html { background: #1c1c1e; color: #f4f4f6; }
-                main { background: #2a2a2d; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4), 0 0 0 0.5px rgba(255, 255, 255, 0.1); }
-                p { color: rgba(244, 244, 246, 0.7); }
-                code { background: rgba(255, 255, 255, 0.08); }
+                html { background: #1c1c1e; color: #f5f5f7; }
+                p { color: #a1a1a6; }
+                code { color: #8e8e93; }
+                .retry { color: #4da3ff; }
+                .retry:focus-visible { outline-color: #4da3ff; }
               }
             </style>
             </head>
