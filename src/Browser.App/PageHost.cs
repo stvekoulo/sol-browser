@@ -15,6 +15,7 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
     public event Action? RuntimeChanged;                         // chargement, historique
     public event Action<string>? Loaded;                         // id, page chargée avec succès
     public event Action<string>? NewTabRequested;
+    public event Action<string, string?>? FaviconChanged;        // id, icône en data: (ou null)
 
     public bool IsLoading(string id) => _loading.Contains(id);
     public bool CanGoBack(string id) => Core(id)?.CanGoBack ?? false;
@@ -44,7 +45,25 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
             if (e.IsSuccess) Loaded?.Invoke(tab.Id);
         };
         core.NewWindowRequested += (_, e) => { e.Handled = true; NewTabRequested?.Invoke(e.Uri); };
+        core.FaviconChanged += async (_, _) => FaviconChanged?.Invoke(tab.Id, await ReadFaviconAsync(core));
         Navigate(tab.Id, tab.Url);
+    }
+
+    // L'icône est lue par l'hôte et transmise en data: à l'interface, qui ne fait ainsi aucune requête réseau.
+    private static async Task<string?> ReadFaviconAsync(CoreWebView2 core)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(core.FaviconUri)) return null;
+            using var stream = (await core.GetFaviconAsync(CoreWebView2FaviconImageFormat.Png)).AsStreamForRead();
+            using var bytes = new MemoryStream();
+            await stream.CopyToAsync(bytes);
+            return bytes.Length is > 0 and <= 64 * 1024 ? "data:image/png;base64," + Convert.ToBase64String(bytes.ToArray()) : null;
+        }
+        catch (Exception) // page fermée ou icône illisible : pas d'icône, rien d'autre à faire
+        {
+            return null;
+        }
     }
 
     // Une page web est du contenu non fiable : aucun pont vers l'hôte, aucune permission accordée d'office.
@@ -83,7 +102,7 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
     {
         var split = secondaryId is not null && _views.ContainsKey(secondaryId);
         primary.Width = new GridLength(split ? ratio : 1, GridUnitType.Star);
-        divider.Width = new GridLength(split ? 6 : 0);
+        divider.Width = new GridLength(split ? 8 : 0);
         secondary.Width = split ? new GridLength(1 - ratio, GridUnitType.Star) : new GridLength(0);
         foreach (var (id, view) in _views)
         {

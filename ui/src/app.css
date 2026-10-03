@@ -64,6 +64,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .tab-group.active .tab.active { color: var(--text); }
 .tab-group.active .tab:not(.active) { color: var(--text-dim); }
 .tab-title { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.favicon { width: 16px; height: 16px; flex: none; border-radius: 3px; }
 .tab-close { opacity: 0; }
 .tab:hover .tab-close, .tab.active .tab-close { opacity: 1; }
 

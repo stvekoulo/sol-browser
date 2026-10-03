@@ -18,7 +18,9 @@ public sealed class BrowserController
     private readonly TabManager _tabs = new();
     private readonly SplitLayout _split = new();
     private readonly HashSet<string> _restored = new(); // onglets dont le premier chargement vient de la session
-    private IReadOnlyList<Visit> _suggestions = [];
+    private readonly Dictionary<string, string?> _favicons = new();
+    private DateTime _libraryClosedAt;
+    private IReadOnlyList<Suggestion> _suggestions = [];
     private string? _suggestTab;
     private bool _suggesting; // la vue posée sur la page affiche des suggestions
 
@@ -32,6 +34,7 @@ public sealed class BrowserController
         _pages.RuntimeChanged += Refresh;
         _pages.NewTabRequested += url => { Open(url); Refresh(); };
         _pages.Loaded += RecordVisit;
+        _pages.FaviconChanged += (id, data) => { _favicons[id] = data; PostFavicon(id); };
         _window.AppWindow.Changed += (_, e) => { if (e.DidPresenterChange || e.DidSizeChange) Refresh(); };
         _window.Closed += (_, _) => { SaveSession(); _db.Dispose(); };
     }
@@ -45,7 +48,10 @@ public sealed class BrowserController
             case "suggest": Suggest(id, c.Query!, c.X!.Value, c.Y!.Value, c.Width!.Value); return;
             case "library.open": OpenLibrary(c.X!.Value, c.Y!.Value); return;
             case "popup.size": _popup.SetHeight(c.Height!.Value); return;
-            case "popup.close": _popup.Hide(); return;
+            case "popup.close":
+                if (!_suggesting) _libraryClosedAt = DateTime.UtcNow;
+                _popup.Hide();
+                return;
             case "window.close": _window.Close(); return;
             case "window.drag": BeginDrag(); return;
 
@@ -53,11 +59,16 @@ public sealed class BrowserController
                 if (_suggestTab is not null && c.Index is int i && i >= 0 && i < _suggestions.Count)
                     _pages.Navigate(_suggestTab, _suggestions[i].Url);
                 break;
-            case "ui.ready": if (_tabs.Tabs.Count == 0) RestoreSession(); break;
+            case "ui.ready":
+                if (_tabs.Tabs.Count == 0) RestoreSession();
+                foreach (var tabId in _favicons.Keys) PostFavicon(tabId);
+                break;
             case "tab.open": Open(c.Url is null ? _settings.HomeUrl : Resolve(c.Url)); break;
             case "tab.close": Close(id); break;
             case "tab.activate": _tabs.Activate(id); break;
-            case "tab.move": _tabs.Move(id, c.Index!.Value); break;
+            case "tab.move":
+                if (_tabs.Move(id, c.Index!.Value)) KeepPairAdjacent();
+                break;
             case "tab.reopen": if (_tabs.ReopenClosed() is { } reopened) _pages.Add(reopened); break;
             case "nav.go": _pages.Navigate(id, Resolve(c.Input!)); break;
             case "nav.back": _pages.Back(id); break;
@@ -111,6 +122,7 @@ public sealed class BrowserController
     {
         if (!_tabs.Close(id)) return;
         _pages.Remove(id);
+        _favicons.Remove(id);
         _split.OnTabClosed(id);
         if (_tabs.Tabs.Count == 0) _window.Close();
     }
@@ -122,16 +134,26 @@ public sealed class BrowserController
         if (otherId is not null && (otherId == active || _tabs.Tabs.All(t => t.Id != otherId))) return;
         var other = otherId ?? Open(_settings.HomeUrl, activate: false).Id;
 
-        // Les deux onglets de la paire restent voisins dans la barre d'onglets.
-        var tabs = _tabs.Tabs.ToList();
-        int a = tabs.FindIndex(t => t.Id == active), o = tabs.FindIndex(t => t.Id == other);
-        _tabs.Move(other, o > a ? a + 1 : a);
         _split.Open(active, other);
+        KeepPairAdjacent();
     }
+
+    // Les deux onglets d'une vue scindée restent voisins dans la barre d'onglets, le second juste après le premier.
+    private void KeepPairAdjacent()
+    {
+        if (!_split.IsSplit) return;
+        var tabs = _tabs.Tabs.ToList();
+        int p = tabs.FindIndex(t => t.Id == _split.PrimaryId), s = tabs.FindIndex(t => t.Id == _split.SecondaryId);
+        if (s != p + 1) _tabs.Move(_split.SecondaryId!, s > p ? p + 1 : p);
+    }
+
+    private void PostFavicon(string id) =>
+        _bridge.Post(JsonSerializer.Serialize(new { @event = "favicon", id, data = _favicons.GetValueOrDefault(id) }));
 
     private void Suggest(string tabId, string query, double x, double y, double width)
     {
-        _suggestions = query.Trim().Length == 0 ? [] : _db.Suggest(query.Trim(), 6);
+        var q = query.Trim();
+        _suggestions = Suggestions.Build(q, q.Length == 0 ? [] : _db.Suggest(q, 5), _settings.SearchUrlTemplate);
         _suggestTab = tabId;
         // Une requête vide (champ vidé ou quitté) ne referme que les suggestions, pas un autre panneau ouvert entre-temps.
         if (_suggestions.Count == 0) { if (_suggesting) _popup.Hide(); _suggesting = false; return; }
@@ -139,12 +161,15 @@ public sealed class BrowserController
         _popup.Show(x, y, width, JsonSerializer.Serialize(new
         {
             popup = "suggestions",
-            items = _suggestions.Select(v => new { url = v.Url, title = v.Title }),
+            items = _suggestions.Select(v => new { url = v.Url, title = v.Title, kind = v.Kind }),
         }), focus: false); // le curseur reste dans la barre d'adresse
     }
 
     private void OpenLibrary(double x, double y)
     {
+        // Recliquer l'icône referme le panneau : le clic lui fait d'abord perdre le curseur, donc il vient de se fermer.
+        // ponytail: seuil de temps ; à remplacer par un état explicite si d'autres menus s'ajoutent.
+        if (DateTime.UtcNow - _libraryClosedAt < TimeSpan.FromMilliseconds(350)) return;
         const double width = 340;
         _suggesting = false;
         _popup.Show(x - width, y, width, JsonSerializer.Serialize(new

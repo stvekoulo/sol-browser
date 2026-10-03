@@ -3,10 +3,12 @@ import { onState, send, type State, type Tab } from './bridge';
 
 export default function App() {
   const [state, setState] = useState<State | null>(null);
+  const [icons, setIcons] = useState<Record<string, string | null | undefined>>({});
 
   useEffect(() => {
-    const off = onState(setState, event => {
-      if (event === 'focus-address') document.querySelector<HTMLInputElement>('.pane.focused input, .pane input')?.focus();
+    const off = onState(setState, e => {
+      if (e.event === 'focus-address') document.querySelector<HTMLInputElement>('.pane.focused input, .pane input')?.focus();
+      if (e.event === 'favicon' && e.id) setIcons(all => ({ ...all, [e.id!]: e.data }));
     });
     send({ type: 'ui.ready' });
     return off;
@@ -19,7 +21,7 @@ export default function App() {
 
   return (
     <>
-      <TitleBar state={state} />
+      <TitleBar state={state} icons={icons} />
       <nav className="toolbar">
         {panes.map((tab, i) => (
           <Pane
@@ -54,7 +56,12 @@ export default function App() {
   );
 }
 
-function TitleBar({ state }: { state: State }) {
+type Icons = Record<string, string | null | undefined>;
+
+// Onglet en cours de glisser-déposer (un seul à la fois).
+let draggedTab: string | null = null;
+
+function TitleBar({ state, icons }: { state: State; icons: Icons }) {
   // Seul le fond de la barre déplace la fenêtre, pas les onglets ni les boutons.
   const drag = (e: MouseEvent) => {
     if (e.button === 0 && e.target === e.currentTarget) send({ type: 'window.drag' });
@@ -71,13 +78,13 @@ function TitleBar({ state }: { state: State }) {
     if (next && tab.id === split.primaryId && next.id === split.secondaryId) {
       items.push(
         <div key={tab.id} className={`tab-group${split.visible ? ' active' : ''}`}>
-          <TabItem tab={tab} active={tab.id === activeId} />
-          <TabItem tab={next} active={next.id === activeId} />
+          <TabItem tab={tab} index={i} icon={icons[tab.id]} active={tab.id === activeId} />
+          <TabItem tab={next} index={i + 1} icon={icons[next.id]} active={next.id === activeId} />
         </div>,
       );
       i++;
     } else {
-      items.push(<TabItem key={tab.id} tab={tab} active={tab.id === activeId} />);
+      items.push(<TabItem key={tab.id} tab={tab} index={i} icon={icons[tab.id]} active={tab.id === activeId} />);
     }
   }
 
@@ -102,7 +109,7 @@ function TitleBar({ state }: { state: State }) {
   );
 }
 
-function TabItem({ tab, active }: { tab: Tab; active: boolean }) {
+function TabItem({ tab, index, icon, active }: { tab: Tab; index: number; icon: string | null | undefined; active: boolean }) {
   const label = tab.title && tab.title !== 'about:blank' ? tab.title : 'Nouvel onglet';
   return (
     <div
@@ -114,8 +121,23 @@ function TabItem({ tab, active }: { tab: Tab; active: boolean }) {
         if (e.button === 0) send({ type: 'tab.activate', id: tab.id });
         if (e.button === 1) send({ type: 'tab.close', id: tab.id });
       }}
+      // Réordonner : glisser un onglet au-dessus d'un autre le déplace à cette position.
+      draggable
+      onDragStart={e => {
+        draggedTab = tab.id;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', tab.id);
+      }}
+      onDragOver={e => {
+        if (!draggedTab) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (draggedTab !== tab.id) send({ type: 'tab.move', id: draggedTab, index });
+      }}
+      onDrop={e => e.preventDefault()}
+      onDragEnd={() => (draggedTab = null)}
     >
-      {tab.loading && <span className="spinner" aria-hidden />}
+      {tab.loading ? <span className="spinner" aria-hidden /> : icon ? <img className="favicon" src={icon} alt="" draggable={false} /> : null}
       <span className="tab-title">{label}</span>
       <button
         className="icon tab-close"

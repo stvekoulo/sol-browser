@@ -11,7 +11,7 @@
     <Grid x:Name="Pages" Grid.Row="1">
       <Grid.ColumnDefinitions>
         <ColumnDefinition x:Name="PrimaryColumn" Width="*" />
-        <ColumnDefinition x:Name="DividerColumn" Width="0" />
+        <ColumnDefinition x:Name="DividerColumn" Width="0" MinWidth="0" />
         <ColumnDefinition x:Name="SecondaryColumn" Width="0" />
       </Grid.ColumnDefinitions>
       <local:DividerGrip x:Name="Divider" Grid.Column="1" Background="#40808080" />

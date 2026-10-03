@@ -65,16 +65,48 @@ public sealed partial class MainWindow : Window
     }
 
     // Séparateur de la vue scindée : le glisser change la part de chaque page.
+    // Dès que la souris quitte la poignée, elle survole une page web, qui absorbe les mouvements : la capture
+    // XAML ne suffit pas. On capture donc la souris au niveau de la fenêtre et on suit WM_MOUSEMOVE.
+    private bool _draggingDivider;
+
     private void WireDivider()
     {
-        Divider.PointerPressed += (_, e) => Divider.CapturePointer(e.Pointer);
-        Divider.PointerReleased += (_, e) => Divider.ReleasePointerCapture(e.Pointer);
-        Divider.PointerMoved += (_, e) =>
+        Divider.PointerPressed += (_, e) =>
         {
-            if (Divider.PointerCaptures is not { Count: > 0 } || Pages.ActualWidth <= 0) return;
-            var ratio = e.GetCurrentPoint(Pages).Position.X / Pages.ActualWidth;
-            _controller?.Execute(new Command("split.resize", Ratio: ratio));
+            Log("divider pressed");
+            _draggingDivider = true;
+            SetCapture(_hwnd);
+            e.Handled = true;
         };
+    }
+
+    private bool HandleDividerDrag(uint msg, nint lParam)
+    {
+        if (!_draggingDivider) return false;
+        switch (msg)
+        {
+            case 0x0200: // WM_MOUSEMOVE : x en pixels dans la zone cliente
+                if (GetClientRect(_hwnd, out var rect) && rect.Right > 0)
+                    _controller?.Execute(new Command("split.resize", Ratio: (double)(short)(lParam & 0xFFFF) / rect.Right));
+                return true;
+            case 0x0202: // WM_LBUTTONUP
+                Log("divider released");
+                _draggingDivider = false;
+                ReleaseCapture();
+                return true;
+            case 0x0215: // WM_CAPTURECHANGED
+                Log("divider capture lost");
+                _draggingDivider = false;
+                return false;
+        }
+        return false;
+    }
+
+    // Journal de diagnostic, écrit seulement si NAVIGATEUR_DEBUG=1.
+    private static readonly bool Debug = Environment.GetEnvironmentVariable("NAVIGATEUR_DEBUG") == "1";
+    private static void Log(string line)
+    {
+        if (Debug) File.AppendAllText(Path.Combine(AppPaths.DataDir, "debug.log"), $"{DateTime.Now:HH:mm:ss.fff} {line}\n");
     }
 
     private void SetShortcuts(bool active)
@@ -95,8 +127,14 @@ public sealed partial class MainWindow : Window
             _controller?.Shortcut(action);
             return 0;
         }
+        if (HandleDividerDrag(msg, lParam)) return 0;
         return DefSubclassProc(hwnd, msg, wParam, lParam);
     }
+
+    [StructLayout(LayoutKind.Sequential)] private struct Rect { public int Left, Top, Right, Bottom; }
+    [DllImport("user32.dll")] private static extern nint SetCapture(nint hwnd);
+    [DllImport("user32.dll")] private static extern bool ReleaseCapture();
+    [DllImport("user32.dll")] private static extern bool GetClientRect(nint hwnd, out Rect rect);
 
     private delegate nint SubclassProc(nint hwnd, uint msg, nint wParam, nint lParam, nuint id, nuint data);
     [DllImport("comctl32.dll")] private static extern bool SetWindowSubclass(nint hwnd, SubclassProc proc, nuint id, nuint data);

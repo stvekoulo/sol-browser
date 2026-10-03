@@ -49,10 +49,11 @@ export function onMessage(callback: (data: unknown) => void) {
 }
 
 // L'hôte envoie soit l'état complet, soit un événement ponctuel { event: "…" }.
-export function onState(callback: (state: State) => void, onEvent?: (name: string) => void) {
+export type HostEvent = { event: string; id?: string; data?: string | null };
+
+export function onState(callback: (state: State) => void, onEvent?: (event: HostEvent) => void) {
   return onMessage(data => {
-    const event = (data as { event?: unknown }).event;
-    if (typeof event === 'string') onEvent?.(event);
+    if (typeof (data as HostEvent).event === 'string') onEvent?.(data as HostEvent);
     else callback(data as State);
   });
 }

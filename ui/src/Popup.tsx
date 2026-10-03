@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { onMessage, send } from './bridge';
 
-type Item = { url: string; title: string };
+type Item = { url: string; title: string; kind?: 'search' | 'go' | 'history' | 'site' };
 type Content =
   | { popup: 'suggestions'; items: Item[] }
   | { popup: 'library'; bookmarks: Item[]; history: Item[] };
@@ -36,7 +36,7 @@ export default function Popup() {
     return (
       <div ref={root} className="popup" role="listbox" aria-label="Suggestions">
         {content.items.map((item, index) => (
-          <Row key={item.url} item={item} onPick={() => send({ type: 'suggest.pick', index })} />
+          <Row key={item.kind + item.url} item={item} onPick={() => send({ type: 'suggest.pick', index })} />
         ))}
       </div>
     );
@@ -62,8 +62,16 @@ function Section({ title, empty, items, onPick }: { title: string; empty: string
 function Row({ item, onPick }: { item: Item; onPick: () => void }) {
   return (
     <button className="row" role="option" aria-selected={false} onMouseDown={e => e.button === 0 && onPick()}>
-      <span className="row-title">{item.title || item.url}</span>
-      <span className="row-url">{item.url.replace(/^https?:\/\/(www\.)?/, '')}</span>
+      {item.kind === 'search' ? (
+        <span className="row-title">Rechercher « {item.title} »</span>
+      ) : item.kind === 'go' ? (
+        <span className="row-title">Ouvrir {item.title}</span>
+      ) : (
+        <>
+          <span className="row-title">{item.title || item.url}</span>
+          <span className="row-url">{item.url.replace(/^https?:\/\/(www\.)?/, '')}</span>
+        </>
+      )}
     </button>
   );
 }
