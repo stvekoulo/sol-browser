@@ -10,10 +10,10 @@ namespace Browser.App;
 /// </summary>
 public sealed class SidebarHost(WebView2 sidebar, ColumnDefinition column, Action<string> post)
 {
-    public const double MinWidth = 220, MaxWidth = 520;
+    public const double MinWidth = 220, MaxWidth = 520, DefaultWidth = 296;
 
     /// <summary>Largeur de la carte ouverte, réglable par l'utilisateur.</summary>
-    public double Width { get; private set; } = 296;
+    public double Width { get; private set; } = DefaultWidth;
 
     /// <summary>Change la largeur de la carte ; la colonne suit tout de suite si la carte y est épinglée.</summary>
     public void Resize(double width)

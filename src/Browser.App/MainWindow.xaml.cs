@@ -248,6 +248,15 @@ public sealed partial class MainWindow : Window
             e.Handled = true;
             timer.Start();
         };
+        // Double-clic sur le bord : retour à la largeur d'origine.
+        SidebarGrip.DoubleTapped += (_, e) =>
+        {
+            e.Handled = true;
+            timer.Stop();
+            _sidebar!.Resize(SidebarHost.DefaultWidth);
+            settings.SidebarWidth = _sidebar.Width;
+            JsonFileStore.Save(AppPaths.Settings, settings);
+        };
     }
 
     private DispatcherTimer CreateDividerTimer()
