@@ -21,6 +21,7 @@ export type State = {
   tabs: Tab[];
   groups: TabGroup[];
   activeId: string | null;
+  privateMode: boolean; // fenêtre de navigation privée
   shield: boolean; // blocage des publicités et des traqueurs en service
   // Raccourcis de la carte latérale ; tabId : l'onglet ouvert dans le raccourci, qui n'a pas de ligne dans la liste.
   shortcuts: { url: string; name: string; icon: string | null; tabId: string | null }[];

@@ -11,6 +11,9 @@ public static class AppPaths
     /// <summary>Profil de cette fenêtre, choisi au lancement par <c>--profile=nom</c>.</summary>
     public static string Profile { get; } = Profiles.FromArgs(Environment.GetCommandLineArgs());
 
+    /// <summary>Fenêtre de navigation privée (<c>--private</c>) : rien de ce qui est visité n'est écrit sur le disque.</summary>
+    public static bool Private { get; } = Environment.GetCommandLineArgs().Contains("--private");
+
     /// <summary>Données du profil : rien n'est partagé entre deux profils.</summary>
     public static string DataDir { get; } = Profiles.DataDir(BaseDir, Profile);
 

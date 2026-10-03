@@ -11,7 +11,11 @@ export default function Dock() {
   const root = useRef<HTMLDivElement>(null);
   useLang();
 
-  useEffect(() => onMessage(data => setItems((data as { items?: Download[] }).items ?? [])), []);
+  useEffect(() => {
+    const off = onMessage(data => setItems((data as { items?: Download[] }).items ?? []));
+    send({ type: 'dock.ready' }); // créé au premier téléchargement : il demande ce qu'il doit afficher
+    return off;
+  }, []);
 
   useLayoutEffect(() => {
     if (items.length > 0 && root.current) send({ type: 'dock.size', width: root.current.offsetWidth, height: root.current.offsetHeight });

@@ -32,17 +32,28 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
 
     public void AddAsleep(Tab tab) => _asleep[tab.Id] = tab;
 
+    // Fenêtre privée : le moteur ne garde rien sur le disque (cookies, cache, historique) et n'y charge pas les
+    // extensions ; le blocage propre au navigateur prend alors le relais.
+    private static async Task StartEngineAsync(WebView2 view)
+    {
+        var environment = await AdBlock.EnvironmentAsync();
+        if (!AppPaths.Private) { await view.EnsureCoreWebView2Async(environment); return; }
+        var options = environment.CreateCoreWebView2ControllerOptions();
+        options.IsInPrivateModeEnabled = true;
+        await view.EnsureCoreWebView2Async(environment, options);
+    }
+
     public async void Add(Tab tab)
     {
         var view = new WebView2 { Visibility = Visibility.Collapsed };
         _views[tab.Id] = view;
         container.Children.Add(view);
-        await view.EnsureCoreWebView2Async(await AdBlock.EnvironmentAsync());
+        await StartEngineAsync(view);
         if (!_views.ContainsKey(tab.Id)) return; // fermé pendant l'initialisation
 
         var core = view.CoreWebView2;
         Harden(core);
-        if (!await AdBlock.ExtensionInstalled) Shield(core);
+        if (AppPaths.Private || !await AdBlock.ExtensionInstalled) Shield(core);
         if (!_views.ContainsKey(tab.Id)) return;
         await ApplySettingsAsync(tab.Id, core);
         if (!_views.ContainsKey(tab.Id)) return;
@@ -223,6 +234,7 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
     public void Remove(string id)
     {
         _asleep.Remove(id);
+        _hiddenSince.Remove(id);
         if (_views.TryGetValue(id, out var closing)) ClearSims(id, closing);
         if (!_views.Remove(id, out var view)) return;
         _loading.Remove(id);
@@ -267,6 +279,7 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
             var column = id == activeId ? 0 : split && id == secondaryId ? 2 : -1;
             view.Visibility = column < 0 ? Visibility.Collapsed : Visibility.Visible;
             if (column >= 0) Grid.SetColumn(view, column);
+            Rest(id, view, hidden: column < 0);
             // Coques et vues miroirs d'un onglet simulé : mêmes colonne et visibilité que sa vue.
             foreach (var sim in _sims.GetValueOrDefault(id, []))
                 foreach (var part in new FrameworkElement?[] { sim.View, sim.Below, sim.Above })
@@ -423,10 +436,10 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
         var view = new WebView2 { Visibility = main.Visibility };
         Grid.SetColumn(view, Grid.GetColumn(main));
         container.Children.Add(view);
-        await view.EnsureCoreWebView2Async(await AdBlock.EnvironmentAsync());
+        await StartEngineAsync(view);
         var core = view.CoreWebView2;
         Harden(core);
-        if (!await AdBlock.ExtensionInstalled) Shield(core);
+        if (AppPaths.Private || !await AdBlock.ExtensionInstalled) Shield(core);
         core.Settings.AreDefaultContextMenusEnabled = false;
         core.Settings.IsStatusBarEnabled = false;
         core.NewWindowRequested += (_, e) => { e.Handled = true; NewTabRequested?.Invoke(e.Uri); };
@@ -561,6 +574,70 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
             }));
         }
         catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { /* vue fermée entre-temps */ }
+    }
+
+    // Économie de mémoire. Un onglet masqué demande d'abord au moteur d'occuper moins de mémoire ; après quelques
+    // minutes il est mis en veille (scripts à l'arrêt, page gardée telle quelle) ; s'il reste masqué longtemps, sa vue
+    // est fermée et il redevient un onglet endormi, rechargé quand on y revient. Un onglet qui joue du son, ou que le
+    // navigateur garde affiché ailleurs (vue scindée, appareil simulé), n'est jamais touché.
+    // Diagnostic : NAVIGATEUR_SAVER_TEST=1 ramène les délais à quelques secondes pour pouvoir observer le mécanisme.
+    private static readonly bool SaverTest = Environment.GetEnvironmentVariable("NAVIGATEUR_SAVER_TEST") == "1";
+    private static readonly TimeSpan SuspendAfter = SaverTest ? TimeSpan.FromSeconds(4) : TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan DiscardAfter = SaverTest ? TimeSpan.FromSeconds(18) : TimeSpan.FromMinutes(30);
+    private readonly Dictionary<string, DateTime> _hiddenSince = new();
+    private DispatcherTimer? _saver;
+
+    /// <summary>Onglets à ne jamais décharger (donné par le navigateur : vue scindée…).</summary>
+    public Func<string, bool> KeepAwake { get; set; } = _ => false;
+    public event Action<string>? Discarded; // id : la vue a été fermée, l'onglet se rechargera
+    public int AsleepCount => _asleep.Count;
+
+    private void Rest(string id, WebView2 view, bool hidden)
+    {
+        if (view.CoreWebView2 is not { } core) return;
+        try
+        {
+            if (hidden && _hiddenSince.TryAdd(id, DateTime.UtcNow)) core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low;
+            else if (!hidden && _hiddenSince.Remove(id))
+            {
+                core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Normal;
+                if (core.IsSuspended) core.Resume();
+            }
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { /* vue fermée entre-temps */ }
+        if (_saver is null)
+        {
+            _saver = new DispatcherTimer { Interval = SaverTest ? TimeSpan.FromSeconds(2) : TimeSpan.FromMinutes(1) };
+            _saver.Tick += (_, _) => SaveMemory(DateTime.UtcNow);
+            _saver.Start();
+        }
+    }
+
+    /// <summary>Passe en revue les onglets masqués ; <paramref name="now"/> est donné pour pouvoir avancer l'horloge en test.</summary>
+    public void SaveMemory(DateTime now)
+    {
+        if (!settings.MemorySaver) return;
+        foreach (var (id, since) in _hiddenSince.ToList())
+        {
+            if (!_views.TryGetValue(id, out var view) || view.CoreWebView2 is not { } core) { _hiddenSince.Remove(id); continue; }
+            try
+            {
+                if (core.IsDocumentPlayingAudio) { _hiddenSince[id] = now; continue; } // musique, appel : il reste éveillé
+                var busy = KeepAwake(id) || _sims.ContainsKey(id) || _loading.Contains(id);
+                if (!busy && now - since >= DiscardAfter && core.Source.StartsWith("http", StringComparison.Ordinal) && !_errorUrl.ContainsKey(id)) Discard(id, core);
+                else if (now - since >= SuspendAfter && !core.IsSuspended) _ = core.TrySuspendAsync();
+            }
+            catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { /* vue fermée entre-temps */ }
+        }
+    }
+
+    private void Discard(string id, CoreWebView2 core)
+    {
+        var tab = new Tab(id, core.Source, core.DocumentTitle);
+        Remove(id);
+        _hiddenSince.Remove(id);
+        _asleep[id] = tab;
+        Discarded?.Invoke(id);
     }
 
     // Zoom d'une page. Ce type de vue n'expose pas le zoom du moteur : il est appliqué à la racine du document,

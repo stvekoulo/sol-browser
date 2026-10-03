@@ -35,7 +35,9 @@ public partial class App : Application
         // - retour et avance par balayage horizontal à deux doigts sur le pavé tactile.
         // - langue : celle de l'interface, que les sites reçoivent aussi comme langue préférée.
         Language.Current = Language.Resolve(JsonFileStore.Load<Settings>(AppPaths.Settings).Language, System.Globalization.CultureInfo.CurrentUICulture.Name);
-        const string features = "--enable-features=OverlayScrollbar,msOverlayScrollbarWinStyle,msOverlayScrollbarWinStyleAnimation,OverscrollHistoryNavigation";
+        // - un seul processus de rendu par site : les vues de l'interface (barre, carte, menus) en partagent un au lieu
+        //   d'en occuper un chacune, et les onglets d'un même site aussi. L'isolation entre sites différents reste entière.
+        const string features = "--process-per-site " + "--enable-features=OverlayScrollbar,msOverlayScrollbarWinStyle,msOverlayScrollbarWinStyleAnimation,OverscrollHistoryNavigation";
         Environment.SetEnvironmentVariable(WebArgsVariable, $"{LaunchEnvironment[WebArgsVariable]} {features} --lang={Language.Current}".Trim());
 
         InitializeComponent();

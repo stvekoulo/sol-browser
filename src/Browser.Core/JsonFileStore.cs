@@ -32,6 +32,8 @@ public sealed class Settings
     public string Language { get; set; } = "system";
     /// <summary>Bloque les requêtes vers les domaines connus de publicité et de pistage.</summary>
     public bool BlockAds { get; set; } = true;
+    /// <summary>Met en veille les onglets inactifs, puis les décharge de la mémoire s'ils le restent longtemps.</summary>
+    public bool MemorySaver { get; set; } = true;
     /// <summary>Largeur de la carte latérale, réglée en tirant son bord droit.</summary>
     public double SidebarWidth { get; set; } = 296;
     /// <summary>Écrans affichés côte à côte par la comparaison d'écrans ; vide : le choix par défaut.</summary>

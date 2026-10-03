@@ -14,6 +14,7 @@ public sealed partial class MainWindow : Window
         (0x54, 2, "tab.open"),        // Ctrl+T
         (0x57, 2, "tab.close"),       // Ctrl+W
         (0x54, 2 | 4, "tab.reopen"),  // Ctrl+Maj+T
+        (0x4E, 2 | 4, "window.private"), // Ctrl+Maj+N
         (0x4C, 2, "address.focus"),   // Ctrl+L
         (0x52, 2, "nav.reload"),      // Ctrl+R
         (0x74, 0, "nav.reload"),      // F5
@@ -101,8 +102,8 @@ public sealed partial class MainWindow : Window
         popup.PageLeft = () => SidebarColumn.ActualWidth;
         var dockBridge = new UiBridge(Dock, "index.html#dock");
         bridge.AttachPopup(dockBridge);
-        var dock = new DockHost(DockFrame, Dock, dockBridge);
         var uiFolder = Path.Combine(AppContext.BaseDirectory, "ui");
+        var dock = new DockHost(DockFrame, Dock, dockBridge, () => dockBridge.InitAsync(uiFolder, c => _controller!.Execute(c)));
         var panelBridge = new UiBridge(Panel, "index.html#panel");
         bridge.AttachPopup(panelBridge);
         var panel = new PanelHost(PanelRow, panelBridge, () => panelBridge.InitAsync(uiFolder, c => _controller!.Execute(c)));
@@ -116,7 +117,6 @@ public sealed partial class MainWindow : Window
         await AdBlock.ApplyExtensionAsync(Ui.CoreWebView2.Profile, settings.BlockAds);
         if (settings.BlockAds) _ = AdBlock.UpdateExtensionAsync();
         await popupBridge.InitAsync(uiFolder, _controller.Execute);
-        await dockBridge.InitAsync(uiFolder, _controller.Execute);
         popup.Hide();
         dock.Hide();
     }

@@ -42,6 +42,8 @@ public sealed class BrowserController
         _pages.RuntimeChanged += Refresh;
         _pages.NewTabRequested += url => { Open(url); Refresh(); };
         _pages.Loaded += RecordVisit;
+        _pages.Discarded += id => { _restored.Add(id); Refresh(); }; // son rechargement ne sera pas une nouvelle visite
+        _pages.KeepAwake = id => _split.Contains(id);
         _pages.Loaded += id => _ = LearnShortcutNameAsync(id);
         _pages.FaviconChanged += (id, data) => { _favicons[id] = data; PostFavicon(id); LearnShortcutIcon(id, data); };
         _pages.ContextMenuRequested += OpenContextMenu;
@@ -105,6 +107,7 @@ public sealed class BrowserController
                 else SetSetting(id, c.Index != 0);
                 return;
             case "settings.text": if (id == "home") SetHomePage(c.Input!); return;
+            case "dock.ready": _dock.Ready(); return;
             case "dock.size": if (_dockShown) _dock.SetSize(c.Width!.Value, c.Height!.Value); return;
             case "shortcut.menu": OpenShortcutMenu(c.Index!.Value, c.X!.Value, c.Y!.Value); return;
             case "shortcut.update": UpdateShortcut(id, c.Title!, c.Input!); break;
@@ -135,10 +138,10 @@ public sealed class BrowserController
             case "profile.rename":
                 if (Profiles.Rename(AppPaths.BaseDir, id, c.Title!) && id == AppPaths.Profile) _window.Title = $"Navigateur — {ProfileName(id)}";
                 break;
-            // Session isolée : un profil jetable dans une nouvelle fenêtre, à côté de celle-ci.
-            case "profile.isolated":
+            // Fenêtre privée : un profil jetable dans une nouvelle fenêtre, à côté de celle-ci, où le moteur n'écrit rien.
+            case "profile.isolated" or "window.private":
                 HidePopup();
-                OpenProfile(Profiles.CreateTemporary(AppPaths.BaseDir, T("Session isolée", "Isolated session")), replace: false);
+                OpenProfile(Profiles.CreateTemporary(AppPaths.BaseDir, T("Navigation privée", "Private browsing")), replace: false, isPrivate: true);
                 return;
             case "profile.switch": SwitchProfile(id); return;
             case "profile.delete": DeleteProfile(id); return;
@@ -362,6 +365,7 @@ public sealed class BrowserController
         items = new[]
         {
             new { key = "blocker", label = T("Bloquer les publicités et les traqueurs", "Block ads and trackers"), hint = AdBlock.ExtensionId is null ? T("Liste de domaines connus, mise à jour chaque semaine", "List of known domains, updated weekly") : T("Avec uBlock Origin Lite, intégré au navigateur", "With uBlock Origin Lite, built into the browser"), on = _settings.BlockAds },
+            new { key = "memory", label = T("Économie de mémoire", "Memory saver"), hint = MemoryHint(), on = _settings.MemorySaver },
             new { key = "scrollbars", label = T("Barre de défilement fine", "Thin scrollbar"), hint = T("Apparaît seulement pendant le défilement", "Only appears while scrolling"), on = !_settings.HideScrollbars },
             new { key = "blur", label = T("Flou progressif en bas des pages", "Progressive blur at the bottom of pages"), hint = "", on = _settings.BlurEnabled },
             new { key = "floatingDownloads", label = T("Téléchargements en bas à droite", "Downloads at the bottom right"), hint = T("Sinon, uniquement dans le panneau de la barre", "Otherwise, only in the toolbar panel"), on = _settings.FloatingDownloads },
@@ -415,6 +419,28 @@ public sealed class BrowserController
         if (_settingsOpen) _popup.Post(SettingsJson());
     }
 
+    // Mémoire occupée par le navigateur et les processus de son moteur, pour le réglage d'économie de mémoire.
+    private string MemoryHint()
+    {
+        // Mémoire privée : celle que chaque processus occupe en propre (la mémoire partagée serait comptée plusieurs fois).
+        using var self = System.Diagnostics.Process.GetCurrentProcess();
+        long bytes = self.PrivateMemorySize64;
+        try
+        {
+            if (_tabs.ActiveId is { } active && _pages.CoreOf(active) is { } core)
+                foreach (var info in core.Environment.GetProcessInfos())
+                {
+                    try { using var process = System.Diagnostics.Process.GetProcessById(info.ProcessId); bytes += process.PrivateMemorySize64; }
+                    catch (Exception e) when (e is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { /* processus déjà parti */ }
+                }
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { /* moteur indisponible : mémoire du navigateur seul */ }
+        var megabytes = bytes / 1024 / 1024;
+        var asleep = _pages.AsleepCount;
+        return T($"Met en veille les onglets inactifs, puis les décharge après 30 minutes. Utilisé : {megabytes} Mo, {asleep} onglet{(asleep > 1 ? "s" : "")} déchargé{(asleep > 1 ? "s" : "")}.",
+            $"Suspends inactive tabs, then unloads them after 30 minutes. In use: {megabytes} MB, {asleep} tab{(asleep == 1 ? "" : "s")} unloaded.");
+    }
+
     private static readonly string[] Languages = ["system", "fr", "en"];
 
     private void SetLanguage(int index)
@@ -445,6 +471,7 @@ public sealed class BrowserController
                 _settings.BlockAds = on;
                 if (_tabs.ActiveId is { } shown && _pages.CoreOf(shown) is { } shownCore) _ = AdBlock.ApplyExtensionAsync(shownCore.Profile, on);
                 break;
+            case "memory": _settings.MemorySaver = on; break;
             case "scrollbars": _settings.HideScrollbars = !on; break;
             case "blur": _settings.BlurEnabled = on; break;
             case "floatingDownloads": _settings.FloatingDownloads = on; break;
@@ -511,7 +538,7 @@ public sealed class BrowserController
                 Execute(new Command("tab.activate", Id: _tabs.Tabs[(index + step) % _tabs.Tabs.Count].Id));
                 break;
             case "address.focus": _bridge.Post("""{"event":"focus-address"}"""); break;
-            case "tab.open" or "tab.reopen": Execute(new Command(action)); break;
+            case "tab.open" or "tab.reopen" or "window.private": Execute(new Command(action)); break;
             default: if (active is not null) Execute(new Command(action, Id: active)); break;
         }
     }
@@ -962,7 +989,7 @@ public sealed class BrowserController
     private void SwitchProfile(string id) => OpenProfile(id, replace: true);
 
     // replace : la nouvelle fenêtre prend la place de celle-ci. Sinon elle s'ouvre à côté, légèrement décalée.
-    private void OpenProfile(string id, bool replace)
+    private void OpenProfile(string id, bool replace, bool isPrivate = false)
     {
         if (id == AppPaths.Profile || !Profiles.List(AppPaths.BaseDir).Contains(id)) return;
         if (Environment.ProcessPath is not { } exe) return;
@@ -970,6 +997,7 @@ public sealed class BrowserController
         var shift = replace ? 0 : 36;
         var start = new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = false };
         start.ArgumentList.Add($"--profile={id}");
+        if (isPrivate) start.ArgumentList.Add("--private");
         start.ArgumentList.Add($"--bounds={app.Position.X + shift},{app.Position.Y + shift},{app.Size.Width},{app.Size.Height}");
         if (replace && Presenter?.State == OverlappedPresenterState.Maximized) start.ArgumentList.Add("--maximized");
         // La nouvelle fenêtre repart de l'environnement d'origine, pas de celui que ce profil s'est réglé.
@@ -1143,6 +1171,7 @@ public sealed class BrowserController
     private void RecordVisit(string id)
     {
         if (_restored.Remove(id)) return; // rouvrir une session n'est pas une visite
+        if (AppPaths.Private) return;     // navigation privée : aucun historique
         if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { } tab && IsWeb(tab.Url))
             _db.RecordVisit(tab.Url, tab.Title, DateTimeOffset.UtcNow);
     }
@@ -1185,6 +1214,7 @@ public sealed class BrowserController
 
     private void SaveSession()
     {
+        if (AppPaths.Private) return; // navigation privée : la fenêtre ne laisse pas d'onglets derrière elle
         var tabs = _tabs.Tabs.ToList();
         int? IndexOf(string? id) => tabs.FindIndex(t => t.Id == id) is >= 0 and var i ? i : null;
         JsonFileStore.Save(AppPaths.Session, new Session
@@ -1224,6 +1254,7 @@ public sealed class BrowserController
             }),
             groups = _tabs.Groups.Select(g => new { id = g.Id, name = g.Name, color = g.Color, icon = g.Icon, collapsed = g.Collapsed }),
             activeId = _tabs.ActiveId,
+            privateMode = AppPaths.Private, // fenêtre de navigation privée
             shield = _settings.BlockAds, // blocage des publicités et des traqueurs en service
             shortcuts = _settings.Shortcuts.Select(s => new { url = s.Url, name = s.Name, icon = s.Icon, tabId = _shortcutTabs.GetValueOrDefault(s) }),
             profile = ProfileName(AppPaths.Profile),

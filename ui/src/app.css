@@ -191,3 +191,12 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 
 /* Bouclier : plein quand le blocage des publicités est en service, estompé quand il est coupé. */
 .address-lead.unshielded .shield-icon { opacity: 0.35; }
+
+/* Fenêtre de navigation privée : repère permanent dans la barre. */
+.private-chip {
+  height: 26px; padding: 0 11px;
+  display: inline-flex; align-items: center;
+  border-radius: var(--radius-pill);
+  background: #3b2f63; color: #ffffff;
+  font-size: 11.5px; font-weight: 600;
+}
