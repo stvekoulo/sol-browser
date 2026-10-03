@@ -37,6 +37,16 @@ public sealed class Session
     public int? PrimaryIndex { get; set; }
     public int? SecondaryIndex { get; set; }
     public double Ratio { get; set; } = 0.5;
+    /// <summary>Groupes d'onglets, et pour chaque adresse de <see cref="Urls"/> le rang de son groupe (ou null).</summary>
+    public List<SessionGroup> Groups { get; set; } = new();
+    public List<int?> GroupOf { get; set; } = new();
+}
+
+public sealed class SessionGroup
+{
+    public string Name { get; set; } = "";
+    public string Color { get; set; } = "";
+    public bool Collapsed { get; set; }
 }
 
 public static class JsonFileStore

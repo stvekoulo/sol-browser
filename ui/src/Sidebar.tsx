@@ -54,22 +54,62 @@ export default function Sidebar() {
     setTimeout(() => setCopied(false), 1200);
   };
 
-  // Construction de la liste verticale des onglets non épinglés (avec paires scindées).
+  // Lignes des onglets de rang « from » à « to » (avec les paires d'une vue scindée).
+  const rows = (from: number, to: number) => {
+    const items: ReactNode[] = [];
+    for (let i = from; i <= to; i++) {
+      const tab = tabs[i], next = i < to ? tabs[i + 1] : undefined;
+      if (next && tab.id === split.primaryId && next.id === split.secondaryId) {
+        items.push(
+          <div key={tab.id} className={`sidebar-split-group${split.visible ? ' active' : ''}`} data-slot-id={tab.id} data-slot-first={i} data-slot-last={i + 1}>
+            <SidebarTabRow tab={tab} index={i} icon={icons[tab.id]} active={tab.id === activeId} grouped />
+            <SidebarTabRow tab={next} index={i + 1} icon={icons[next.id]} active={next.id === activeId} grouped />
+          </div>,
+        );
+        i++;
+      } else {
+        items.push(<SidebarTabRow key={tab.id} tab={tab} index={i} icon={icons[tab.id]} active={tab.id === activeId} />);
+      }
+    }
+    return items;
+  };
+
+  // Liste verticale des onglets non épinglés. Les onglets d'un groupe, toujours voisins, sont réunis sous
+  // l'en-tête du groupe : un clic le replie ou le déplie, un clic droit ouvre son menu.
   const normalItems: ReactNode[] = [];
   for (let i = 0; i < tabs.length; i++) {
-    const tab = tabs[i], next = tabs[i + 1];
-    if (tab.pinned) continue;
-    if (next && !next.pinned && tab.id === split.primaryId && next.id === split.secondaryId) {
+    if (tabs[i].pinned) continue;
+    let end = i;
+    const group = state.groups.find(g => g.id === tabs[i].groupId);
+    if (!group) {
+      if (tabs[i].id === split.primaryId && tabs[i + 1]?.id === split.secondaryId) end = i + 1;
+      normalItems.push(...rows(i, end));
+    } else {
+      while (tabs[end + 1]?.groupId === group.id) end++;
       normalItems.push(
-        <div key={tab.id} className={`sidebar-split-group${split.visible ? ' active' : ''}`} data-slot-id={tab.id} data-slot-first={i} data-slot-last={i + 1}>
-          <SidebarTabRow tab={tab} index={i} icon={icons[tab.id]} active={tab.id === activeId} grouped />
-          <SidebarTabRow tab={next} index={i + 1} icon={icons[next.id]} active={next.id === activeId} grouped />
+        <div key={group.id} className={`tab-group-block${group.collapsed ? ' collapsed' : ''}`} data-color={group.color}>
+          <button
+            className="tab-group-header"
+            aria-expanded={!group.collapsed}
+            title={group.collapsed ? `Déplier « ${group.name} »` : `Replier « ${group.name} »`}
+            onClick={() => send({ type: 'group.toggle', id: group.id })}
+            onContextMenu={e => {
+              e.preventDefault();
+              send({ type: 'group.menu', id: group.id, x: e.clientX + OFFSET_X, y: e.clientY + OFFSET_Y });
+            }}
+          >
+            <span className="tab-group-dot" aria-hidden />
+            <span className="tab-group-name">{group.name}</span>
+            <span className="tab-group-count">{end - i + 1}</span>
+            <span className="tab-group-chevron" aria-hidden>
+              <Icon d="M6 4l4 4-4 4" size={12} />
+            </span>
+          </button>
+          {!group.collapsed && <div className="tab-group-tabs">{rows(i, end)}</div>}
         </div>,
       );
-      i++;
-    } else {
-      normalItems.push(<SidebarTabRow key={tab.id} tab={tab} index={i} icon={icons[tab.id]} active={tab.id === activeId} />);
     }
+    i = end;
   }
 
   return (

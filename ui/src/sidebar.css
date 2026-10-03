@@ -194,3 +194,43 @@
 /* Carte flottante au-dessus de la page : la vue a exactement sa taille, la page reste visible tout autour. */
 .sidebar-body.floating .sidebar-card { margin: 0; height: 100%; }
 .sidebar-body.floating { background-color: var(--page-real, var(--page-bg)); }
+
+/* Groupes d'onglets : un en-tête à la couleur du groupe, ses onglets en retrait derrière un filet de même couleur */
+.tab-group-block { display: flex; flex-direction: column; gap: 2px; --group: #8fa8e8; }
+.tab-group-block[data-color="blue"] { --group: #8fa8e8; }
+.tab-group-block[data-color="green"] { --group: #8ccfa6; }
+.tab-group-block[data-color="yellow"] { --group: #e3cf7a; }
+.tab-group-block[data-color="orange"] { --group: #edb07f; }
+.tab-group-block[data-color="pink"] { --group: #eba3c2; }
+.tab-group-block[data-color="purple"] { --group: #b9a2ec; }
+.tab-group-block[data-color="grey"] { --group: #b3b6bf; }
+
+.tab-group-header {
+  flex: none;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--group) 26%, transparent);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  transition: background var(--fast) var(--ease-out);
+}
+.tab-group-header:hover { background: color-mix(in srgb, var(--group) 40%, transparent); }
+.tab-group-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--group); }
+.tab-group-name { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tab-group-count { flex: none; font-weight: 500; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.tab-group-chevron { flex: none; color: var(--text-dim); transform: rotate(90deg); transition: transform var(--fast) var(--ease-out); }
+.tab-group-block.collapsed .tab-group-chevron { transform: none; }
+.tab-group-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-left: 13px;
+  padding-left: 7px;
+  border-left: 2px solid color-mix(in srgb, var(--group) 70%, transparent);
+}

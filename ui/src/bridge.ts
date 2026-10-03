@@ -4,6 +4,7 @@ export type Tab = {
   url: string;
   title: string;
   pinned: boolean;
+  groupId: string | null;
   zoom: number; // en pour cent
   loading: boolean;
   canGoBack: boolean;
@@ -11,8 +12,11 @@ export type Tab = {
   bookmarked: boolean;
 };
 
+export type TabGroup = { id: string; name: string; color: string; collapsed: boolean };
+
 export type State = {
   tabs: Tab[];
+  groups: TabGroup[];
   activeId: string | null;
   // Paire d'onglets scindés ; visible quand l'onglet actif est l'un des deux.
   split: { primaryId: string | null; secondaryId: string | null; ratio: number; visible: boolean };

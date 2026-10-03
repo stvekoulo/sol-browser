@@ -11,7 +11,7 @@ type Content =
   | { popup: 'downloads'; items: Download[] }
   | { popup: 'settings'; zoom: number; theme: number; tint: Setting[]; items: Setting[] }
   | { popup: 'profiles'; items: Profile[] }
-  | { popup: 'profile-new' };
+  | { popup: 'prompt'; title: string; hint: string; placeholder: string; submit: string; value: string; command: string; id: string | null };
 
 type Profile = { id: string; name: string; current: boolean; deletable: boolean };
 
@@ -203,8 +203,8 @@ export default function Popup() {
   if (content.popup === 'profiles')
     return <ProfileList key={opening} rootRef={root} items={content.items} />;
 
-  if (content.popup === 'profile-new')
-    return <ProfileNameForm key={opening} rootRef={root} />;
+  if (content.popup === 'prompt')
+    return <NameForm key={opening} rootRef={root} ask={content} />;
 
   const open = (item: Item) => send({ type: 'tab.open', url: item.url });
   const items = libTab === 'bookmarks' ? content.bookmarks : content.history;
@@ -338,24 +338,24 @@ function ProfileList({ rootRef, items }: { rootRef: RefObject<HTMLDivElement | n
   );
 }
 
-// Saisie du nom d'un nouveau profil.
-function ProfileNameForm({ rootRef }: { rootRef: RefObject<HTMLDivElement | null> }) {
-  const [name, setName] = useState('');
+// Saisie d'un nom (profil, groupe d'onglets). La réponse part sous la forme de la commande indiquée par l'hôte.
+function NameForm({ rootRef, ask }: { rootRef: RefObject<HTMLDivElement | null>; ask: Extract<Content, { popup: 'prompt' }> }) {
+  const [name, setName] = useState(ask.value);
   return (
     <div ref={rootRef} className="popup arriving">
       <form
         className="name-form"
         onSubmit={e => {
           e.preventDefault();
-          if (name.trim()) send({ type: 'profile.create', title: name.trim() });
+          if (name.trim()) send({ type: ask.command, id: ask.id ?? undefined, title: name.trim() });
         }}
       >
-        <label htmlFor="profile-name" className="name-form-title">Nouveau profil</label>
-        <p className="row-sub">Ses onglets, son historique, ses favoris et ses mots de passe restent séparés des autres profils.</p>
-        <input id="profile-name" autoFocus maxLength={40} placeholder="Nom du profil" spellCheck={false} value={name} onChange={e => setName(e.target.value)} />
+        <label htmlFor="name-input" className="name-form-title">{ask.title}</label>
+        {ask.hint && <p className="row-sub">{ask.hint}</p>}
+        <input id="name-input" autoFocus maxLength={40} placeholder={ask.placeholder} spellCheck={false} value={name} onChange={e => setName(e.target.value)} onFocus={e => e.target.select()} />
         <div className="name-form-actions">
           <button type="button" className="pill-action" onClick={() => send({ type: 'popup.close' })}>Annuler</button>
-          <button type="submit" className="pill-action primary" disabled={!name.trim()}>Créer et ouvrir</button>
+          <button type="submit" className="pill-action primary" disabled={!name.trim()}>{ask.submit}</button>
         </div>
       </form>
     </div>
