@@ -5,15 +5,13 @@ namespace Browser.App;
 
 /// <summary>
 /// Petite vue flottante posée par-dessus la page (suggestions, bibliothèque, téléchargements, menus).
-///
-/// NE JAMAIS appeler ElementCompositionPreview (découpe, animation…) sur ce cadre ni sur sa vue web : une fois
-/// le cadre confié à la couche de composition, la vraie souris le traverse et atteint la page dessous, alors
-/// que les tests de position de XAML répondent toujours « le menu ». Constaté au journal le 2026-10-03.
-/// L'arrondi vient du CornerRadius du cadre, le mouvement du contenu web lui-même.
+/// Ses coins arrondis viennent de CornerClip (voir ce fichier pour ce qu'il ne faut surtout pas faire) ;
+/// son mouvement d'apparition est joué par son contenu web.
 /// </summary>
 public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge)
 {
     private const double Edge = 10;
+    private const float Radius = 20;
     private bool _pending;
     private bool _focus;
     private double _x, _y;
@@ -59,6 +57,8 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge)
         frame.Margin = new Thickness(x, y, 0, 0);
 
         frame.Visibility = Visibility.Visible;
+        frame.UpdateLayout();
+        CornerClip.Set(view, Radius);
         if (_pending && _focus) view.Focus(FocusState.Programmatic);
         _pending = false;
     }

@@ -11,6 +11,7 @@ namespace Browser.App;
 public sealed class SidebarHost(WebView2 sidebar, ColumnDefinition column, Action<string> post)
 {
     private const double Width = 296;
+    private const float CardRadius = 22; // rayon de la carte (--radius-card)
     private const double CardMargin = 10; // marge de la carte dans sa colonne (sidebar.css)
     private const double EdgeZone = 16; // largeur de la bande, au bord gauche, qui fait apparaître la carte fermée
     private static readonly TimeSpan In = TimeSpan.FromMilliseconds(320), Out = TimeSpan.FromMilliseconds(260); // durées de motion.css
@@ -71,6 +72,8 @@ public sealed class SidebarHost(WebView2 sidebar, ColumnDefinition column, Actio
         // La vue se réduit à la carte elle-même : autour d'elle, c'est la vraie page qu'on voit.
         sidebar.Margin = new Thickness(CardMargin, 2, 0, CardMargin);
         sidebar.Width = Width - 2 * CardMargin;
+        sidebar.UpdateLayout();
+        CornerClip.Set(sidebar, CardRadius); // flottante : ses coins laissent voir la page
     }
 
     private void Dock()
@@ -80,6 +83,7 @@ public sealed class SidebarHost(WebView2 sidebar, ColumnDefinition column, Actio
         sidebar.HorizontalAlignment = HorizontalAlignment.Stretch;
         sidebar.Margin = new Thickness(0);
         sidebar.Width = double.NaN;
+        CornerClip.Set(sidebar, 0); // dans sa colonne : vue entière
         post("""{"event":"sidebar-docked"}""");
     }
 }

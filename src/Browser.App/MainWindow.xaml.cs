@@ -89,7 +89,7 @@ public sealed partial class MainWindow : Window
         popup.PageLeft = () => SidebarColumn.ActualWidth;
         var dockBridge = new UiBridge(Dock, "index.html#dock");
         bridge.AttachPopup(dockBridge);
-        var dock = new DockHost(DockFrame, dockBridge);
+        var dock = new DockHost(DockFrame, Dock, dockBridge);
         _controller = new BrowserController(this, pages, bridge, popup, dock, settings);
         WireDivider();
         WireGestures();
