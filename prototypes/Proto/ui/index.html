@@ -1,0 +1,31 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; height: 100%; background: transparent; font: 14px system-ui; }
+  #bar { height: 88px; background: #f2f2f4; display: flex; align-items: center; gap: 8px; padding: 0 16px; box-sizing: border-box; }
+  #menu { display: none; position: absolute; top: 80px; left: 16px; width: 260px; padding: 8px;
+          background: rgba(255,255,255,.85); backdrop-filter: blur(20px); border-radius: 12px;
+          box-shadow: 0 10px 40px rgba(0,0,0,.25); }
+  #menu.open { display: block; }
+  #menu div { padding: 8px 10px; border-radius: 8px; }
+  #menu div:hover { background: rgba(0,0,0,.08); }
+  #out { margin-left: auto; font-variant-numeric: tabular-nums; }
+</style>
+<div id="bar">
+  <button id="btn">Menu</button>
+  <button id="blur">Flou : off</button>
+  <button id="bench">Mesurer</button>
+  <span id="out"></span>
+</div>
+<div id="menu"><div>Nouvel onglet</div><div>Historique</div><div>Favoris</div></div>
+<script>
+  const send = m => chrome.webview.postMessage(m);
+  const menu = document.getElementById('menu');
+  const setMenu = open => { menu.classList.toggle('open', open); send(open ? 'menu:open' : 'menu:close'); };
+  document.getElementById('btn').onclick = e => { e.stopPropagation(); setMenu(!menu.classList.contains('open')); };
+  document.addEventListener('click', e => { if (!menu.contains(e.target)) setMenu(false); });
+  let blur = false;
+  document.getElementById('blur').onclick = e => { blur = !blur; e.target.textContent = 'Flou : ' + (blur ? 'on' : 'off'); send(blur ? 'blur:on' : 'blur:off'); };
+  document.getElementById('bench').onclick = () => { document.getElementById('out').textContent = 'mesure…'; send('bench'); };
+  chrome.webview.addEventListener('message', e => document.getElementById('out').textContent = e.data);
+</script>
