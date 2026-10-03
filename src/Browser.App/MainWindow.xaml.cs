@@ -32,12 +32,12 @@ public sealed partial class MainWindow : Window
     private readonly SubclassProc _wndProc; // gardé en champ : le délégué ne doit pas être libéré
     private BrowserController? _controller;
     private UiBridge? _bridge;
-    private const double SidebarWidth = 296;
+    private SidebarHost? _sidebar;
 
     public MainWindow()
     {
         InitializeComponent();
-        Title = "Navigateur";
+        Title = AppPaths.Profile == Profiles.Default ? "Navigateur" : $"Navigateur — {Profiles.Display(AppPaths.Profile)}";
         // Pas de barre de titre système : l'interface dessine la sienne. La bordure reste, pour le redimensionnement.
         if (AppWindow.Presenter is OverlappedPresenter presenter) presenter.SetBorderAndTitleBar(true, false);
 
@@ -60,6 +60,8 @@ public sealed partial class MainWindow : Window
         var pages = new PageHost(Pages, PrimaryColumn, DividerColumn, SecondaryColumn, blur, settings);
         var bridge = new UiBridge(Ui, "index.html", Sidebar, SidebarColumn, pages);
         _bridge = bridge;
+        _sidebar = new SidebarHost(Sidebar, SidebarColumn, bridge.Post);
+        bridge.SidebarHost = _sidebar;
         bridge.PageColorChanged += (r, g, b) =>
             Root.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, r, g, b));
         var popupBridge = new UiBridge(Popup, "index.html#popup");
@@ -82,9 +84,62 @@ public sealed partial class MainWindow : Window
 
     // Gestes : boutons latéraux de la souris, et balayage horizontal à deux doigts du pavé tactile, pour page
     // précédente et page suivante. Le moteur ne reconnaît pas ce balayage dans ce type de vue : on le lit ici.
+    private const double SwipeThreshold = 480;
     private double _swipe;
     private DateTime _swipeAt;
     private bool _swipeDone;
+    private DispatcherTimer? _swipeIdle;
+
+    // Pastille à flèche qui sort du bord pendant le balayage : elle avance avec le geste, et la page change
+    // quand elle est entièrement sortie. Un simple élément XAML posé sur la page, sans effet sur la souris.
+    private void ShowSwipeHint(bool back, double progress)
+    {
+        SwipeHint.HorizontalAlignment = back ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+        SwipeGlyph.Glyph = back ? "" : ""; // chevron gauche, chevron droit
+        var eased = 1 - Math.Pow(1 - progress, 3);     // la pastille sort vite puis ralentit
+        SwipeShift.X = (back ? -1 : 1) * (64 - 84 * eased);
+        SwipeHint.Opacity = Math.Min(1, progress * 1.6);
+        SwipeScale.ScaleX = SwipeScale.ScaleY = 0.7 + 0.3 * eased;
+
+        // Geste abandonné avant le seuil : la pastille rentre.
+        _swipeIdle ??= CreateSwipeIdleTimer();
+        _swipeIdle.Start();
+    }
+
+    private DispatcherTimer CreateSwipeIdleTimer()
+    {
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+        timer.Tick += (_, _) =>
+        {
+            if ((DateTime.UtcNow - _swipeAt).TotalMilliseconds < 300) return;
+            timer.Stop();
+            if (!_swipeDone) HideSwipeHint(committed: false);
+        };
+        return timer;
+    }
+
+    private void HideSwipeHint(bool committed)
+    {
+        _swipeIdle?.Stop();
+        var ease = new Microsoft.UI.Xaml.Media.Animation.CubicEase { EasingMode = Microsoft.UI.Xaml.Media.Animation.EasingMode.EaseOut };
+        var duration = TimeSpan.FromMilliseconds(committed ? 380 : 220);
+        var story = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
+        void Animate(DependencyObject target, string property, double to, TimeSpan begin)
+        {
+            var animation = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation { To = to, Duration = duration, BeginTime = begin, EasingFunction = ease };
+            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(animation, target);
+            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(animation, property);
+            story.Children.Add(animation);
+        }
+        // Validé : la pastille grossit un instant avant de s'effacer. Abandonné : elle retourne dans le bord.
+        var back = SwipeHint.HorizontalAlignment == HorizontalAlignment.Left;
+        Animate(SwipeHint, "Opacity", 0, committed ? TimeSpan.FromMilliseconds(120) : TimeSpan.Zero);
+        if (committed) { Animate(SwipeScale, "ScaleX", 1.25, TimeSpan.Zero); Animate(SwipeScale, "ScaleY", 1.25, TimeSpan.Zero); }
+        else Animate(SwipeShift, "X", back ? -64 : 64, TimeSpan.Zero);
+        // À la fin, les valeurs redeviennent modifiables directement pour le prochain geste.
+        story.Completed += (_, _) => { story.Stop(); SwipeHint.Opacity = 0; };
+        story.Begin();
+    }
 
     private void WireGestures()
     {
@@ -101,21 +156,7 @@ public sealed partial class MainWindow : Window
         Root.AddHandler(UIElement.PointerMovedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler((_, e) =>
         {
             var p = e.GetCurrentPoint(Root).Position;
-            var peeking = Grid.GetColumnSpan(Sidebar) == 2;
-            if (!peeking && SidebarColumn.Width.Value == 0 && p.X <= 6 && p.Y > 52)
-            {
-                Grid.SetColumnSpan(Sidebar, 2);
-                Canvas.SetZIndex(Sidebar, 1);
-                Sidebar.HorizontalAlignment = HorizontalAlignment.Left;
-                Sidebar.Width = SidebarWidth;
-                Sidebar.Visibility = Visibility.Visible;
-                _bridge?.Post("""{"event":"sidebar-peek"}""");
-            }
-            else if (peeking && (p.X > SidebarWidth + 40 || p.Y < 40) && PopupFrame.Visibility != Visibility.Visible)
-            {
-                Sidebar.Visibility = Visibility.Collapsed;
-                UiBridge.DockSidebar(Sidebar);
-            }
+            _sidebar?.PointerAt(p.X, p.Y, menuOpen: PopupFrame.Visibility == Visibility.Visible);
         }), true);
 
         Root.AddHandler(UIElement.PointerWheelChangedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler((_, e) =>
@@ -132,11 +173,15 @@ public sealed partial class MainWindow : Window
             if ((now - _swipeAt).TotalMilliseconds > 350) { _swipe = 0; _swipeDone = false; } // nouveau geste
             _swipeAt = now;
             _swipe += p.MouseWheelDelta;
+            if (_swipeDone) return;
             // ponytail: seuil fixe, et une page qui défile elle-même horizontalement déclenche aussi le geste ;
             // à affiner en ne réagissant qu'en bout de défilement.
-            if (_swipeDone || Math.Abs(_swipe) < 480) return;
+            var progress = Math.Min(1, Math.Abs(_swipe) / SwipeThreshold);
+            ShowSwipeHint(back: _swipe < 0, progress);
+            if (progress < 1) return;
             _swipeDone = true;
             _controller?.Shortcut(_swipe < 0 ? "nav.back" : "nav.forward");
+            HideSwipeHint(committed: true);
         }), true);
     }
 

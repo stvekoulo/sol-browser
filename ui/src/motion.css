@@ -32,11 +32,18 @@
 }
 .dock { animation: rise 360ms var(--ease-out) both; }
 
-/* Carte latérale apparue au survol du bord gauche : elle glisse depuis ce bord. */
+/* Carte latérale : elle glisse depuis le bord gauche à l'ouverture, et y retourne à la fermeture.
+   Durées reprises par SidebarHost.cs, qui attend la fin du mouvement. */
 @keyframes slide-in {
-  from { opacity: 0; transform: translateX(-28px); }
+  from { opacity: 0; transform: translateX(-36px) scale(0.98); }
 }
-.sidebar-card.peeking { animation: slide-in var(--slow) var(--ease-out) both; }
+@keyframes slide-out {
+  to { opacity: 0; transform: translateX(-36px) scale(0.98); }
+}
+.sidebar-card.entering { animation: slide-in 320ms var(--ease-out) both; }
+.sidebar-card.leaving { animation: slide-out 260ms var(--ease-out) both; }
+/* Pendant ces mouvements, les onglets ne rejouent pas leur propre apparition. */
+.sidebar-card:is(.entering, .leaving) :is(.sidebar-tab, .sidebar-split-group) { transition: none; }
 
 /* Un onglet qui arrive dans la liste : fondu et léger glissement. */
 .sidebar-tab, .sidebar-split-group {
@@ -53,6 +60,7 @@
   @keyframes arrive { from { opacity: 0; } }
   @keyframes rise { from { opacity: 0; } }
   @keyframes slide-in { from { opacity: 0; } }
+  @keyframes slide-out { to { opacity: 0; } }
   @starting-style { .sidebar-tab, .sidebar-split-group { translate: 0 0; } }
 }
 

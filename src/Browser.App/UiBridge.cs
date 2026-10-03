@@ -86,14 +86,9 @@ public sealed class UiBridge(WebView2 view, string page = "index.html", WebView2
             catch (ArgumentException) { return; }
             if (!e.Source.StartsWith(Origin, StringComparison.Ordinal)) return;
 
-            if (sidebar is not null && sidebarColumn is not null && json.Contains("\"sidebar.toggle\"", StringComparison.Ordinal))
+            if (SidebarHost is { } host && json.Contains("\"sidebar.toggle\"", StringComparison.Ordinal))
             {
-                // Ouverte = épinglée dans sa colonne. Une carte seulement apparue au survol du bord compte comme fermée :
-                // le bouton l'épingle alors.
-                var open = sidebarColumn.Width.Value == 0;
-                DockSidebar(sidebar);
-                sidebar.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-                sidebarColumn.Width = new GridLength(open ? 296 : 0);
+                var open = host.Toggle();
                 view.CoreWebView2?.PostWebMessageAsJson($$"""{"event":"sidebar","open":{{(open ? "true" : "false")}}}""");
                 return;
             }
@@ -104,14 +99,8 @@ public sealed class UiBridge(WebView2 view, string page = "index.html", WebView2
         core.Navigate(Origin + targetPage);
     }
 
-    /// <summary>Remet la carte latérale dans sa colonne, après une apparition flottante au survol du bord gauche.</summary>
-    public static void DockSidebar(WebView2 sidebar)
-    {
-        Grid.SetColumnSpan(sidebar, 1);
-        Canvas.SetZIndex(sidebar, 0);
-        sidebar.HorizontalAlignment = HorizontalAlignment.Stretch;
-        sidebar.Width = double.NaN;
-    }
+    /// <summary>Carte latérale pilotée par le bouton de la barre.</summary>
+    public SidebarHost? SidebarHost { get; set; }
 
     public void Post(string json)
     {

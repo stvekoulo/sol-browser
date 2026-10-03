@@ -25,6 +25,7 @@ public static class CommandParser
         ["downloads.open"] = ["x", "y"],
         ["window.minimize"] = [], ["window.maximize"] = [], ["window.close"] = [], ["window.drag"] = [],
         ["zoom.in"] = [], ["zoom.out"] = [], ["zoom.reset"] = [],
+        ["profile.menu"] = ["x", "y"],
         ["ui.ready"] = [],
     };
 

@@ -152,6 +152,17 @@ export default function App() {
           <Icon d="M3 4h10M3 8h10M3 12h10" />
         </button>
         <button
+          className="pill-icon-btn profile-btn"
+          aria-label={`Profil : ${state.profile}`}
+          title={`Profil : ${state.profile}`}
+          onClick={e => {
+            const box = e.currentTarget.getBoundingClientRect();
+            send({ type: 'profile.menu', x: box.right, y: box.bottom + 6 });
+          }}
+        >
+          <Icon d="M8 8a2.6 2.6 0 1 0 0-5.2A2.6 2.6 0 0 0 8 8M3 13.2c.6-2.2 2.6-3.4 5-3.4s4.4 1.2 5 3.4" />
+        </button>
+        <button
           className="pill-icon-btn"
           aria-label="Réglages"
           title="Réglages"

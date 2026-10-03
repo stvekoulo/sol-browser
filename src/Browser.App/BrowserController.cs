@@ -89,6 +89,7 @@ public sealed class BrowserController
             case "settings.set": SetSetting(id, c.Index != 0); return;
             case "dock.size": if (_dockShown) _dock.SetSize(c.Width!.Value, c.Height!.Value); return;
             case "tab.menu": OpenTabMenu(id, c.X!.Value, c.Y!.Value); return;
+            case "profile.menu": OpenProfileMenu(c.X!.Value, c.Y!.Value); return;
             case "capture.menu": OpenCaptureMenu(c.X!.Value, c.Y!.Value); return;
             case "window.close": _window.Close(); return;
             case "window.drag": BeginDrag(); return;
@@ -457,6 +458,39 @@ public sealed class BrowserController
         ]);
     }
 
+    // Profils : chacun a sa fenêtre et ses données. Le menu en ouvre un autre ou en crée un.
+    private void OpenProfileMenu(double x, double y)
+    {
+        if (ClosesPanel("profile")) return;
+        var profiles = Profiles.List(AppPaths.BaseDir);
+        var items = profiles
+            .Select(name => (name == AppPaths.Profile ? $"{Profiles.Display(name)} (cette fenêtre)" : $"Ouvrir {Profiles.Display(name)}",
+                name == AppPaths.Profile ? (Action?)null : () => LaunchProfile(name)))
+            .ToList();
+        items.Add(("", null));
+        items.Add(("Nouveau profil", () =>
+        {
+            var name = Profiles.NextName(profiles);
+            Directory.CreateDirectory(Profiles.DataDir(AppPaths.BaseDir, name));
+            LaunchProfile(name);
+        }));
+        ShowMenu(x - 260, y, items);
+    }
+
+    private static void LaunchProfile(string name)
+    {
+        if (Environment.ProcessPath is not { } exe || !Profiles.IsValid(name)) return;
+        var start = new System.Diagnostics.ProcessStartInfo(exe, $"--profile={name}") { UseShellExecute = false };
+        // La nouvelle fenêtre repart de l'environnement d'origine, pas de celui que ce profil s'est réglé.
+        foreach (var (variable, value) in App.LaunchEnvironment)
+        {
+            if (value is null) start.Environment.Remove(variable);
+            else start.Environment[variable] = value;
+        }
+        try { System.Diagnostics.Process.Start(start); }
+        catch (System.ComponentModel.Win32Exception) { /* exécutable introuvable ou refusé : rien ne s'ouvre */ }
+    }
+
     // Bouton de capture d'écran de la barre d'outils.
     private void OpenCaptureMenu(double x, double y)
     {
@@ -583,6 +617,7 @@ public sealed class BrowserController
                 bookmarked = (t.Id == _tabs.ActiveId || (showSplit && _split.Contains(t.Id))) && _db.IsBookmarked(t.Url),
             }),
             activeId = _tabs.ActiveId,
+            profile = Profiles.Display(AppPaths.Profile),
             split = new { primaryId = _split.PrimaryId, secondaryId = _split.SecondaryId, ratio = _split.Ratio, visible = showSplit },
             maximized = Presenter?.State == OverlappedPresenterState.Maximized,
             downloads = new

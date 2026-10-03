@@ -14,7 +14,7 @@ export default function Sidebar() {
   const [icons, setIcons] = useState<Icons>({});
   const [copied, setCopied] = useState(false);
   const [status, setStatus] = useState(''); // adresse du lien survolé dans la page
-  const [peek, setPeek] = useState(0); // apparitions au survol du bord gauche : rejoue l'entrée de la carte
+  const [motion, setMotion] = useState<{ way: '' | 'entering' | 'leaving'; run: number }>({ way: '', run: 0 });
   const [urlText, setUrlText] = useState('');
   const [editingUrl, setEditingUrl] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -23,7 +23,9 @@ export default function Sidebar() {
     const off = onState(setState, e => {
       if (e.event === 'favicon' && e.id) setIcons(all => ({ ...all, [e.id!]: e.data }));
       if (e.event === 'status') setStatus(e.text ?? '');
-      if (e.event === 'sidebar-peek') setPeek(n => n + 1);
+      // L'hôte fait entrer ou sortir la carte : le mouvement est joué ici, par son contenu.
+      if (e.event === 'sidebar-enter') setMotion(m => ({ way: 'entering', run: m.run + 1 }));
+      if (e.event === 'sidebar-leave') setMotion(m => ({ way: 'leaving', run: m.run + 1 }));
     });
     send({ type: 'ui.ready' });
     return off;
@@ -68,7 +70,7 @@ export default function Sidebar() {
   }
 
   return (
-    <aside key={peek} className={`sidebar-card${peek ? ' peeking' : ''}`} aria-label="Panneau latéral des onglets">
+    <aside key={motion.run} className={`sidebar-card ${motion.way}`} aria-label="Panneau latéral des onglets">
       <div className="sidebar-url-pill">
         <LockIcon />
         <form

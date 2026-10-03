@@ -16,6 +16,7 @@ export type State = {
   activeId: string | null;
   // Paire d'onglets scindés ; visible quand l'onglet actif est l'un des deux.
   split: { primaryId: string | null; secondaryId: string | null; ratio: number; visible: boolean };
+  profile: string; // nom affiché du profil de cette fenêtre
   maximized: boolean;
   downloads: { count: number; active: number; docked: boolean };
 };

@@ -1,6 +1,8 @@
 /* Surfaces flottantes (#popup) : menus contextuels, suggestions, favoris, historique et téléchargements. */
+/* Le cadre de la vue est un rectangle qu'on ne peut ni découper ni rendre transparent (voir PopupHost.cs).
+   Ses quatre coins, hors de la carte arrondie, prennent donc la couleur de la page pour se fondre dedans. */
 .popup-body {
-  background: var(--bg-sidebar-card);
+  background: var(--page-bg);
   overflow: hidden;
 }
 
