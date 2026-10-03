@@ -30,6 +30,17 @@ export default function App() {
           />
         ))}
         <button
+          className="icon"
+          aria-label="Favoris et historique"
+          title="Favoris et historique"
+          onClick={e => {
+            const box = e.currentTarget.getBoundingClientRect();
+            send({ type: 'library.open', x: box.right, y: box.bottom + 6 });
+          }}
+        >
+          <Icon d="M3 3.5h10M3 8h10M3 12.5h10" />
+        </button>
+        <button
           className={`icon${split.visible ? ' on' : ''}`}
           aria-label={split.visible ? 'Fermer la vue scindée' : 'Afficher deux pages côte à côte'}
           aria-pressed={split.visible}
@@ -160,22 +171,41 @@ function Pane({ tab, focused, grow }: { tab: Tab | undefined; focused: boolean; 
           placeholder="Rechercher ou saisir une adresse"
           spellCheck={false}
           value={text}
-          onChange={e => setText(e.target.value)}
+          onChange={e => {
+            setText(e.target.value);
+            // Les suggestions s'affichent dans une vue posée sous le champ : l'hôte a besoin de sa position.
+            const box = e.target.getBoundingClientRect();
+            if (id) send({ type: 'suggest', id, query: e.target.value, x: box.left, y: box.bottom + 6, width: box.width });
+          }}
           onFocus={e => {
             setEditing(true);
             e.target.select();
             if (id && !focused) send({ type: 'tab.activate', id });
           }}
-          onBlur={() => setEditing(false)}
+          onBlur={() => {
+            setEditing(false);
+            // Requête vide : l'hôte referme les suggestions, sans toucher à un autre panneau.
+            if (id) send({ type: 'suggest', id, query: '', x: 0, y: 0, width: 0 });
+          }}
         />
       </form>
+      <button
+        className={`icon${tab?.bookmarked ? ' on' : ''}`}
+        aria-label={tab?.bookmarked ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+        aria-pressed={!!tab?.bookmarked}
+        title={tab?.bookmarked ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+        disabled={!url}
+        onClick={() => tab && send(tab.bookmarked ? { type: 'bookmark.remove', url: tab.url } : { type: 'bookmark.add', url: tab.url, title: tab.title })}
+      >
+        <Icon d="M8 2.2l1.8 3.7 4 .6-2.9 2.8.7 4L8 11.4l-3.6 1.9.7-4L2.2 6.5l4-.6z" fill={!!tab?.bookmarked} />
+      </button>
     </div>
   );
 }
 
-function Icon({ d }: { d: string }) {
+function Icon({ d, fill = false }: { d: string; fill?: boolean }) {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <svg width="16" height="16" viewBox="0 0 16 16" fill={fill ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d={d} />
     </svg>
   );

@@ -23,6 +23,17 @@ public class CommandParserTests
         Assert.NotNull(CommandParser.Parse("""{"type":"window.drag"}"""));
     }
 
+    [Fact]
+    public void Parses_placement_numbers()
+    {
+        var c = CommandParser.Parse("""{"type":"suggest","id":"t1","query":"web","x":120,"y":84.5,"width":600}""");
+        Assert.Equal(120, c!.X);
+        Assert.Equal(84.5, c.Y);
+        Assert.Equal(600, c.Width);
+        Assert.Null(CommandParser.Parse("""{"type":"suggest","id":"t1","query":"web","x":120,"y":84.5}"""));
+        Assert.Null(CommandParser.Parse("""{"type":"popup.size","height":"12"}"""));
+    }
+
     [Theory]
     [InlineData("not json")]
     [InlineData("[]")]

@@ -6,7 +6,7 @@ using Microsoft.Web.WebView2.Core;
 namespace Browser.App;
 
 /// <summary>Une WebView2 par onglet. Aucun canal vers l'hôte n'est ouvert sur ces vues.</summary>
-public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDefinition secondary, string? injectedScript)
+public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDefinition divider, ColumnDefinition secondary, string? injectedScript)
 {
     private readonly Dictionary<string, WebView2> _views = new();
     private readonly HashSet<string> _loading = new();
@@ -83,10 +83,11 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
     {
         var split = secondaryId is not null && _views.ContainsKey(secondaryId);
         primary.Width = new GridLength(split ? ratio : 1, GridUnitType.Star);
+        divider.Width = new GridLength(split ? 6 : 0);
         secondary.Width = split ? new GridLength(1 - ratio, GridUnitType.Star) : new GridLength(0);
         foreach (var (id, view) in _views)
         {
-            var column = id == activeId ? 0 : split && id == secondaryId ? 1 : -1;
+            var column = id == activeId ? 0 : split && id == secondaryId ? 2 : -1;
             view.Visibility = column < 0 ? Visibility.Collapsed : Visibility.Visible;
             if (column >= 0) Grid.SetColumn(view, column);
         }

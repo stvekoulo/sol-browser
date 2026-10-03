@@ -51,10 +51,30 @@ public sealed partial class MainWindow : Window
             ? File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "blur.js"))
             : null;
 
-        var pages = new PageHost(Pages, PrimaryColumn, SecondaryColumn, blur);
+        var pages = new PageHost(Pages, PrimaryColumn, DividerColumn, SecondaryColumn, blur);
         var bridge = new UiBridge(Ui);
-        _controller = new BrowserController(this, pages, bridge, settings);
-        await bridge.InitAsync(Path.Combine(AppContext.BaseDirectory, "ui"), _controller.Execute);
+        var popupBridge = new UiBridge(Popup, "index.html#popup");
+        var popup = new PopupHost(PopupFrame, Popup, popupBridge);
+        _controller = new BrowserController(this, pages, bridge, popup, settings);
+        WireDivider();
+
+        var uiFolder = Path.Combine(AppContext.BaseDirectory, "ui");
+        await bridge.InitAsync(uiFolder, _controller.Execute);
+        await popupBridge.InitAsync(uiFolder, _controller.Execute);
+        popup.Hide();
+    }
+
+    // Séparateur de la vue scindée : le glisser change la part de chaque page.
+    private void WireDivider()
+    {
+        Divider.PointerPressed += (_, e) => Divider.CapturePointer(e.Pointer);
+        Divider.PointerReleased += (_, e) => Divider.ReleasePointerCapture(e.Pointer);
+        Divider.PointerMoved += (_, e) =>
+        {
+            if (Divider.PointerCaptures is not { Count: > 0 } || Pages.ActualWidth <= 0) return;
+            var ratio = e.GetCurrentPoint(Pages).Position.X / Pages.ActualWidth;
+            _controller?.Execute(new Command("split.resize", Ratio: ratio));
+        };
     }
 
     private void SetShortcuts(bool active)

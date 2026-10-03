@@ -12,14 +12,19 @@ public sealed class BrowserController
     private readonly Window _window;
     private readonly PageHost _pages;
     private readonly UiBridge _bridge;
+    private readonly PopupHost _popup;
     private readonly Settings _settings;
     private readonly BrowserDb _db;
     private readonly TabManager _tabs = new();
     private readonly SplitLayout _split = new();
+    private readonly HashSet<string> _restored = new(); // onglets dont le premier chargement vient de la session
+    private IReadOnlyList<Visit> _suggestions = [];
+    private string? _suggestTab;
+    private bool _suggesting; // la vue posée sur la page affiche des suggestions
 
-    public BrowserController(Window window, PageHost pages, UiBridge bridge, Settings settings)
+    public BrowserController(Window window, PageHost pages, UiBridge bridge, PopupHost popup, Settings settings)
     {
-        (_window, _pages, _bridge, _settings) = (window, pages, bridge, settings);
+        (_window, _pages, _bridge, _popup, _settings) = (window, pages, bridge, popup, settings);
         Directory.CreateDirectory(AppPaths.DataDir);
         _db = new BrowserDb(AppPaths.Database);
 
@@ -36,6 +41,18 @@ public sealed class BrowserController
         var id = c.Id ?? "";
         switch (c.Type)
         {
+            // Vue posée sur la page : ces commandes ne changent pas l'état des onglets.
+            case "suggest": Suggest(id, c.Query!, c.X!.Value, c.Y!.Value, c.Width!.Value); return;
+            case "library.open": OpenLibrary(c.X!.Value, c.Y!.Value); return;
+            case "popup.size": _popup.SetHeight(c.Height!.Value); return;
+            case "popup.close": _popup.Hide(); return;
+            case "window.close": _window.Close(); return;
+            case "window.drag": BeginDrag(); return;
+
+            case "suggest.pick":
+                if (_suggestTab is not null && c.Index is int i && i >= 0 && i < _suggestions.Count)
+                    _pages.Navigate(_suggestTab, _suggestions[i].Url);
+                break;
             case "ui.ready": if (_tabs.Tabs.Count == 0) RestoreSession(); break;
             case "tab.open": Open(c.Url is null ? _settings.HomeUrl : Resolve(c.Url)); break;
             case "tab.close": Close(id); break;
@@ -50,13 +67,14 @@ public sealed class BrowserController
             case "split.open": Split(c.Id); break;
             case "split.close": _split.Close(); break;
             case "split.resize": _split.Resize(c.Ratio!.Value); break;
+            case "bookmark.add": if (IsWeb(c.Url!)) _db.AddBookmark(c.Url!, c.Title!); break;
+            case "bookmark.remove": _db.RemoveBookmark(c.Url!); break;
             case "window.minimize": Presenter?.Minimize(); break;
             case "window.maximize":
                 if (Presenter?.State == OverlappedPresenterState.Maximized) Presenter.Restore(); else Presenter?.Maximize();
                 break;
-            case "window.close": _window.Close(); return;
-            case "window.drag": BeginDrag(); return;
         }
+        _popup.Hide();
         Refresh();
     }
 
@@ -79,6 +97,8 @@ public sealed class BrowserController
 
     private OverlappedPresenter? Presenter => _window.AppWindow.Presenter as OverlappedPresenter;
     private string Resolve(string input) => AddressInput.Resolve(input, _settings.SearchUrlTemplate);
+    private static bool IsWeb(string url) =>
+        url.StartsWith("https://", StringComparison.Ordinal) || url.StartsWith("http://", StringComparison.Ordinal);
 
     private Tab Open(string url, bool activate = true)
     {
@@ -109,10 +129,36 @@ public sealed class BrowserController
         _split.Open(active, other);
     }
 
+    private void Suggest(string tabId, string query, double x, double y, double width)
+    {
+        _suggestions = query.Trim().Length == 0 ? [] : _db.Suggest(query.Trim(), 6);
+        _suggestTab = tabId;
+        // Une requête vide (champ vidé ou quitté) ne referme que les suggestions, pas un autre panneau ouvert entre-temps.
+        if (_suggestions.Count == 0) { if (_suggesting) _popup.Hide(); _suggesting = false; return; }
+        _suggesting = true;
+        _popup.Show(x, y, width, JsonSerializer.Serialize(new
+        {
+            popup = "suggestions",
+            items = _suggestions.Select(v => new { url = v.Url, title = v.Title }),
+        }), focus: false); // le curseur reste dans la barre d'adresse
+    }
+
+    private void OpenLibrary(double x, double y)
+    {
+        const double width = 340;
+        _suggesting = false;
+        _popup.Show(x - width, y, width, JsonSerializer.Serialize(new
+        {
+            popup = "library",
+            bookmarks = _db.Bookmarks().Select(b => new { url = b.Url, title = b.Title }),
+            history = _db.RecentHistory(12).Select(v => new { url = v.Url, title = v.Title }),
+        }), focus: true); // la vue prend le curseur : la perdre la referme
+    }
+
     private void RecordVisit(string id)
     {
-        if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { } tab
-            && (tab.Url.StartsWith("https://", StringComparison.Ordinal) || tab.Url.StartsWith("http://", StringComparison.Ordinal)))
+        if (_restored.Remove(id)) return; // rouvrir une session n'est pas une visite
+        if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { } tab && IsWeb(tab.Url))
             _db.RecordVisit(tab.Url, tab.Title, DateTimeOffset.UtcNow);
     }
 
@@ -122,6 +168,7 @@ public sealed class BrowserController
         var session = JsonFileStore.Load<Session>(AppPaths.Session);
         var tabs = session.Urls.Select(url => Open(url, activate: false)).ToList();
         if (tabs.Count == 0) { Open(_settings.HomeUrl); return; }
+        foreach (var tab in tabs) _restored.Add(tab.Id);
 
         _tabs.Activate(tabs[Math.Clamp(session.ActiveIndex, 0, tabs.Count - 1)].Id);
         bool Valid(int? i) => i is >= 0 && i < tabs.Count;
@@ -156,6 +203,8 @@ public sealed class BrowserController
                 loading = _pages.IsLoading(t.Id),
                 canGoBack = _pages.CanGoBack(t.Id),
                 canGoForward = _pages.CanGoForward(t.Id),
+                // Seules les pages affichées ont une étoile : inutile d'interroger la base pour les autres.
+                bookmarked = (t.Id == _tabs.ActiveId || (showSplit && _split.Contains(t.Id))) && _db.IsBookmarked(t.Url),
             }),
             activeId = _tabs.ActiveId,
             split = new { primaryId = _split.PrimaryId, secondaryId = _split.SecondaryId, ratio = _split.Ratio, visible = showSplit },

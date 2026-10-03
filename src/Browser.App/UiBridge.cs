@@ -4,8 +4,8 @@ using Microsoft.Web.WebView2.Core;
 
 namespace Browser.App;
 
-/// <summary>Vue d'interface : ne charge que les fichiers locaux, reçoit les commandes, envoie l'état.</summary>
-public sealed class UiBridge(WebView2 view)
+/// <summary>Vue d'interface : ne charge que les fichiers locaux, reçoit les commandes, envoie des messages.</summary>
+public sealed class UiBridge(WebView2 view, string page = "index.html")
 {
     private const string Origin = "https://ui.navigateur/";
 
@@ -35,8 +35,8 @@ public sealed class UiBridge(WebView2 view)
                 onCommand(command);
         };
 
-        core.Navigate(Origin + "index.html");
+        core.Navigate(Origin + page);
     }
 
-    public void Post(string stateJson) => view.CoreWebView2?.PostWebMessageAsJson(stateJson);
+    public void Post(string json) => view.CoreWebView2?.PostWebMessageAsJson(json);
 }

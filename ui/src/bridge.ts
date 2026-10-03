@@ -6,6 +6,7 @@ export type Tab = {
   loading: boolean;
   canGoBack: boolean;
   canGoForward: boolean;
+  bookmarked: boolean;
 };
 
 export type State = {
@@ -25,6 +26,10 @@ export type Command = {
   query?: string;
   index?: number;
   ratio?: number;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
 };
 
 type WebView = {
@@ -37,12 +42,17 @@ const webview = (window as unknown as { chrome?: { webview?: WebView } }).chrome
 
 export const send = (command: Command) => webview?.postMessage(JSON.stringify(command));
 
-// L'hôte envoie soit l'état complet, soit un événement ponctuel { event: "…" }.
-export function onState(callback: (state: State) => void, onEvent?: (name: string) => void) {
-  const handler = (e: MessageEvent) => {
-    if (typeof e.data?.event === 'string') onEvent?.(e.data.event);
-    else callback(e.data as State);
-  };
+export function onMessage(callback: (data: unknown) => void) {
+  const handler = (e: MessageEvent) => callback(e.data);
   webview?.addEventListener('message', handler);
   return () => webview?.removeEventListener('message', handler);
+}
+
+// L'hôte envoie soit l'état complet, soit un événement ponctuel { event: "…" }.
+export function onState(callback: (state: State) => void, onEvent?: (name: string) => void) {
+  return onMessage(data => {
+    const event = (data as { event?: unknown }).event;
+    if (typeof event === 'string') onEvent?.(event);
+    else callback(data as State);
+  });
 }
