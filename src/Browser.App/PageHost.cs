@@ -6,9 +6,10 @@ using Microsoft.Web.WebView2.Core;
 namespace Browser.App;
 
 /// <summary>Une WebView2 par onglet. Aucun canal vers l'hôte n'est ouvert sur ces vues.</summary>
-public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDefinition divider, ColumnDefinition secondary, string? injectedScript, Settings settings)
+public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDefinition divider, ColumnDefinition secondary, string blurScript, Settings settings)
 {
     private readonly Dictionary<string, WebView2> _views = new();
+    private readonly Dictionary<string, string> _blurScriptIds = new(); // vues où le flou est installé
     private readonly HashSet<string> _loading = new();
 
     public event Action<string, string?, string?>? PageChanged; // id, url, titre
@@ -16,7 +17,7 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
     public event Action<string>? Loaded;                         // id, page chargée avec succès
     public event Action<string>? NewTabRequested;
     public event Action<double, double, CoreWebView2ContextMenuRequestedEventArgs>? ContextMenuRequested; // x, y dans la fenêtre
-    public event Action<CoreWebView2DownloadStartingEventArgs>? DownloadStarting;
+    public event Action<string, CoreWebView2DownloadStartingEventArgs>? DownloadStarting; // onglet d'origine
     public event Action<string, string?>? FaviconChanged;        // id, icône en data: (ou null)
 
     public bool IsLoading(string id) => _loading.Contains(id);
@@ -33,9 +34,7 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
 
         var core = view.CoreWebView2;
         Harden(core);
-        if (injectedScript is not null) await core.AddScriptToExecuteOnDocumentCreatedAsync(injectedScript);
-        // Réglage du moteur, pas une feuille de style injectée : il vaut pour toutes les pages de la vue, quelle que soit leur politique de sécurité.
-        if (settings.HideScrollbars) await core.CallDevToolsProtocolMethodAsync("Emulation.setScrollbarsHidden", """{"hidden":true}""");
+        await ApplySettingsAsync(tab.Id, core);
         if (!_views.ContainsKey(tab.Id)) return;
 
         core.SourceChanged += (_, _) => PageChanged?.Invoke(tab.Id, core.Source, null);
@@ -55,9 +54,42 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
             var point = view.TransformToVisual(null).TransformPoint(new Windows.Foundation.Point(e.Location.X, e.Location.Y));
             ContextMenuRequested?.Invoke(point.X, point.Y, e);
         };
-        core.DownloadStarting += (_, e) => DownloadStarting?.Invoke(e);
+        core.DownloadStarting += (_, e) => DownloadStarting?.Invoke(tab.Id, e);
         core.FaviconChanged += async (_, _) => FaviconChanged?.Invoke(tab.Id, await ReadFaviconAsync(core));
         Navigate(tab.Id, tab.Url);
+    }
+
+    /// <summary>Applique les réglages aux pages déjà ouvertes, sans les recharger.</summary>
+    public async void ApplySettings()
+    {
+        foreach (var (id, view) in _views.ToList())
+        {
+            if (view.CoreWebView2 is not { } core) continue;
+            try { await ApplySettingsAsync(id, core); }
+            catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { /* vue fermée entre-temps */ }
+        }
+    }
+
+    private async Task ApplySettingsAsync(string id, CoreWebView2 core)
+    {
+        core.Settings.IsPasswordAutosaveEnabled = settings.SavePasswords;
+
+        // Barres de défilement : réglage du moteur, pas une feuille de style injectée, donc valable sur toutes les pages
+        // quelle que soit leur politique de sécurité. Affichées, elles sont fines et n'apparaissent qu'au défilement.
+        await core.CallDevToolsProtocolMethodAsync("Emulation.setScrollbarsHidden", settings.HideScrollbars ? """{"hidden":true}""" : """{"hidden":false}""");
+
+        var installed = _blurScriptIds.TryGetValue(id, out var scriptId);
+        if (settings.BlurEnabled && !installed)
+        {
+            _blurScriptIds[id] = await core.AddScriptToExecuteOnDocumentCreatedAsync(blurScript);
+            await core.ExecuteScriptAsync(blurScript); // la page déjà affichée
+        }
+        else if (!settings.BlurEnabled && installed)
+        {
+            core.RemoveScriptToExecuteOnDocumentCreated(scriptId);
+            _blurScriptIds.Remove(id);
+            await core.ExecuteScriptAsync("window.__navBlurHost && window.__navBlurHost.remove(); window.__navBlurHost = undefined; window.__navBlur = false;");
+        }
     }
 
     // L'icône est lue par l'hôte et transmise en data: à l'interface, qui ne fait ainsi aucune requête réseau.
@@ -85,6 +117,7 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
         s.IsWebMessageEnabled = false;
         // Mots de passe : gestionnaire du moteur (proposition d'enregistrement, stockage chiffré, remplissage).
         s.IsPasswordAutosaveEnabled = settings.SavePasswords;
+        s.IsSwipeNavigationEnabled = true; // balayage horizontal : page précédente ou suivante
         s.IsGeneralAutofillEnabled = false;
         s.IsReputationCheckingRequired = true; // SmartScreen
         // ponytail: tout est refusé tant qu'il n'y a pas d'invite ; à remplacer par une demande à l'utilisateur
@@ -96,6 +129,7 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
     {
         if (!_views.Remove(id, out var view)) return;
         _loading.Remove(id);
+        _blurScriptIds.Remove(id);
         container.Children.Remove(view);
         view.Close();
     }

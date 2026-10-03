@@ -131,6 +131,18 @@ export default function App() {
         >
           <Icon d="M3 4h10M3 8h10M3 12h10" />
         </button>
+        <button
+          className="pill-icon-btn"
+          aria-label="Réglages"
+          title="Réglages"
+          onClick={e => {
+            const box = e.currentTarget.getBoundingClientRect();
+            send({ type: 'settings.open', x: box.right, y: box.bottom + 6 });
+          }}
+        >
+          {/* Curseurs de réglage : deux glissières avec leur poignée */}
+          <Icon d="M2.5 5h4M9.5 5h4M2.5 11h7M12.5 11h1M8 3.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3M11 9.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3" />
+        </button>
       </div>
     </header>
   );

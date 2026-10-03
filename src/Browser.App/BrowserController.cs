@@ -25,9 +25,11 @@ public sealed class BrowserController
     private string? _suggestTab;
     private bool _suggesting; // la vue posée sur la page affiche des suggestions
 
-    public BrowserController(Window window, PageHost pages, UiBridge bridge, PopupHost popup, Settings settings)
+    private readonly DockHost _dock;
+
+    public BrowserController(Window window, PageHost pages, UiBridge bridge, PopupHost popup, DockHost dock, Settings settings)
     {
-        (_window, _pages, _bridge, _popup, _settings) = (window, pages, bridge, popup, settings);
+        (_window, _pages, _bridge, _popup, _dock, _settings) = (window, pages, bridge, popup, dock, settings);
         Directory.CreateDirectory(AppPaths.DataDir);
         _db = new BrowserDb(AppPaths.Database);
         _capture = new CaptureService(window);
@@ -74,6 +76,9 @@ public sealed class BrowserController
                 if (_suggesting) _popup.Post(JsonSerializer.Serialize(new { select = c.Index }));
                 return;
             case "menu.pick": PickMenuItem(c.Index!.Value); return;
+            case "settings.open": OpenSettings(c.X!.Value, c.Y!.Value); return;
+            case "settings.set": SetSetting(id, c.Index != 0); return;
+            case "dock.size": if (_dockShown) _dock.SetSize(c.Width!.Value, c.Height!.Value); return;
             case "tab.menu": OpenTabMenu(id, c.X!.Value, c.Y!.Value); return;
             case "capture.menu": OpenCaptureMenu(c.X!.Value, c.Y!.Value); return;
             case "window.close": _window.Close(); return;
@@ -121,13 +126,25 @@ public sealed class BrowserController
     private Microsoft.Web.WebView2.Core.CoreWebView2DownloadOperation? FindDownload(string id) =>
         _downloads.FirstOrDefault(d => d.Id == id).Op;
 
-    private void OnDownloadStarting(Microsoft.Web.WebView2.Core.CoreWebView2DownloadStartingEventArgs e)
+    private void OnDownloadStarting(string tabId, Microsoft.Web.WebView2.Core.CoreWebView2DownloadStartingEventArgs e)
     {
         e.Handled = true; // pas de fenêtre de téléchargement du moteur : le navigateur affiche la sienne
         var op = e.DownloadOperation;
         _downloads.Insert(0, ($"d{_downloads.Count + 1}", op));
+        var id = _downloads[0].Id;
         op.BytesReceivedChanged += (_, _) => DownloadsChanged(throttle: true);
-        op.StateChanged += (_, _) => DownloadsChanged(throttle: false);
+        op.StateChanged += async (_, _) =>
+        {
+            _finishedAt[id] = DateTime.UtcNow;
+            // Un onglet ouvert seulement pour ce téléchargement n'a rien à afficher : il se referme une fois le fichier arrivé.
+            // Pas avant : fermer la vue d'origine interrompt le téléchargement (constaté).
+            if (op.State != Microsoft.Web.WebView2.Core.CoreWebView2DownloadState.InProgress
+                && _tabs.Tabs.Count > 1 && _pages.CoreOf(tabId) is { CanGoBack: false, Source: "about:blank" })
+                Close(tabId);
+            DownloadsChanged(throttle: false);
+            await Task.Delay(DockLinger + TimeSpan.FromMilliseconds(200));
+            UpdateDock(); // le fichier terminé quitte l'encart
+        };
         DownloadsChanged(throttle: false);
     }
 
@@ -137,13 +154,30 @@ public sealed class BrowserController
         if (throttle && (DateTime.UtcNow - _downloadsPosted).TotalMilliseconds < 250) return;
         _downloadsPosted = DateTime.UtcNow;
         Refresh();
-        if (_downloadsOpen) _popup.Post(DownloadsJson());
+        if (_downloadsOpen) _popup.Post(DownloadsJson(_downloads));
+        UpdateDock();
     }
 
-    private string DownloadsJson() => JsonSerializer.Serialize(new
+    // Encart en bas à droite : les téléchargements en cours, et ceux qui viennent de finir pendant quelques secondes.
+    private static readonly TimeSpan DockLinger = TimeSpan.FromSeconds(6);
+    private readonly Dictionary<string, DateTime> _finishedAt = new();
+    private bool _dockShown;
+
+    private void UpdateDock()
+    {
+        var shown = _settings.FloatingDownloads
+            ? _downloads.Where(d => d.Op.State == Microsoft.Web.WebView2.Core.CoreWebView2DownloadState.InProgress
+                || (_finishedAt.TryGetValue(d.Id, out var at) && DateTime.UtcNow - at < DockLinger)).ToList()
+            : [];
+        _dockShown = shown.Count > 0;
+        if (_dockShown) _dock.Post(DownloadsJson(shown)); // l'encart répond par sa taille, ce qui l'affiche
+        else _dock.Hide();
+    }
+
+    private static string DownloadsJson(IEnumerable<(string Id, Microsoft.Web.WebView2.Core.CoreWebView2DownloadOperation Op)> downloads) => JsonSerializer.Serialize(new
     {
         popup = "downloads",
-        items = _downloads.Select(d => new
+        items = downloads.Select(d => new
         {
             id = d.Id,
             name = Path.GetFileName(d.Op.ResultFilePath),
@@ -159,13 +193,57 @@ public sealed class BrowserController
         const double width = 340;
         HidePopup();
         _downloadsOpen = true;
-        _popup.Show(x - width, y, width, DownloadsJson(), focus: true);
+        _popup.Show(x - width, y, width, DownloadsJson(_downloads), focus: true);
+    }
+
+    // Panneau de réglages : des interrupteurs, appliqués tout de suite et enregistrés.
+    private bool _settingsOpen;
+
+    private string SettingsJson() => JsonSerializer.Serialize(new
+    {
+        popup = "settings",
+        items = new[]
+        {
+            new { key = "scrollbars", label = "Barre de défilement fine", hint = "Apparaît seulement pendant le défilement", on = !_settings.HideScrollbars },
+            new { key = "blur", label = "Flou progressif en bas des pages", hint = "", on = _settings.BlurEnabled },
+            new { key = "floatingDownloads", label = "Téléchargements en bas à droite", hint = "Sinon, uniquement dans le panneau de la barre", on = _settings.FloatingDownloads },
+            new { key = "onlineSuggestions", label = "Suggestions de recherche Google", hint = "Envoie à Google ce qui est tapé dans la barre d'adresse", on = _settings.OnlineSuggestions },
+            new { key = "passwords", label = "Enregistrer les mots de passe", hint = "Stockage chiffré du moteur, sur cet ordinateur", on = _settings.SavePasswords },
+        },
+    });
+
+    private void OpenSettings(double x, double y)
+    {
+        if (DateTime.UtcNow - _libraryClosedAt < TimeSpan.FromMilliseconds(350)) return; // reclic sur l'icône : reste fermé
+        const double width = 340;
+        HidePopup();
+        _settingsOpen = true;
+        _popup.Show(x - width, y, width, SettingsJson(), focus: true);
+    }
+
+    private void SetSetting(string key, bool on)
+    {
+        switch (key)
+        {
+            case "scrollbars": _settings.HideScrollbars = !on; break;
+            case "blur": _settings.BlurEnabled = on; break;
+            case "floatingDownloads": _settings.FloatingDownloads = on; break;
+            case "onlineSuggestions": _settings.OnlineSuggestions = on; break;
+            case "passwords": _settings.SavePasswords = on; break;
+            default: return;
+        }
+        JsonFileStore.Save(AppPaths.Settings, _settings);
+        _pages.ApplySettings();
+        UpdateDock();
+        Refresh();
+        if (_settingsOpen) _popup.Post(SettingsJson());
     }
 
     private void HidePopup()
     {
         _suggesting = false;
         _downloadsOpen = false;
+        _settingsOpen = false;
         var dismissed = _menuDismissed;
         (_menu, _menuDismissed) = (null, null);
         dismissed?.Invoke();

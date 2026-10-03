@@ -17,6 +17,7 @@ public static class CommandParser
         ["split.open"] = [], ["split.close"] = [], ["split.resize"] = ["ratio"],
         ["bookmark.add"] = ["url", "title"], ["bookmark.remove"] = ["url"],
         ["suggest"] = ["id", "query", "x", "y", "width"], ["suggest.pick"] = ["index"], ["suggest.select"] = ["index"],
+        ["settings.open"] = ["x", "y"], ["settings.set"] = ["id", "index"], ["dock.size"] = ["width", "height"],
         ["menu.pick"] = ["index"], ["tab.menu"] = ["id", "x", "y"], ["capture.menu"] = ["x", "y"],
         ["library.open"] = ["x", "y"],
         ["popup.size"] = ["height"], ["popup.close"] = [],

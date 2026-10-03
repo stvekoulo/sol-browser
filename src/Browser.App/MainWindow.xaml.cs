@@ -47,22 +47,27 @@ public sealed partial class MainWindow : Window
     private async Task InitAsync()
     {
         var settings = JsonFileStore.Load<Settings>(AppPaths.Settings);
-        var blur = settings.BlurEnabled
-            ? File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "blur.js"))
-            : null;
+        var blur = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "blur.js"));
 
         var pages = new PageHost(Pages, PrimaryColumn, DividerColumn, SecondaryColumn, blur, settings);
         var bridge = new UiBridge(Ui, "index.html", Sidebar, SidebarColumn, pages);
+        bridge.PageColorChanged += (r, g, b) =>
+            Root.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, r, g, b));
         var popupBridge = new UiBridge(Popup, "index.html#popup");
         bridge.AttachPopup(popupBridge);
         var popup = new PopupHost(PopupFrame, Popup, popupBridge);
-        _controller = new BrowserController(this, pages, bridge, popup, settings);
+        var dockBridge = new UiBridge(Dock, "index.html#dock");
+        bridge.AttachPopup(dockBridge);
+        var dock = new DockHost(DockFrame, Dock, dockBridge);
+        _controller = new BrowserController(this, pages, bridge, popup, dock, settings);
         WireDivider();
 
         var uiFolder = Path.Combine(AppContext.BaseDirectory, "ui");
         await bridge.InitAsync(uiFolder, _controller.Execute);
         await popupBridge.InitAsync(uiFolder, _controller.Execute);
+        await dockBridge.InitAsync(uiFolder, _controller.Execute);
         popup.Hide();
+        dock.Hide();
     }
 
     // Séparateur de la vue scindée : scrutation directe de la souris tant que le bouton est enfoncé.

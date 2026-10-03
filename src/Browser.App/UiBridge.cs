@@ -41,9 +41,12 @@ public sealed class UiBridge(WebView2 view, string page = "index.html", WebView2
 
     private static string? s_lastThemeMsg;
     private string? _activeId;
-    private UiBridge? _popupBridge;
+    private readonly List<UiBridge> _floating = new(); // vues flottantes qui suivent la couleur de la page : menus, encart
 
-    public void AttachPopup(UiBridge popupBridge) => _popupBridge = popupBridge;
+    public void AttachPopup(UiBridge floatingBridge) => _floating.Add(floatingBridge);
+
+    /// <summary>Couleur de fond de la page active (rouge, vert, bleu).</summary>
+    public event Action<byte, byte, byte>? PageColorChanged;
 
     public async Task InitAsync(string uiFolder, Action<Command> onCommand)
     {
@@ -140,10 +143,13 @@ public sealed class UiBridge(WebView2 view, string page = "index.html", WebView2
             if (doc.RootElement.ValueKind != JsonValueKind.Object) return;
             var bg = doc.RootElement.GetProperty("bg").GetString() ?? "rgb(245, 246, 238)";
             var dark = doc.RootElement.GetProperty("dark").GetBoolean();
+            // Le fond de la fenêtre suit aussi la page : pas d'éclair sombre derrière une vue en cours de chargement.
+            if (System.Text.RegularExpressions.Regex.Match(bg, @"rgb\((\d+), (\d+), (\d+)\)") is { Success: true } m)
+                PageColorChanged?.Invoke(byte.Parse(m.Groups[1].Value), byte.Parse(m.Groups[2].Value), byte.Parse(m.Groups[3].Value));
             s_lastThemeMsg = JsonSerializer.Serialize(new { @event = "theme", bg, dark });
             view.CoreWebView2?.PostWebMessageAsJson(s_lastThemeMsg);
             sidebar?.CoreWebView2?.PostWebMessageAsJson(s_lastThemeMsg);
-            _popupBridge?.Post(s_lastThemeMsg);
+            foreach (var floating in _floating) floating.Post(s_lastThemeMsg);
         }
         catch (Exception) { }
     }

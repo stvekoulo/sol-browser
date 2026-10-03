@@ -2,7 +2,8 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Browser.App">
-  <Grid>
+  <!-- Fond aux couleurs de la page active (posé par le code) : jamais le gris du thème Windows. -->
+  <Grid x:Name="Root" Background="#EEF0E2">
     <Grid.RowDefinitions>
       <RowDefinition Height="52" />
       <RowDefinition Height="*" />
@@ -22,6 +23,15 @@
         </Grid.ColumnDefinitions>
         <local:DividerGrip x:Name="Divider" Grid.Column="1" Background="#40808080" />
       </Grid>
+    </Grid>
+    <!-- Encart flottant en bas à droite : téléchargements en cours. -->
+    <Grid x:Name="DockFrame" Grid.RowSpan="2" Width="1" Height="1" Margin="0,0,18,18"
+          HorizontalAlignment="Right" VerticalAlignment="Bottom" CornerRadius="20"
+          Translation="0,0,32">
+      <Grid.Shadow>
+        <ThemeShadow />
+      </Grid.Shadow>
+      <WebView2 x:Name="Dock" />
     </Grid>
     <!-- Vue posée par-dessus la page : suggestions, bibliothèque, menus. -->
     <Grid x:Name="PopupFrame" Grid.RowSpan="2" Width="1" Height="1"

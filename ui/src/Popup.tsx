@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { formatDomain, onMessage, send } from './bridge';
+import { DownloadCard, type Download } from './Downloads';
 import { Icon } from './Icons';
 
 type Item = { url: string; title: string; kind?: 'search' | 'go' | 'history' | 'site' };
@@ -7,18 +8,10 @@ type Content =
   | { popup: 'suggestions'; items: Item[] }
   | { popup: 'library'; bookmarks: Item[]; history: Item[] }
   | { popup: 'menu'; items: string[] }
-  | { popup: 'downloads'; items: Download[] };
+  | { popup: 'downloads'; items: Download[] }
+  | { popup: 'settings'; items: Setting[] };
 
-type Download = { id: string; name: string; received: number; total: number | null; state: 'InProgress' | 'Interrupted' | 'Completed' };
-
-const size = (bytes: number) =>
-  bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} Ko` : `${(bytes / 1024 / 1024).toFixed(1)} Mo`;
-
-function status(d: Download) {
-  if (d.state === 'Completed') return `Terminé · ${size(d.received)}`;
-  if (d.state === 'Interrupted') return 'Interrompu';
-  return d.total ? `${Math.round((d.received / d.total) * 100)} % · ${size(d.total)}` : size(d.received);
-}
+type Setting = { key: string; label: string; hint: string; on: boolean };
 
 // Associe une icône vectorielle contextuelle à chaque libellé de menu.
 function menuIconPath(label: string): string {
@@ -117,44 +110,35 @@ export default function Popup() {
           <span className="popup-badge">{content.items.length}</span>
         </div>
         <div className="popup-list">
-          {content.items.map(d => {
-            const pct = d.total && d.total > 0 ? Math.round((d.received / d.total) * 100) : null;
-            return (
-              <div key={d.id} className="download-card">
-                <div className="download-top">
-                  <span className="row-badge" aria-hidden>
-                    <Icon d="M8 2.5v7.5M5 7l3 3 3-3M3.5 13h9" size={13} />
-                  </span>
-                  <div className="download-text">
-                    <span className="row-title">{d.name}</span>
-                    <span className="row-sub">{status(d)}</span>
-                  </div>
-                  <div className="download-actions">
-                    {d.state === 'InProgress' && (
-                      <button className="pill-action" onClick={() => send({ type: 'download.cancel', id: d.id })}>
-                        Annuler
-                      </button>
-                    )}
-                    {d.state === 'Completed' && (
-                      <>
-                        <button className="pill-action primary" onClick={() => send({ type: 'download.open', id: d.id })}>
-                          Ouvrir
-                        </button>
-                        <button className="pill-action" onClick={() => send({ type: 'download.reveal', id: d.id })}>
-                          Dossier
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-                {d.state === 'InProgress' && pct !== null && (
-                  <div className="download-bar">
-                    <div className="download-bar-fill" style={{ width: `${pct}%` }} />
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {content.items.map(d => (
+            <DownloadCard key={d.id} d={d} />
+          ))}
+        </div>
+      </div>
+    );
+
+  if (content.popup === 'settings')
+    return (
+      <div ref={root} className="popup">
+        <div className="popup-header">
+          <span className="popup-header-title">Réglages</span>
+        </div>
+        <div className="popup-list">
+          {content.items.map(s => (
+            <button
+              key={s.key}
+              className="setting-row"
+              role="switch"
+              aria-checked={s.on}
+              onClick={() => send({ type: 'settings.set', id: s.key, index: s.on ? 0 : 1 })}
+            >
+              <span className="setting-text">
+                <span className="row-title">{s.label}</span>
+                {s.hint && <span className="row-sub">{s.hint}</span>}
+              </span>
+              <span className={`switch${s.on ? ' on' : ''}`} aria-hidden />
+            </button>
+          ))}
         </div>
       </div>
     );

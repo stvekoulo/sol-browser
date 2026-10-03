@@ -59,22 +59,6 @@ public sealed class PopupHost
         _frame.Visibility = Visibility.Collapsed;
     }
 
-    // Applique la découpe arrondie DirectComposition après le calcul de mise en page XAML.
-    private void ApplyRoundedClip()
-    {
-        if (_frame.Visibility != Visibility.Visible) return;
-        var w = (float)(_frame.ActualWidth > 1 ? _frame.ActualWidth : _frame.Width);
-        var h = (float)(_frame.ActualHeight > 1 ? _frame.ActualHeight : _frame.Height);
-        if (w <= 1 || h <= 1) return;
-
-        var visual = ElementCompositionPreview.GetElementVisual(_frame);
-        var geo = visual.Compositor.CreateRoundedRectangleGeometry();
-        geo.Size = new Vector2(w, h);
-        geo.CornerRadius = new Vector2(Radius, Radius);
-        var clip = visual.Compositor.CreateGeometricClip(geo);
-        visual.Clip = clip;
-        ElementCompositionPreview.GetElementVisual(_view).Clip = clip;
-        if (ElementCompositionPreview.GetElementChildVisual(_view) is { } child)
-            child.Clip = clip;
-    }
+    // Applique la découpe arrondie après le calcul de mise en page XAML.
+    private void ApplyRoundedClip() => RoundedClip.Apply(_frame, _view, Radius);
 }
