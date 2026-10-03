@@ -1,50 +1,80 @@
+using System.Numerics;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Hosting;
 
 namespace Browser.App;
 
-/// <summary>
-/// Petite vue d'interface posée par-dessus la page, à la taille de son contenu : suggestions, bibliothèque, menu contextuel.
-/// Opaque par construction : la transparence d'une vue web ne fonctionne pas en WinUI 3 (voir les résultats du prototype 1).
-/// </summary>
-public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge)
+// Petite vue flottante posée par-dessus la page (suggestions, bibliothèque, téléchargements, menus).
+public sealed class PopupHost
 {
-    private const double Edge = 8; // marge gardée avec les bords de la fenêtre
+    private const double Edge = 10;
+    private const float Radius = 20f;
+    private readonly Grid _frame;
+    private readonly WebView2 _view;
+    private readonly UiBridge _bridge;
     private bool _pending;
     private bool _focus;
     private double _x, _y;
 
-    /// <summary>Place la vue et lui envoie son contenu. Elle devient visible quand elle a annoncé sa hauteur.</summary>
+    public PopupHost(Grid frame, WebView2 view, UiBridge bridge)
+    {
+        (_frame, _view, _bridge) = (frame, view, bridge);
+        _frame.SizeChanged += (_, _) => ApplyRoundedClip();
+        _frame.LayoutUpdated += (_, _) => ApplyRoundedClip();
+    }
+
     public void Show(double x, double y, double width, string contentJson, bool focus)
     {
-        frame.Width = Math.Clamp(width, 120, 900);
+        _frame.Width = Math.Clamp(width, 160, 900);
         (_x, _y) = (x, y);
         _pending = true;
         _focus = focus;
-        bridge.Post(contentJson);
+        _bridge.Post(contentJson);
     }
 
-    public void Post(string json) => bridge.Post(json);
+    public void Post(string json) => _bridge.Post(json);
 
     public void SetHeight(double height)
     {
-        if (!_pending && frame.Visibility == Visibility.Collapsed) return;
-        frame.Height = Math.Clamp(height, 1, 520);
+        if (!_pending && _frame.Visibility == Visibility.Collapsed) return;
+        _frame.Height = Math.Clamp(height, 1, 520);
 
-        // La vue reste entière dans la fenêtre : elle se décale si elle dépasserait à droite ou en bas.
-        var window = (FrameworkElement)frame.Parent;
-        var x = Math.Max(Edge, Math.Min(_x, window.ActualWidth - frame.Width - Edge));
-        var y = Math.Max(Edge, Math.Min(_y, window.ActualHeight - frame.Height - Edge));
-        frame.Margin = new Thickness(x, y, 0, 0);
+        var window = (FrameworkElement)_frame.Parent;
+        var x = Math.Max(Edge, Math.Min(_x, window.ActualWidth - _frame.Width - Edge));
+        var y = Math.Max(Edge, Math.Min(_y, window.ActualHeight - _frame.Height - Edge));
+        _frame.Margin = new Thickness(x, y, 0, 0);
 
-        frame.Visibility = Visibility.Visible;
-        if (_pending && _focus) view.Focus(FocusState.Programmatic);
+        _frame.Visibility = Visibility.Visible;
+        _frame.UpdateLayout();
+        ApplyRoundedClip();
+
+        if (_pending && _focus) _view.Focus(FocusState.Programmatic);
         _pending = false;
     }
 
     public void Hide()
     {
         _pending = false;
-        frame.Visibility = Visibility.Collapsed;
+        _frame.Visibility = Visibility.Collapsed;
+    }
+
+    // Applique la découpe arrondie DirectComposition après le calcul de mise en page XAML.
+    private void ApplyRoundedClip()
+    {
+        if (_frame.Visibility != Visibility.Visible) return;
+        var w = (float)(_frame.ActualWidth > 1 ? _frame.ActualWidth : _frame.Width);
+        var h = (float)(_frame.ActualHeight > 1 ? _frame.ActualHeight : _frame.Height);
+        if (w <= 1 || h <= 1) return;
+
+        var visual = ElementCompositionPreview.GetElementVisual(_frame);
+        var geo = visual.Compositor.CreateRoundedRectangleGeometry();
+        geo.Size = new Vector2(w, h);
+        geo.CornerRadius = new Vector2(Radius, Radius);
+        var clip = visual.Compositor.CreateGeometricClip(geo);
+        visual.Clip = clip;
+        ElementCompositionPreview.GetElementVisual(_view).Clip = clip;
+        if (ElementCompositionPreview.GetElementChildVisual(_view) is { } child)
+            child.Clip = clip;
     }
 }

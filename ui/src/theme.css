@@ -1,45 +1,120 @@
-/* Tout le design passe par ces variables : c'est le seul fichier à modifier pour rhabiller le navigateur. */
+/* Variables de design : verre dépoli adaptatif selon la couleur de la page (--page-bg). */
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 
-  --font: Inter, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font: Inter, "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
   --font-size: 13px;
 
-  --titlebar-height: 40px;
-  --toolbar-height: 48px;
-  --radius-control: 8px;
-  --radius-tab: 9px;
-  --gap: 8px;
+  --topbar-height: 52px;
+  --radius-pill: 999px;
+  --radius-card: 22px;
+  --radius-control: 12px;
 
-  --bg-chrome: #ececee;
-  --bg-toolbar: #f7f7f8;
-  --bg-tab-hover: rgba(0, 0, 0, 0.06);
-  --bg-tab-active: #f7f7f8;
-  --bg-field: #e6e6e9;
-  --bg-field-focus: #ffffff;
-  --text: #1d1d1f;
-  --text-dim: #6e6e73;
-  --border: rgba(0, 0, 0, 0.1);
+  /* Couleur dynamique injectée par l'hôte selon la page active */
+  --page-bg: #eef0e2;
+
+  /* Surface de la carte latérale : fusionne la teinte de la page avec un voile givré */
+  --bg-sidebar-card: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--page-bg) 68%, #ffffff 32%) 0%,
+    color-mix(in srgb, var(--page-bg) 82%, #dde0ce 18%) 55%,
+    color-mix(in srgb, var(--page-bg) 74%, #cfd3be 26%) 100%
+  );
+  --border-card: rgba(255, 255, 255, 0.78);
+  --shadow-card:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    0 10px 26px rgba(0, 0, 0, 0.06),
+    0 0 0 0.5px rgba(0, 0, 0, 0.06);
+
+  --bg-popup: color-mix(in srgb, var(--page-bg) 45%, #ffffff 55%);
+
+  /* Capsules translucides de la barre supérieure */
+  --bg-glass-pill: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--page-bg) 28%, rgba(255, 255, 255, 0.88)) 0%,
+    color-mix(in srgb, var(--page-bg) 48%, rgba(255, 255, 255, 0.68)) 100%
+  );
+  --bg-glass-pill-hover: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--page-bg) 16%, rgba(255, 255, 255, 0.96)) 0%,
+    color-mix(in srgb, var(--page-bg) 32%, rgba(255, 255, 255, 0.82)) 100%
+  );
+
+  /* Pilules flottantes surélevées (URL sidebar, favoris G/X/Youtube, onglet actif) */
+  --bg-pill-solid: rgba(255, 255, 255, 0.92);
+  --bg-pill-solid-hover: #ffffff;
+  --bg-tab-hover: rgba(0, 0, 0, 0.05);
+
+  --text: #18181b;
+  --text-dim: rgba(24, 24, 27, 0.58);
+  --border: rgba(0, 0, 0, 0.07);
+  --border-strong: rgba(0, 0, 0, 0.12);
   --accent: #0a84ff;
+
+  --shadow-glass-pill:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    0 3px 8px rgba(0, 0, 0, 0.055),
+    0 0 0 0.5px rgba(0, 0, 0, 0.075);
+
+  --shadow-pill-elevated:
+    inset 0 1px 0 #ffffff,
+    0 4px 12px rgba(0, 0, 0, 0.065),
+    0 0 0 0.5px rgba(0, 0, 0, 0.045);
 
   --light-close: #ff5f57;
   --light-minimize: #febc2e;
   --light-maximize: #28c840;
 
-  --ease: cubic-bezier(0.2, 0, 0, 1);
-  --fast: 120ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --fast: 160ms;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg-chrome: #1e1e20;
-    --bg-toolbar: #2a2a2d;
-    --bg-tab-hover: rgba(255, 255, 255, 0.07);
-    --bg-tab-active: #2a2a2d;
-    --bg-field: #1c1c1e;
-    --bg-field-focus: #141416;
-    --text: #f5f5f7;
-    --text-dim: #98989d;
-    --border: rgba(255, 255, 255, 0.1);
-  }
+/* Adaptation automatique lorsque la page active est sombre (ex: YouTube Dark, X, GitHub Dark) */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg-sidebar-card: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--page-bg) 82%, #ffffff 18%) 0%,
+    color-mix(in srgb, var(--page-bg) 90%, #ffffff 10%) 55%,
+    color-mix(in srgb, var(--page-bg) 94%, #ffffff 6%) 100%
+  );
+  --border-card: rgba(255, 255, 255, 0.12);
+  --shadow-card:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 12px 28px rgba(0, 0, 0, 0.42),
+    0 0 0 0.5px rgba(255, 255, 255, 0.08);
+
+  --bg-popup: color-mix(in srgb, var(--page-bg) 78%, #27272a 22%);
+
+  --bg-glass-pill: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.14) 0%,
+    rgba(255, 255, 255, 0.08) 100%
+  );
+  --bg-glass-pill-hover: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.2) 0%,
+    rgba(255, 255, 255, 0.12) 100%
+  );
+
+  --bg-pill-solid: rgba(255, 255, 255, 0.13);
+  --bg-pill-solid-hover: rgba(255, 255, 255, 0.18);
+  --bg-tab-hover: rgba(255, 255, 255, 0.07);
+
+  --text: #f4f4f6;
+  --text-dim: rgba(244, 244, 246, 0.6);
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --accent: #409cff;
+
+  --shadow-glass-pill:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 4px 10px rgba(0, 0, 0, 0.32),
+    0 0 0 0.5px rgba(255, 255, 255, 0.1);
+
+  --shadow-pill-elevated:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 5px 14px rgba(0, 0, 0, 0.38),
+    0 0 0 0.5px rgba(255, 255, 255, 0.09);
 }

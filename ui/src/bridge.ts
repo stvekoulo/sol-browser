@@ -44,18 +44,47 @@ const webview = (window as unknown as { chrome?: { webview?: WebView } }).chrome
 
 export const send = (command: Command) => webview?.postMessage(JSON.stringify(command));
 
+// L'hôte envoie soit l'état complet, soit un événement ponctuel { event: "…" }.
+export type HostEvent = {
+  event: string;
+  id?: string;
+  data?: string | null;
+  count?: number;
+  open?: boolean;
+  bg?: string;
+  dark?: boolean;
+};
+
 export function onMessage(callback: (data: unknown) => void) {
-  const handler = (e: MessageEvent) => callback(e.data);
+  const handler = (e: MessageEvent) => {
+    const ev = e.data as HostEvent | null;
+    if (ev && ev.event === 'theme' && ev.bg) {
+      document.documentElement.style.setProperty('--page-bg', ev.bg);
+      document.documentElement.dataset.theme = ev.dark ? 'dark' : 'light';
+      return;
+    }
+    callback(e.data);
+  };
   webview?.addEventListener('message', handler);
   return () => webview?.removeEventListener('message', handler);
 }
-
-// L'hôte envoie soit l'état complet, soit un événement ponctuel { event: "…" }.
-export type HostEvent = { event: string; id?: string; data?: string | null };
 
 export function onState(callback: (state: State) => void, onEvent?: (event: HostEvent) => void) {
   return onMessage(data => {
     if (typeof (data as HostEvent).event === 'string') onEvent?.(data as HostEvent);
     else callback(data as State);
   });
+}
+
+// Extrait le nom de domaine épuré (ex. "corn.tech") pour la pilule centrale de la barre du haut.
+export function formatDomain(url: string): string {
+  if (!url || url === 'about:blank') return '';
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:')
+      return parsed.hostname.replace(/^www\./i, '');
+  } catch {
+    // URL non standard : affichage brut
+  }
+  return url;
 }

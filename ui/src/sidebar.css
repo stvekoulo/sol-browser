@@ -1,0 +1,172 @@
+/* Carte latérale flottante (#sidebar) : aucun cadre externe, tout flotte sur --page-bg. */
+.sidebar-body {
+  background-color: var(--page-bg);
+  transition: background-color 220ms var(--ease-out);
+}
+
+.sidebar-card {
+  height: calc(100% - 12px);
+  margin: 2px 10px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  background: var(--bg-sidebar-card);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border-card);
+  box-shadow: var(--shadow-card);
+  transition: background 220ms var(--ease-out), border-color 220ms var(--ease-out), box-shadow 220ms var(--ease-out);
+}
+
+/* Pilule flottante d'URL complète en haut de la carte latérale */
+.sidebar-url-pill {
+  height: 40px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 0 14px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-pill-solid);
+  box-shadow: var(--shadow-pill-elevated);
+  transition: background var(--fast) var(--ease-out), box-shadow var(--fast) var(--ease-out);
+}
+.sidebar-url-pill:hover,
+.sidebar-url-pill:focus-within {
+  background: var(--bg-pill-solid-hover);
+}
+.lock-icon { flex: none; color: var(--text); }
+.sidebar-url-form { flex: 1; min-width: 0; }
+.sidebar-url-form input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  user-select: text;
+  outline: none;
+  text-overflow: ellipsis;
+}
+.sidebar-url-form input::placeholder { color: var(--text-dim); }
+.sidebar-url-btn {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--text-dim);
+}
+.sidebar-url-btn:hover { background: var(--bg-tab-hover); color: var(--text); }
+.sidebar-url-btn.copied { color: #28c840; }
+
+/* Rangée des pilules flottantes (G, X, Youtube) */
+.pinned-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  flex: none;
+}
+.pinned-pill {
+  height: 40px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-pill-solid);
+  box-shadow: var(--shadow-pill-elevated);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 500;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.pinned-pill.circle { width: 46px; flex: none; }
+.pinned-pill.wide { flex: 1; min-width: 0; padding: 0 14px; }
+.pinned-pill.wide span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.pinned-pill:hover { background: var(--bg-pill-solid-hover); transform: translateY(-0.5px); }
+.pinned-pill.active { box-shadow: var(--shadow-pill-elevated), 0 0 0 1.5px var(--border-strong); }
+
+/* Liste verticale des onglets flottants */
+.sidebar-tabs {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.sidebar-tabs::-webkit-scrollbar { display: none; }
+
+.sidebar-tab {
+  height: 38px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px 0 12px;
+  border-radius: var(--radius-pill);
+  color: var(--text);
+  font-size: 12.5px;
+  transition: background var(--fast) var(--ease-out), box-shadow var(--fast) var(--ease-out);
+}
+.sidebar-tab:hover { background: var(--bg-tab-hover); }
+.sidebar-tab.active {
+  background: var(--bg-pill-solid);
+  box-shadow: var(--shadow-pill-elevated);
+  font-weight: 500;
+}
+.sidebar-tab.dragging, .sidebar-split-group.dragging {
+  position: relative;
+  z-index: 2;
+  background: var(--bg-pill-solid-hover);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+}
+
+/* Paire d'onglets scindés : deux pilules flottantes côte à côte sans cadre englobant */
+.sidebar-split-group {
+  display: flex;
+  gap: 6px;
+}
+.sidebar-split-group .sidebar-tab {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  background: var(--bg-tab-hover);
+}
+.sidebar-split-group.active .sidebar-tab,
+.sidebar-split-group .sidebar-tab.active {
+  background: var(--bg-pill-solid);
+  box-shadow: var(--shadow-pill-elevated);
+}
+
+.sidebar-tab-title { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.sidebar-tab-close {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--text-dim);
+  opacity: 0.55;
+}
+.sidebar-tab:hover .sidebar-tab-close, .sidebar-tab.active .sidebar-tab-close { opacity: 0.85; }
+.sidebar-tab-close:hover { background: var(--bg-tab-hover); color: var(--text); opacity: 1 !important; }
+
+.sidebar-new-tab {
+  height: 36px;
+  flex: none;
+  margin-top: 4px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-dim);
+  font-size: 12.5px;
+}
+.sidebar-new-tab:hover { background: var(--bg-tab-hover); color: var(--text); }

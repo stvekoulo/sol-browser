@@ -52,8 +52,9 @@ public sealed partial class MainWindow : Window
             : null;
 
         var pages = new PageHost(Pages, PrimaryColumn, DividerColumn, SecondaryColumn, blur, settings);
-        var bridge = new UiBridge(Ui);
+        var bridge = new UiBridge(Ui, "index.html", Sidebar, SidebarColumn, pages);
         var popupBridge = new UiBridge(Popup, "index.html#popup");
+        bridge.AttachPopup(popupBridge);
         var popup = new PopupHost(PopupFrame, Popup, popupBridge);
         _controller = new BrowserController(this, pages, bridge, popup, settings);
         WireDivider();
@@ -64,10 +65,7 @@ public sealed partial class MainWindow : Window
         popup.Hide();
     }
 
-    // Séparateur de la vue scindée : le glisser change la part de chaque page.
-    // Ni la capture XAML ni la capture Win32 ne tiennent : dès que la souris quitte la poignée, la page web
-    // survolée reprend la capture (constaté au journal). Tant que le bouton reste enfoncé, on lit donc
-    // directement la position du curseur à chaque image.
+    // Séparateur de la vue scindée : scrutation directe de la souris tant que le bouton est enfoncé.
     private DispatcherTimer? _dividerTimer;
     private double _dividerRatio;
 
@@ -89,10 +87,13 @@ public sealed partial class MainWindow : Window
             // Bouton principal : le droit si l'utilisateur a inversé les boutons de sa souris.
             var button = GetSystemMetrics(23 /* SM_SWAPBUTTON */) != 0 ? 0x02 : 0x01;
             if ((GetAsyncKeyState(button) & 0x8000) == 0) { timer.Stop(); return; }
-            if (!GetCursorPos(out var point) || !ScreenToClient(_hwnd, ref point) || !GetClientRect(_hwnd, out var rect) || rect.Right <= 0) return;
+            if (!GetCursorPos(out var point) || !ScreenToClient(_hwnd, ref point) || !GetClientRect(_hwnd, out var rect)) return;
 
-            var ratio = (double)point.X / rect.Right;
-            if (Math.Abs(ratio - _dividerRatio) < 0.002) return; // la souris n'a pas bougé
+            var sideWidth = SidebarColumn.Width.Value;
+            var pagesWidth = rect.Right - sideWidth;
+            if (pagesWidth <= 0) return;
+            var ratio = (point.X - sideWidth) / pagesWidth;
+            if (Math.Abs(ratio - _dividerRatio) < 0.002) return;
             _dividerRatio = ratio;
             _controller?.Execute(new Command("split.resize", Ratio: ratio));
         };

@@ -1,0 +1,237 @@
+/* Surfaces flottantes (#popup) : menus contextuels, suggestions, favoris, historique et téléchargements. */
+.popup-body {
+  background: var(--bg-sidebar-card);
+  overflow: hidden;
+}
+
+.popup {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border-radius: 20px;
+  background: var(--bg-sidebar-card);
+  border: 1px solid var(--border-card);
+  box-shadow: inset 0 1px 0 var(--border-card);
+}
+
+.popup-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 400px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.popup-list::-webkit-scrollbar { display: none; }
+
+/* Sélecteur segmenté flottant (Favoris / Historique) */
+.popup-segment {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  margin-bottom: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-tab-hover);
+}
+.popup-seg-btn {
+  flex: 1;
+  height: 32px;
+  border-radius: var(--radius-pill);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-dim);
+}
+.popup-seg-btn:hover { color: var(--text); }
+.popup-seg-btn.active {
+  background: var(--bg-pill-solid-hover);
+  box-shadow: var(--shadow-pill-elevated);
+  color: var(--text);
+}
+.popup-seg-count {
+  height: 18px;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-tab-hover);
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* En-tête de panneau (Téléchargements) */
+.popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 10px 6px;
+}
+.popup-header-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.popup-badge {
+  height: 20px;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-pill-solid);
+  box-shadow: var(--shadow-pill-elevated);
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Lignes flottantes en forme de capsule (menus, suggestions, favoris, historique) */
+.row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  height: 36px;
+  padding: 0 10px 0 7px;
+  border-radius: var(--radius-pill);
+  text-align: left;
+  color: var(--text);
+}
+.row:hover,
+.row.selected {
+  background: var(--bg-pill-solid-hover);
+  box-shadow: var(--shadow-pill-elevated);
+}
+.row.danger:hover {
+  color: #e5484d;
+}
+.row.danger:hover .row-badge {
+  background: rgba(229, 72, 77, 0.12);
+  color: #e5484d;
+}
+
+.row-badge {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--bg-tab-hover);
+  color: var(--text-dim);
+  display: grid;
+  place-items: center;
+  transition: background var(--fast) var(--ease-out), color var(--fast) var(--ease-out);
+}
+.row:hover .row-badge,
+.row.selected .row-badge {
+  background: var(--bg-tab-hover);
+  color: var(--text);
+}
+
+.row-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12.5px;
+  font-weight: 450;
+}
+.row-sub {
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+.row-pill {
+  flex: none;
+  max-width: 42%;
+  height: 21px;
+  padding: 0 8px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-tab-hover);
+  color: var(--text-dim);
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.popup hr {
+  width: calc(100% - 24px);
+  margin: 3px 12px;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+.empty-pill {
+  margin: 4px 2px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: var(--bg-pill-solid);
+  box-shadow: var(--shadow-pill-elevated);
+  color: var(--text-dim);
+  font-size: 12.5px;
+  text-align: center;
+}
+
+/* Cartes flottantes des téléchargements */
+.download-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 9px 10px;
+  border-radius: 16px;
+  background: var(--bg-pill-solid);
+  box-shadow: var(--shadow-pill-elevated);
+}
+.download-top {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.download-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.download-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+.pill-action {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-tab-hover);
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+.pill-action:hover { background: var(--border-strong); }
+.pill-action.primary {
+  background: var(--accent);
+  color: #ffffff;
+}
+.pill-action.primary:hover { filter: brightness(1.06); }
+
+.download-bar {
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-tab-hover);
+  overflow: hidden;
+}
+.download-bar-fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  transition: width 180ms var(--ease-out);
+}
