@@ -50,6 +50,7 @@ public sealed class BrowserController
         _pages.PermissionRequested += OnPermissionRequested;
         _window.AppWindow.Changed += (_, e) => { if (e.DidPresenterChange || e.DidSizeChange) Refresh(); };
         _window.Closed += (_, _) => { SaveSession(); _db.Dispose(); };
+        ApplyComparison();
     }
 
     private static string T(string fr, string en) => Language.T(fr, en);
@@ -102,6 +103,7 @@ public sealed class BrowserController
             case "shortcut.menu": OpenShortcutMenu(c.Index!.Value, c.X!.Value, c.Y!.Value); return;
             case "shortcut.update": UpdateShortcut(id, c.Title!, c.Input!); break;
             case "shortcut.open": OpenShortcut(c.Index!.Value); break;
+            case "device.compare": SetComparison(id, c.Query!); return;
             case "device.rotate": _pages.RotateDevice(id); return;
             case "device.set": _pages.SetDevice(id, c.Query!.Length == 0 ? null : c.Query); HidePopup(); return;
             case "tab.menu": OpenTabMenu(id, c.X!.Value, c.Y!.Value); return;
@@ -977,10 +979,41 @@ public sealed class BrowserController
 
     private static string DeviceLabel(string name) => name switch
     {
-        "iPhone Fold cover" => T("iPhone Fold (plié)", "iPhone Fold (folded)"),
-        PageHost.Comparison => T("3 écrans", "3 screens"),
+        "iPhone Duo cover" => T("iPhone Duo (plié)", "iPhone Duo (folded)"),
+        "Desktop" => T("Ordinateur", "Desktop"),
+        PageHost.Comparison => T("Comparaison", "Comparison"),
         _ => name,
     };
+
+    // Comparaison d'écrans : de deux à quatre appareils, choisis par l'utilisateur et retenus dans les réglages.
+    private const int MinCompared = 2, MaxCompared = 4;
+
+    private void ApplyComparison()
+    {
+        var known = Device.All.Select(d => d.Name).Where(_settings.CompareDevices.Contains).ToList(); // dans l'ordre du catalogue
+        _pages.ComparisonDevices = known.Count is >= MinCompared and <= MaxCompared ? known : Device.DefaultComparison;
+    }
+
+    private void AskComparison(string tabId)
+    {
+        HidePopup();
+        _popup.ShowCentered(340, JsonSerializer.Serialize(new
+        {
+            popup = "compare-pick", id = tabId, min = MinCompared, max = MaxCompared,
+            devices = Device.All.Select(d => new { name = d.Name, label = DeviceLabel(d.Name), size = $"{d.Width} × {d.Height}", on = _pages.ComparisonDevices.Contains(d.Name) }),
+        }), top: 64);
+    }
+
+    private void SetComparison(string tabId, string names)
+    {
+        var chosen = names.Split('|').Where(n => Device.Find(n) is not null).Distinct().ToList();
+        if (chosen.Count is < MinCompared or > MaxCompared) return;
+        _settings.CompareDevices = chosen;
+        JsonFileStore.Save(AppPaths.Settings, _settings);
+        ApplyComparison();
+        HidePopup();
+        _pages.SetDevice(tabId, PageHost.Comparison);
+    }
 
     private void OpenContextMenu(string tabId, double x, double y, Microsoft.Web.WebView2.Core.CoreWebView2ContextMenuRequestedEventArgs e)
     {
@@ -1011,9 +1044,10 @@ public sealed class BrowserController
         items.Add((simulated ? T("Changer d'appareil…", "Change device…") : T("Voir en mobile…", "View as mobile…"), () => _afterMenu = () =>
             ShowMenu(x, y,
             [
-                .. Device.All.Select(d => (DeviceLabel(d.Name), (Action?)(() => _afterMenu = () => _pages.SetDevice(tabId, d.Name)))),
+                .. Device.All.Where(d => !d.Desktop).Select(d => (DeviceLabel(d.Name), (Action?)(() => _afterMenu = () => _pages.SetDevice(tabId, d.Name)))),
                 ("", null),
-                (T("Comparer téléphone, tablette et ordinateur", "Compare phone, tablet and desktop"), () => _afterMenu = () => _pages.SetDevice(tabId, PageHost.Comparison)),
+                (T("Comparer plusieurs écrans", "Compare several screens"), () => _afterMenu = () => _pages.SetDevice(tabId, PageHost.Comparison)),
+                (T("Choisir les écrans à comparer…", "Choose the screens to compare…"), () => _afterMenu = () => AskComparison(tabId)),
             ])));
         if (simulated) items.Add((T("Pivoter l'appareil", "Rotate device"), () => _afterMenu = () => _pages.RotateDevice(tabId)));
         if (simulated) items.Add((T("Revenir à la vue ordinateur", "Back to desktop view"), () => _afterMenu = () => _pages.SetDevice(tabId, null)));
@@ -1059,6 +1093,9 @@ public sealed class BrowserController
         for (var i = 0; i < tabs.Count && i < session.ShortcutOf.Count; i++)
             if (tabs[i].Pinned && session.ShortcutOf[i] is { } rank && rank >= 0 && rank < _settings.Shortcuts.Count)
                 _shortcutTabs.TryAdd(_settings.Shortcuts[rank], tabs[i].Id);
+        // Appareil simulé : repris quand l'onglet se réveille.
+        for (var i = 0; i < tabs.Count && i < session.Devices.Count; i++)
+            if (session.Devices[i].Split('|') is [{ Length: > 0 } device, .. var rest]) _pages.WantDevice(tabs[i].Id, device, rest.Contains("L"));
 
         // Groupes : recréés autour de leurs onglets, qui étaient voisins à l'enregistrement.
         for (var g = 0; g < session.Groups.Count; g++)
@@ -1088,6 +1125,7 @@ public sealed class BrowserController
             Urls = tabs.Select(t => t.Url).ToList(),
             Titles = tabs.Select(t => t.Title).ToList(),
             PinnedCount = _tabs.PinnedCount,
+            Devices = tabs.Select(t => _pages.DeviceState(t.Id) is var (device, landscape) ? device + (landscape ? "|L" : "") : "").ToList(),
             ShortcutOf = tabs.Select(t => _settings.Shortcuts.FindIndex(s => _shortcutTabs.GetValueOrDefault(s) == t.Id) is >= 0 and var rank ? rank : (int?)null).ToList(),
             Groups = _tabs.Groups.Select(g => new SessionGroup { Name = g.Name, Color = g.Color, Icon = g.Icon, Collapsed = g.Collapsed }).ToList(),
             GroupOf = tabs.Select(t => t.GroupId is null ? (int?)null : _tabs.Groups.ToList().FindIndex(g => g.Id == t.GroupId)).ToList(),

@@ -30,6 +30,8 @@ public sealed class Settings
     public string HomePage { get; set; } = DefaultHomePage;
     /// <summary>Langue de l'interface : "system" (celle de Windows), "fr" ou "en".</summary>
     public string Language { get; set; } = "system";
+    /// <summary>Écrans affichés côte à côte par la comparaison d'écrans ; vide : le choix par défaut.</summary>
+    public List<string> CompareDevices { get; set; } = new();
     /// <summary>Raccourcis de la carte latérale. Ceux-ci sont proposés au départ ; l'utilisateur les modifie ou les retire.</summary>
     public List<SiteShortcut> Shortcuts { get; set; } =
     [
@@ -85,6 +87,8 @@ public sealed class Session
     public List<int?> GroupOf { get; set; } = new();
     /// <summary>Pour chaque adresse de <see cref="Urls"/>, le rang du raccourci dans lequel elle est ouverte (ou null).</summary>
     public List<int?> ShortcutOf { get; set; } = new();
+    /// <summary>Pour chaque adresse, l'appareil simulé (vide : aucun) ; suivi de « |L » s'il est tourné.</summary>
+    public List<string> Devices { get; set; } = new();
 }
 
 public sealed class SessionGroup

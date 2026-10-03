@@ -15,6 +15,7 @@ type Content =
   | { popup: 'profiles'; items: Profile[] }
   | { popup: 'group-edit'; create: boolean; id: string; name: string; color: string; icon: string; presets: string[] }
   | { popup: 'shortcut-edit'; id: string; name: string; url: string }
+  | { popup: 'compare-pick'; id: string; min: number; max: number; devices: { name: string; label: string; size: string; on: boolean }[] }
   | { popup: 'permission'; site: string; what: string; secure: boolean }
   | { popup: 'prompt'; title: string; hint: string; placeholder: string; submit: string; value: string; command: string; id: string | null };
 
@@ -29,7 +30,7 @@ function menuIconPath(label: string): string {
   if (has('épingler', 'détacher', 'pin')) return 'M5.5 2.5h5l.5 4 2 2v1h-9v-1l2-2zM8 9.5v4.5';
   if (isClosing(label)) return 'M4.5 4.5l7 7M11.5 4.5l-7 7';
   if (has('pivoter', 'rotate')) return 'M12.8 8a4.8 4.8 0 1 1-1.4-3.4M12.8 3.2v3h-3';
-  if (has('comparer', 'compare')) return 'M1.5 4.5h3.5v7H1.5zM6.5 3.5h3v9h-3zM11 5.5h3.5v5H11z';
+  if (has('comparer', 'compare', 'écrans', 'screens')) return 'M1.5 4.5h3.5v7H1.5zM6.5 3.5h3v9h-3zM11 5.5h3.5v5H11z';
   if (has('mobile', 'iphone', 'ipad', 'appareil', 'device')) return 'M5 2.5h6v11H5zM7.3 11.5h1.4';
   if (has('ordinateur', 'desktop')) return 'M2.5 3.5h11v7h-11zM6 13h4M8 10.5V13';
   if (has('zone', 'area')) return 'M2.5 5.5v-3h3M10.5 2.5h3v3M13.5 10.5v3h-3M5.5 13.5h-3v-3';
@@ -301,6 +302,9 @@ export default function Popup() {
   if (content.popup === 'shortcut-edit')
     return <ShortcutForm key={opening} rootRef={root} ask={content} />;
 
+  if (content.popup === 'compare-pick')
+    return <ComparePicker key={opening} rootRef={root} ask={content} />;
+
   if (content.popup === 'prompt')
     return <NameForm key={opening} rootRef={root} ask={content} />;
 
@@ -507,6 +511,52 @@ function ShortcutForm({ rootRef, ask }: { rootRef: RefObject<HTMLDivElement | nu
         <div className="name-form-actions">
           <button type="button" className="pill-action" onClick={() => send({ type: 'popup.close' })}>{t('Annuler', 'Cancel')}</button>
           <button type="submit" className="pill-action primary" disabled={!url.trim()}>{t('Enregistrer', 'Save')}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// Choix des écrans de la comparaison : de « min » à « max » appareils, affichés côte à côte.
+function ComparePicker({ rootRef, ask }: { rootRef: RefObject<HTMLDivElement | null>; ask: Extract<Content, { popup: 'compare-pick' }> }) {
+  const [chosen, setChosen] = useState(() => ask.devices.filter(d => d.on).map(d => d.name));
+  const valid = chosen.length >= ask.min && chosen.length <= ask.max;
+  return (
+    <div ref={rootRef} className="popup arriving">
+      <form
+        className="name-form"
+        onSubmit={e => {
+          e.preventDefault();
+          if (valid) send({ type: 'device.compare', id: ask.id, query: chosen.join('|') });
+        }}
+      >
+        <span className="name-form-title">{t('Écrans à comparer', 'Screens to compare')}</span>
+        <p className="row-sub">{t(`De ${ask.min} à ${ask.max} écrans, affichés côte à côte.`, `${ask.min} to ${ask.max} screens, shown side by side.`)}</p>
+        <div className="popup-list">
+          {ask.devices.map(d => {
+            const on = chosen.includes(d.name);
+            return (
+              <button
+                key={d.name}
+                type="button"
+                className="setting-row"
+                role="switch"
+                aria-checked={on}
+                disabled={!on && chosen.length >= ask.max}
+                onClick={() => setChosen(on ? chosen.filter(n => n !== d.name) : [...chosen, d.name])}
+              >
+                <span className="setting-text">
+                  <span className="row-title">{d.label}</span>
+                  <span className="row-sub">{d.size}</span>
+                </span>
+                <span className={`switch${on ? ' on' : ''}`} aria-hidden />
+              </button>
+            );
+          })}
+        </div>
+        <div className="name-form-actions">
+          <button type="button" className="pill-action" onClick={() => send({ type: 'popup.close' })}>{t('Annuler', 'Cancel')}</button>
+          <button type="submit" className="pill-action primary" disabled={!valid}>{t('Comparer', 'Compare')}</button>
         </div>
       </form>
     </div>

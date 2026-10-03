@@ -32,7 +32,7 @@ public static class CommandParser
         ["profile.switch"] = ["id"], ["profile.delete"] = ["id"], ["profile.new"] = [], ["profile.create"] = ["title"],
         ["profile.edit"] = ["id"], ["profile.rename"] = ["id", "title"],
         ["shortcut.menu"] = ["index", "x", "y"], ["shortcut.open"] = ["index"], ["shortcut.update"] = ["id", "title", "input"],
-        ["device.set"] = ["id", "query"], ["device.rotate"] = ["id"],
+        ["device.set"] = ["id", "query"], ["device.rotate"] = ["id"], ["device.compare"] = ["id", "query"],
         ["ui.ready"] = [],
     };
 

@@ -86,6 +86,7 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
         core.StatusBarTextChanged += (_, _) => StatusChanged?.Invoke(tab.Id, core.StatusBarText);
         core.FaviconChanged += async (_, _) => FaviconChanged?.Invoke(tab.Id, await ReadFaviconAsync(core));
         Navigate(tab.Id, tab.Url);
+        if (_wanted.Remove(tab.Id, out var wanted)) SetDevice(tab.Id, wanted.Name, wanted.Landscape);
     }
 
     // Pages d'erreur du navigateur. _target : adresse de la navigation en cours ; _errorUrl : adresse dont la page
@@ -141,12 +142,13 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
         await core.CallDevToolsProtocolMethodAsync("Emulation.setScrollbarsHidden", settings.HideScrollbars ? """{"hidden":true}""" : """{"hidden":false}""");
 
         var installed = _blurScriptIds.TryGetValue(id, out var scriptId);
-        if (settings.BlurEnabled && !installed)
+        var blur = settings.BlurEnabled && !_mode.ContainsKey(id); // pas de flou dans un écran simulé
+        if (blur && !installed)
         {
             _blurScriptIds[id] = await core.AddScriptToExecuteOnDocumentCreatedAsync(blurScript);
             await core.ExecuteScriptAsync(blurScript); // la page déjà affichée
         }
-        else if (!settings.BlurEnabled && installed)
+        else if (!blur && installed)
         {
             core.RemoveScriptToExecuteOnDocumentCreated(scriptId);
             _blurScriptIds.Remove(id);
@@ -256,9 +258,9 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
         }
     }
 
-    // Simulateur d'appareil : la vue de l'onglet prend la taille de l'écran de l'appareil, dans sa coque, le tout à
-    // l'échelle de la fenêtre. Le site reçoit l'agent de l'appareil, un écran tactile, sa taille d'écran et sa densité
-    // de pixels. Rien n'est injecté dans la page.
+    // Simulateur d'appareil : la vue de l'onglet prend la place de la page sur l'écran de l'appareil (sous sa barre
+    // d'état), dans sa coque, le tout à l'échelle de la fenêtre. Le site reçoit l'agent de l'appareil, un écran tactile,
+    // sa taille d'affichage et sa densité de pixels. Rien n'est injecté dans la page.
     // Comparaison d'écrans : la vue de l'onglet et des vues « miroirs » de la même page, une par appareil, côte à côte.
     private sealed class Sim(WebView2 view, Device device)
     {
@@ -266,7 +268,10 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
         public Device Device { get; } = device;
         public bool Landscape;
         public FrameworkElement? Below, Above;
+        public double Inset => Device.Inset(Landscape);
         public (int Width, int Height) Screen => Landscape ? (Device.Height, Device.Width) : (Device.Width, Device.Height);
+        /// <summary>Ce que le site voit : l'écran moins la barre d'état.</summary>
+        public (int Width, int Height) Viewport => (Screen.Width, Screen.Height - (int)Inset);
         public (double Width, double Height) Shell => Landscape ? (Device.ShellHeight, Device.ShellWidth) : (Device.ShellWidth, Device.ShellHeight);
     }
 
@@ -274,25 +279,39 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
     private readonly Dictionary<string, List<Sim>> _sims = new(); // le premier est la vue de l'onglet, les suivants ses miroirs
     private readonly Dictionary<string, string> _mode = new();    // nom de l'appareil, ou « compare »
     private readonly Dictionary<string, (double Width, double Height, double Scale)> _fit = new();
+    private readonly Dictionary<string, (string Name, bool Landscape)> _wanted = new(); // onglets endormis : appareil à leur réveil
+    private readonly HashSet<WebView2> _following = new(); // miroirs en train de suivre leur onglet
+    private Windows.UI.Color _pageColor = Windows.UI.Color.FromArgb(255, 255, 255, 255);
     private string? _desktopUserAgent;
     private bool _watchingLayout;
 
+    /// <summary>Écrans de la comparaison, dans l'ordre d'affichage.</summary>
+    public IReadOnlyList<string> ComparisonDevices { get; set; } = Device.DefaultComparison;
+
     public string? DeviceOf(string id) => _mode.GetValueOrDefault(id);
 
+    /// <summary>Appareil d'un onglet et son orientation, y compris pour un onglet encore endormi. Null : vue ordinaire.</summary>
+    public (string Name, bool Landscape)? DeviceState(string id) =>
+        _mode.TryGetValue(id, out var name) ? (name, _sims.GetValueOrDefault(id)?.FirstOrDefault()?.Landscape ?? false)
+        : _wanted.TryGetValue(id, out var wanted) ? wanted : null;
+
+    /// <summary>Appareil à appliquer quand l'onglet (endormi) sera affiché.</summary>
+    public void WantDevice(string id, string name, bool landscape) => _wanted[id] = (name, landscape);
+
     /// <summary>
-    /// Affiche l'onglet comme sur l'appareil donné, ou sur trois écrans côte à côte (« compare ») ; null revient à la
-    /// vue ordinateur. La page est rechargée.
+    /// Affiche l'onglet comme sur l'appareil donné, ou sur plusieurs écrans côte à côte (« compare ») ; null revient à
+    /// la vue ordinateur. La page est rechargée.
     /// </summary>
-    public async void SetDevice(string id, string? name)
+    public async void SetDevice(string id, string? name, bool landscape = false)
     {
         if (!_views.TryGetValue(id, out var view) || view.CoreWebView2 is not { } core) return;
         IReadOnlyList<Device>? devices = name switch
         {
             null => [],
-            Comparison => Device.Comparison,
+            Comparison => ComparisonDevices.Select(Device.Find).OfType<Device>().ToList(),
             _ => Device.Find(name) is { } found ? [found] : null,
         };
-        if (devices is null) return;
+        if (devices is null || (name is not null && devices.Count == 0)) return;
         _desktopUserAgent ??= core.Settings.UserAgent;
         ClearSims(id, view);
 
@@ -308,6 +327,7 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
                 await core.CallDevToolsProtocolMethodAsync("Emulation.setTouchEmulationEnabled", """{"enabled":false,"maxTouchPoints":1}""");
                 await core.CallDevToolsProtocolMethodAsync("Emulation.setEmitTouchEventsForMouse", """{"enabled":false}""");
                 await core.CallDevToolsProtocolMethodAsync("Emulation.clearDeviceMetricsOverride", "{}");
+                await ApplySettingsAsync(id, core); // le flou du bas des pages revient
                 core.Reload();
                 return;
             }
@@ -319,9 +339,10 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
                 container.LayoutUpdated += (_, _) => FitDevices();
             }
             _mode[id] = name!;
-            var sims = _sims[id] = [new Sim(view, devices[0])];
+            var sims = _sims[id] = [new Sim(view, devices[0]) { Landscape = landscape && !devices[0].Desktop }];
             LayoutSims(id);
             RuntimeChanged?.Invoke();
+            await ApplySettingsAsync(id, core); // retire le flou du bas des pages
             await EmulateAsync(id, sims[0]);
             core.Reload();
 
@@ -335,8 +356,7 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
                     mirror.Close();
                     return;
                 }
-                var sim = new Sim(mirror, device);
-                sims.Add(sim);
+                sims.Add(new Sim(mirror, device) { Landscape = landscape && !device.Desktop });
                 LayoutSims(id);
                 foreach (var each in sims) await EmulateAsync(id, each); // l'échelle a changé pour tous
                 Follow(mirror, core.Source);
@@ -354,9 +374,18 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
         foreach (var sim in sims.ToList()) await EmulateAsync(id, sim);
     }
 
-    // Vue miroir : la même page que l'onglet, sur un autre appareil. Elle n'a pas d'existence propre : un clic sur
-    // un lien fait naviguer l'onglet, qui entraîne ses miroirs.
-    // ponytail: un changement de page sans navigation (application à page unique) dans un miroir ne remonte pas à l'onglet.
+    /// <summary>Couleur de fond de la page affichée : celle de la barre d'état des appareils simulés.</summary>
+    public void SetPageColor(byte r, byte g, byte b)
+    {
+        var color = Windows.UI.Color.FromArgb(255, r, g, b);
+        if (color == _pageColor) return;
+        _pageColor = color;
+        foreach (var id in _sims.Keys.ToList())
+            if (_views.TryGetValue(id, out var main) && main.Visibility == Visibility.Visible) LayoutSims(id);
+    }
+
+    // Vue miroir : la même page que l'onglet, sur un autre appareil. Elle n'a pas d'existence propre : ce qu'on y fait
+    // (clic sur un lien, changement de page d'une application) fait naviguer l'onglet, qui entraîne ses miroirs.
     private async Task<WebView2> AddMirrorAsync(string id, WebView2 main)
     {
         var view = new WebView2 { Visibility = main.Visibility };
@@ -376,12 +405,16 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
             e.Cancel = true;
             Navigate(id, e.Uri);
         };
+        // Changement d'adresse sans nouveau document (application à page unique) : l'onglet suit. Un nouveau document
+        // n'est jamais remonté : deux écrans redirigés vers deux adresses (site mobile, site ordinateur) se renverraient la balle.
+        core.SourceChanged += (_, e) =>
+        {
+            if (!e.IsNewDocument && main.CoreWebView2 is { } tab && tab.Source != core.Source) Navigate(id, core.Source);
+        };
         view.SizeChanged += (_, _) => ClipToDevice(view);
         await core.CallDevToolsProtocolMethodAsync("Emulation.setScrollbarsHidden", """{"hidden":true}""");
         return view;
     }
-
-    private readonly HashSet<WebView2> _following = new(); // miroirs en train de suivre leur onglet
 
     private void SyncMirrors(string id, string url)
     {
@@ -400,6 +433,7 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
     {
         _mode.Remove(id);
         _fit.Remove(id);
+        _wanted.Remove(id);
         if (!_sims.Remove(id, out var sims)) return;
         foreach (var sim in sims)
         {
@@ -432,7 +466,7 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
     private bool LayoutSims(string id)
     {
         if (!_sims.TryGetValue(id, out var sims) || !_views.TryGetValue(id, out var main)) return false;
-        const double gap = 30;
+        const double gap = 36;
         var room = Room(main);
         var total = sims.Sum(s => s.Shell.Width) + gap * (sims.Count - 1);
         var scale = Math.Round(Math.Clamp(Math.Min((room.Width - 36) / total, (room.Height - 36) / sims.Max(s => s.Shell.Height)), 0.1, 1), 2);
@@ -444,16 +478,17 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
         {
             if (sim.Below is not null) container.Children.Remove(sim.Below);
             if (sim.Above is not null) container.Children.Remove(sim.Above);
-            (sim.Below, sim.Above) = DeviceFrame.Build(sim.Device, scale, sim.Landscape);
+            (sim.Below, sim.Above) = DeviceFrame.Build(sim.Device, scale, sim.Landscape, _pageColor);
             var screenLeft = x + (sim.Shell.Width - sim.Screen.Width) / 2 * scale;
-            (sim.View.Width, sim.View.Height) = (Math.Round(sim.Screen.Width * scale), Math.Round(sim.Screen.Height * scale));
-            foreach (var (part, left) in new[] { (sim.Below, x), (sim.View, screenLeft), (sim.Above, screenLeft) })
+            (sim.View.Width, sim.View.Height) = (Math.Round(sim.Viewport.Width * scale), Math.Round(sim.Viewport.Height * scale));
+            // La page s'affiche sous la barre d'état : décalée vers le bas de sa hauteur.
+            foreach (var (part, left, top) in new[] { (sim.Below, x, 0.0), (sim.View, screenLeft, sim.Inset * scale), (sim.Above, screenLeft, 0.0) })
             {
-                (part.HorizontalAlignment, part.VerticalAlignment, part.Margin) = (HorizontalAlignment.Left, VerticalAlignment.Center, new Thickness(left, 0, 0, 0));
+                (part.HorizontalAlignment, part.VerticalAlignment, part.Margin) = (HorizontalAlignment.Left, VerticalAlignment.Center, new Thickness(left, top, 0, 0));
                 Grid.SetColumn(part, Grid.GetColumn(main));
                 part.Visibility = main.Visibility;
             }
-            container.Children.Insert(container.Children.IndexOf(sim.View), sim.Below);     // coque : sous la vue
+            container.Children.Insert(container.Children.IndexOf(sim.View), sim.Below);     // coque et écran : sous la vue
             container.Children.Insert(container.Children.IndexOf(sim.View) + 1, sim.Above); // îlot : par-dessus
             ClipToDevice(sim.View);
             x += (sim.Shell.Width + gap) * scale;
@@ -461,13 +496,13 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
         return changed;
     }
 
-    // Coins de l'écran : ceux de l'appareil que cette vue simule (aucun pour une vue ordinaire).
+    // Coins de la page : ceux de l'écran de l'appareil (ceux du bas seulement sous une barre d'état) ; aucun pour une vue ordinaire.
     private void ClipToDevice(WebView2 view)
     {
         foreach (var (id, sims) in _sims)
             if (sims.FirstOrDefault(s => s.View == view) is { } sim)
             {
-                CornerClip.Set(view, (float)(sim.Device.Radius * _fit.GetValueOrDefault(id, (0, 0, 1)).Scale));
+                CornerClip.Set(view, (float)(sim.Device.Radius * _fit.GetValueOrDefault(id, (0, 0, 1)).Scale), squareTop: sim.Inset > 0);
                 return;
             }
         CornerClip.Set(view, 0);
@@ -483,11 +518,13 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
             var touch = !device.Desktop;
             await core.CallDevToolsProtocolMethodAsync("Emulation.setTouchEmulationEnabled", System.Text.Json.JsonSerializer.Serialize(new { enabled = touch, maxTouchPoints = touch ? 5 : 1 }));
             await core.CallDevToolsProtocolMethodAsync("Emulation.setEmitTouchEventsForMouse", System.Text.Json.JsonSerializer.Serialize(new { enabled = touch, configuration = "mobile" }));
+            var wide = sim.Screen.Width > sim.Screen.Height;
             await core.CallDevToolsProtocolMethodAsync("Emulation.setDeviceMetricsOverride", System.Text.Json.JsonSerializer.Serialize(new
             {
-                width = sim.Screen.Width, height = sim.Screen.Height, deviceScaleFactor = device.PixelRatio, mobile = touch,
+                width = sim.Viewport.Width, height = sim.Viewport.Height, deviceScaleFactor = device.PixelRatio, mobile = touch,
                 scale = _fit.GetValueOrDefault(id, (0, 0, 1)).Scale,
-                screenOrientation = new { type = sim.Landscape ? "landscapePrimary" : "portraitPrimary", angle = sim.Landscape ? 90 : 0 },
+                screenWidth = sim.Screen.Width, screenHeight = sim.Screen.Height,
+                screenOrientation = new { type = wide ? "landscapePrimary" : "portraitPrimary", angle = sim.Landscape ? 90 : 0 },
             }));
         }
         catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { /* vue fermée entre-temps */ }

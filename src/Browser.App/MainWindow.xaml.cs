@@ -82,7 +82,10 @@ public sealed partial class MainWindow : Window
         _sidebar = new SidebarHost(Sidebar, SidebarColumn, bridge.Post);
         bridge.SidebarHost = _sidebar;
         bridge.PageColorChanged += (r, g, b) =>
+        {
             Root.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, r, g, b));
+            pages.SetPageColor(r, g, b); // la barre d'état d'un appareil simulé prend la couleur de la page
+        };
         var popupBridge = new UiBridge(Popup, "index.html#popup");
         bridge.AttachPopup(popupBridge);
         var popup = new PopupHost(PopupFrame, Popup, popupBridge);

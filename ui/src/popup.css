@@ -430,3 +430,5 @@
   font: inherit; font-size: 12px; color: var(--text); user-select: text;
 }
 .home-row input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.setting-row:disabled { opacity: 0.45; }
