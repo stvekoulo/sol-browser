@@ -109,7 +109,8 @@ public sealed class BrowserController
             case "shortcut.update": UpdateShortcut(id, c.Title!, c.Input!); break;
             case "shortcut.open": OpenShortcut(c.Index!.Value); break;
             case "network.toggle": ToggleNetwork(); return;
-            case "network.ready": _network.Post(); return;
+            // Le panneau vient d'être créé : il reçoit les couleurs de la page (envoyées avant qu'il n'écoute), puis sa liste.
+            case "network.ready": _bridge.BroadcastTheme(); _network.Post(); return;
             case "network.clear": if (_network.Shown is { } listed) _network.Clear(listed); return;
             case "network.detail":
                 if (_network.Shown is { } inspected && _pages.CoreOf(inspected) is { } inspectedCore) _ = _network.PostDetailAsync(inspected, inspectedCore, id);
