@@ -2,6 +2,9 @@ import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { formatDomain, onMessage, onState, send, type State, type Tab } from './bridge';
 import { Icon, ShieldIcon, SidebarIcon } from './Icons';
 
+// Pression sur le fond de la barre, en attente d'un mouvement pour déplacer la fenêtre.
+let dragArmed: { x: number; y: number } | null = null;
+
 export default function App() {
   const [state, setState] = useState<State | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -14,7 +17,22 @@ export default function App() {
         setSidebarOpen(e.open);
     });
     send({ type: 'ui.ready' });
-    return off;
+
+    const move = (e: globalThis.MouseEvent) => {
+      if (!dragArmed) return;
+      if (!(e.buttons & 1)) return void (dragArmed = null);
+      if (Math.abs(e.screenX - dragArmed.x) + Math.abs(e.screenY - dragArmed.y) < 4) return;
+      dragArmed = null;
+      send({ type: 'window.drag' });
+    };
+    const disarm = () => (dragArmed = null);
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', disarm);
+    return () => {
+      off();
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', disarm);
+    };
   }, []);
 
   if (!state) return null;
@@ -23,9 +41,11 @@ export default function App() {
   const { split } = state;
   const panes = split.visible ? [byId(split.primaryId), byId(split.secondaryId)] : [activeTab];
 
-  // Seul le fond de la barre déplace ou agrandit la fenêtre.
+  // Seul le fond de la barre déplace ou agrandit la fenêtre. Le déplacement ne démarre qu'une fois la souris
+  // réellement en mouvement, bouton enfoncé : lancé sur un simple clic, Windows attendrait un relâchement
+  // déjà passé et la fenêtre resterait accrochée au curseur.
   const dragWindow = (e: MouseEvent) => {
-    if (e.button === 0 && e.target === e.currentTarget) send({ type: 'window.drag' });
+    if (e.button === 0 && e.target === e.currentTarget) dragArmed = { x: e.screenX, y: e.screenY };
   };
   const maximize = (e: MouseEvent) => {
     if (e.target === e.currentTarget) send({ type: 'window.maximize' });

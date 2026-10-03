@@ -50,11 +50,24 @@ public sealed class PopupHost
         var y = Math.Max(Edge, Math.Min(_y, window.ActualHeight - _frame.Height - Edge));
         _frame.Margin = new Thickness(x, y, 0, 0);
 
+        // DIAGNOSTIC TEMPORAIRE : la vraie souris traverse le menu et atteint la page dessous, alors que le test
+        // de position de XAML donne bien le menu. Chaque ouverture essaie une combinaison différente des trois
+        // habillages du cadre, pour trouver lequel détourne les clics. Le journal note la combinaison active.
+        if (_pending)
+        {
+            _variant = _opens++ % 8;
+            var plain = (_variant & 1) != 0;
+            _shadow ??= _frame.Shadow;
+            _frame.Shadow = plain ? null : _shadow;
+            _frame.Translation = plain ? Vector3.Zero : new Vector3(0, 0, 32);
+            DebugLog.Write($"menu ouvert variante {_variant} : ombre={(plain ? "non" : "oui")} decoupe={((_variant & 2) != 0 ? "non" : "oui")} animation={((_variant & 4) != 0 ? "non" : "oui")}");
+        }
+
         _frame.Visibility = Visibility.Visible;
         _frame.UpdateLayout();
         ApplyRoundedClip();
 
-        if (_pending && _animate) FloatIn.Play(_frame, _anchorRight ? (float)_frame.Width : 0, 0);
+        if (_pending && _animate && (_variant & 4) == 0) FloatIn.Play(_frame, _anchorRight ? (float)_frame.Width : 0, 0);
         if (_pending && _focus) _view.Focus(FocusState.Programmatic);
         _pending = false;
     }
@@ -65,6 +78,15 @@ public sealed class PopupHost
         _frame.Visibility = Visibility.Collapsed;
     }
 
+    private int _opens, _variant;
+    private Microsoft.UI.Xaml.Media.Shadow? _shadow;
+
     // Applique la découpe arrondie après le calcul de mise en page XAML.
-    private void ApplyRoundedClip() => RoundedClip.Apply(_frame, _view, Radius);
+    private void ApplyRoundedClip()
+    {
+        if ((_variant & 2) == 0) { RoundedClip.Apply(_frame, _view, Radius); return; }
+        ElementCompositionPreview.GetElementVisual(_frame).Clip = null;
+        ElementCompositionPreview.GetElementVisual(_view).Clip = null;
+        if (ElementCompositionPreview.GetElementChildVisual(_view) is { } child) child.Clip = null;
+    }
 }

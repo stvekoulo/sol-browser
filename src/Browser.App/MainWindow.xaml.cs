@@ -88,6 +88,17 @@ public sealed partial class MainWindow : Window
             else if (p.Properties.IsXButton2Pressed) _controller?.Shortcut("nav.forward");
         }), true);
 
+        // Diagnostic temporaire : quelle vue reçoit le survol, notée à chaque changement.
+        string? hovered = null;
+        Root.AddHandler(UIElement.PointerMovedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler((_, e) =>
+        {
+            var source = $"{e.OriginalSource?.GetType().Name}:{(e.OriginalSource as FrameworkElement)?.Name}";
+            if (source == hovered) return;
+            hovered = source;
+            var p = e.GetCurrentPoint(Root).Position;
+            DebugLog.Write($"survol -> {source} x={p.X:0} y={p.Y:0} menu visible={PopupFrame.Visibility} captures menu={Popup.PointerCaptures?.Count ?? 0}");
+        }), true);
+
         Root.AddHandler(UIElement.PointerWheelChangedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler((_, e) =>
         {
             var p = e.GetCurrentPoint(Root).Properties;
@@ -96,7 +107,6 @@ public sealed partial class MainWindow : Window
             if ((now - _swipeAt).TotalMilliseconds > 350) { _swipe = 0; _swipeDone = false; } // nouveau geste
             _swipeAt = now;
             _swipe += p.MouseWheelDelta;
-            DebugLog.Write($"molette horizontale delta={p.MouseWheelDelta} cumul={_swipe:0}");
             // ponytail: seuil fixe, et une page qui défile elle-même horizontalement déclenche aussi le geste ;
             // à affiner en ne réagissant qu'en bout de défilement.
             if (_swipeDone || Math.Abs(_swipe) < 480) return;
