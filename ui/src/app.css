@@ -110,6 +110,11 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   border-radius: var(--radius-control); text-align: left;
 }
 .row:hover, .row.selected { background: var(--bg-tab-hover); }
+.download { display: flex; align-items: center; gap: 8px; padding: 6px 10px; }
+.download-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.download-text .row-url { max-width: none; }
+.text-button { flex: none; height: 24px; padding: 0 8px; border-radius: 6px; color: var(--accent); font-size: 12px; }
+.text-button:hover { background: var(--bg-tab-hover); }
 .row-icon { flex: none; align-self: center; color: var(--text-dim); }
 .popup hr { width: calc(100% - 20px); margin: 5px 10px; border: 0; border-top: 0.5px solid var(--border); }
 .row-title { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }

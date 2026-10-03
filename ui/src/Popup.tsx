@@ -5,7 +5,18 @@ type Item = { url: string; title: string; kind?: 'search' | 'go' | 'history' | '
 type Content =
   | { popup: 'suggestions'; items: Item[] }
   | { popup: 'library'; bookmarks: Item[]; history: Item[] }
-  | { popup: 'menu'; items: string[] }; // libellé vide = séparateur
+  | { popup: 'menu'; items: string[] } // libellé vide = séparateur
+  | { popup: 'downloads'; items: Download[] };
+
+type Download = { id: string; name: string; received: number; total: number | null; state: 'InProgress' | 'Interrupted' | 'Completed' };
+
+const size = (bytes: number) => (bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} Ko` : `${(bytes / 1024 / 1024).toFixed(1)} Mo`);
+
+function status(d: Download) {
+  if (d.state === 'Completed') return `Terminé · ${size(d.received)}`;
+  if (d.state === 'Interrupted') return 'Interrompu';
+  return d.total ? `${Math.round((d.received / d.total) * 100)} % de ${size(d.total)}` : size(d.received);
+}
 
 // Contenu de la vue posée sur la page. L'hôte envoie quoi afficher ; la vue annonce sa hauteur.
 export default function Popup() {
@@ -60,6 +71,30 @@ export default function Popup() {
             </button>
           ),
         )}
+      </div>
+    );
+
+  if (content.popup === 'downloads')
+    return (
+      <div ref={root} className="popup">
+        <section>
+          <h2>Téléchargements</h2>
+          {content.items.map(d => (
+            <div key={d.id} className="download">
+              <div className="download-text">
+                <span className="row-title">{d.name}</span>
+                <span className="row-url">{status(d)}</span>
+              </div>
+              {d.state === 'InProgress' && <button className="text-button" onClick={() => send({ type: 'download.cancel', id: d.id })}>Annuler</button>}
+              {d.state === 'Completed' && (
+                <>
+                  <button className="text-button" onClick={() => send({ type: 'download.open', id: d.id })}>Ouvrir</button>
+                  <button className="text-button" onClick={() => send({ type: 'download.reveal', id: d.id })}>Dossier</button>
+                </>
+              )}
+            </div>
+          ))}
+        </section>
       </div>
     );
 

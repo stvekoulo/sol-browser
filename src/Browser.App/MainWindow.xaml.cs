@@ -65,48 +65,38 @@ public sealed partial class MainWindow : Window
     }
 
     // Séparateur de la vue scindée : le glisser change la part de chaque page.
-    // Dès que la souris quitte la poignée, elle survole une page web, qui absorbe les mouvements : la capture
-    // XAML ne suffit pas. On capture donc la souris au niveau de la fenêtre et on suit WM_MOUSEMOVE.
-    private bool _draggingDivider;
+    // Ni la capture XAML ni la capture Win32 ne tiennent : dès que la souris quitte la poignée, la page web
+    // survolée reprend la capture (constaté au journal). Tant que le bouton reste enfoncé, on lit donc
+    // directement la position du curseur à chaque image.
+    private DispatcherTimer? _dividerTimer;
+    private double _dividerRatio;
 
     private void WireDivider()
     {
         Divider.PointerPressed += (_, e) =>
         {
-            Log("divider pressed");
-            _draggingDivider = true;
-            SetCapture(_hwnd);
             e.Handled = true;
+            _dividerTimer ??= CreateDividerTimer();
+            _dividerTimer.Start();
         };
     }
 
-    private bool HandleDividerDrag(uint msg, nint lParam)
+    private DispatcherTimer CreateDividerTimer()
     {
-        if (!_draggingDivider) return false;
-        switch (msg)
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+        timer.Tick += (_, _) =>
         {
-            case 0x0200: // WM_MOUSEMOVE : x en pixels dans la zone cliente
-                if (GetClientRect(_hwnd, out var rect) && rect.Right > 0)
-                    _controller?.Execute(new Command("split.resize", Ratio: (double)(short)(lParam & 0xFFFF) / rect.Right));
-                return true;
-            case 0x0202: // WM_LBUTTONUP
-                Log("divider released");
-                _draggingDivider = false;
-                ReleaseCapture();
-                return true;
-            case 0x0215: // WM_CAPTURECHANGED
-                Log("divider capture lost");
-                _draggingDivider = false;
-                return false;
-        }
-        return false;
-    }
+            // Bouton principal : le droit si l'utilisateur a inversé les boutons de sa souris.
+            var button = GetSystemMetrics(23 /* SM_SWAPBUTTON */) != 0 ? 0x02 : 0x01;
+            if ((GetAsyncKeyState(button) & 0x8000) == 0) { timer.Stop(); return; }
+            if (!GetCursorPos(out var point) || !ScreenToClient(_hwnd, ref point) || !GetClientRect(_hwnd, out var rect) || rect.Right <= 0) return;
 
-    // Journal de diagnostic, écrit seulement si NAVIGATEUR_DEBUG=1.
-    private static readonly bool Debug = Environment.GetEnvironmentVariable("NAVIGATEUR_DEBUG") == "1";
-    private static void Log(string line)
-    {
-        if (Debug) File.AppendAllText(Path.Combine(AppPaths.DataDir, "debug.log"), $"{DateTime.Now:HH:mm:ss.fff} {line}\n");
+            var ratio = (double)point.X / rect.Right;
+            if (Math.Abs(ratio - _dividerRatio) < 0.002) return; // la souris n'a pas bougé
+            _dividerRatio = ratio;
+            _controller?.Execute(new Command("split.resize", Ratio: ratio));
+        };
+        return timer;
     }
 
     private void SetShortcuts(bool active)
@@ -127,14 +117,16 @@ public sealed partial class MainWindow : Window
             _controller?.Shortcut(action);
             return 0;
         }
-        if (HandleDividerDrag(msg, lParam)) return 0;
         return DefSubclassProc(hwnd, msg, wParam, lParam);
     }
 
     [StructLayout(LayoutKind.Sequential)] private struct Rect { public int Left, Top, Right, Bottom; }
-    [DllImport("user32.dll")] private static extern nint SetCapture(nint hwnd);
-    [DllImport("user32.dll")] private static extern bool ReleaseCapture();
+    [StructLayout(LayoutKind.Sequential)] private struct Point { public int X, Y; }
     [DllImport("user32.dll")] private static extern bool GetClientRect(nint hwnd, out Rect rect);
+    [DllImport("user32.dll")] private static extern bool GetCursorPos(out Point point);
+    [DllImport("user32.dll")] private static extern bool ScreenToClient(nint hwnd, ref Point point);
+    [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
+    [DllImport("user32.dll")] private static extern int GetSystemMetrics(int index);
 
     private delegate nint SubclassProc(nint hwnd, uint msg, nint wParam, nint lParam, nuint id, nuint data);
     [DllImport("comctl32.dll")] private static extern bool SetWindowSubclass(nint hwnd, SubclassProc proc, nuint id, nuint data);

@@ -20,7 +20,8 @@ public static class CommandParser
         ["menu.pick"] = ["index"],
         ["library.open"] = ["x", "y"],
         ["popup.size"] = ["height"], ["popup.close"] = [],
-        ["download.cancel"] = ["id"], ["download.open"] = ["id"],
+        ["download.cancel"] = ["id"], ["download.open"] = ["id"], ["download.reveal"] = ["id"],
+        ["downloads.open"] = ["x", "y"],
         ["window.minimize"] = [], ["window.maximize"] = [], ["window.close"] = [], ["window.drag"] = [],
         ["ui.ready"] = [],
     };

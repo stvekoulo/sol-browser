@@ -36,6 +36,7 @@ public sealed class BrowserController
         _pages.Loaded += RecordVisit;
         _pages.FaviconChanged += (id, data) => { _favicons[id] = data; PostFavicon(id); };
         _pages.ContextMenuRequested += OpenContextMenu;
+        _pages.DownloadStarting += OnDownloadStarting;
         _window.AppWindow.Changed += (_, e) => { if (e.DidPresenterChange || e.DidSizeChange) Refresh(); };
         _window.Closed += (_, _) => { SaveSession(); _db.Dispose(); };
     }
@@ -48,6 +49,20 @@ public sealed class BrowserController
             // Vue posée sur la page : ces commandes ne changent pas l'état des onglets.
             case "suggest": Suggest(id, c.Query!, c.X!.Value, c.Y!.Value, c.Width!.Value); return;
             case "library.open": OpenLibrary(c.X!.Value, c.Y!.Value); return;
+            case "downloads.open": OpenDownloads(c.X!.Value, c.Y!.Value); return;
+            case "download.cancel": FindDownload(id)?.Cancel(); return; // le panneau reste ouvert
+            case "download.open" or "download.reveal":
+                if (FindDownload(id) is { State: Microsoft.Web.WebView2.Core.CoreWebView2DownloadState.Completed } done && File.Exists(done.ResultFilePath))
+                {
+                    // Ouvrir un fichier téléchargé l'exécute avec son application : uniquement sur clic de l'utilisateur.
+                    var start = c.Type == "download.open"
+                        ? new System.Diagnostics.ProcessStartInfo(done.ResultFilePath) { UseShellExecute = true }
+                        : new System.Diagnostics.ProcessStartInfo("explorer.exe", $"/select,\"{done.ResultFilePath}\"");
+                    try { System.Diagnostics.Process.Start(start); }
+                    catch (System.ComponentModel.Win32Exception) { /* aucune application associée */ }
+                }
+                HidePopup();
+                return;
             case "popup.size": _popup.SetHeight(c.Height!.Value); return;
             case "popup.close":
                 if (!_suggesting) _libraryClosedAt = DateTime.UtcNow;
@@ -94,9 +109,59 @@ public sealed class BrowserController
         Refresh();
     }
 
+    // Téléchargements de la session, du plus récent au plus ancien.
+    private readonly List<(string Id, Microsoft.Web.WebView2.Core.CoreWebView2DownloadOperation Op)> _downloads = new();
+    private bool _downloadsOpen;
+    private DateTime _downloadsPosted;
+
+    private Microsoft.Web.WebView2.Core.CoreWebView2DownloadOperation? FindDownload(string id) =>
+        _downloads.FirstOrDefault(d => d.Id == id).Op;
+
+    private void OnDownloadStarting(Microsoft.Web.WebView2.Core.CoreWebView2DownloadStartingEventArgs e)
+    {
+        e.Handled = true; // pas de fenêtre de téléchargement du moteur : le navigateur affiche la sienne
+        var op = e.DownloadOperation;
+        _downloads.Insert(0, ($"d{_downloads.Count + 1}", op));
+        op.BytesReceivedChanged += (_, _) => DownloadsChanged(throttle: true);
+        op.StateChanged += (_, _) => DownloadsChanged(throttle: false);
+        DownloadsChanged(throttle: false);
+    }
+
+    private void DownloadsChanged(bool throttle)
+    {
+        // La progression arrive très souvent : quatre mises à jour par seconde suffisent.
+        if (throttle && (DateTime.UtcNow - _downloadsPosted).TotalMilliseconds < 250) return;
+        _downloadsPosted = DateTime.UtcNow;
+        Refresh();
+        if (_downloadsOpen) _popup.Post(DownloadsJson());
+    }
+
+    private string DownloadsJson() => JsonSerializer.Serialize(new
+    {
+        popup = "downloads",
+        items = _downloads.Select(d => new
+        {
+            id = d.Id,
+            name = Path.GetFileName(d.Op.ResultFilePath),
+            received = d.Op.BytesReceived,
+            total = d.Op.TotalBytesToReceive,
+            state = d.Op.State.ToString(),
+        }),
+    });
+
+    private void OpenDownloads(double x, double y)
+    {
+        if (DateTime.UtcNow - _libraryClosedAt < TimeSpan.FromMilliseconds(350)) return; // reclic sur l'icône : reste fermé
+        const double width = 340;
+        HidePopup();
+        _downloadsOpen = true;
+        _popup.Show(x - width, y, width, DownloadsJson(), focus: true);
+    }
+
     private void HidePopup()
     {
         _suggesting = false;
+        _downloadsOpen = false;
         // Un menu contextuel en attente doit toujours être rendu au moteur, même sans choix.
         _menu?.Deferral.Complete();
         _menu = null;
@@ -332,6 +397,11 @@ public sealed class BrowserController
             activeId = _tabs.ActiveId,
             split = new { primaryId = _split.PrimaryId, secondaryId = _split.SecondaryId, ratio = _split.Ratio, visible = showSplit },
             maximized = Presenter?.State == OverlappedPresenterState.Maximized,
+            downloads = new
+            {
+                count = _downloads.Count,
+                active = _downloads.Count(d => d.Op.State == Microsoft.Web.WebView2.Core.CoreWebView2DownloadState.InProgress),
+            },
         }));
     }
 

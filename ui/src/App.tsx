@@ -31,6 +31,19 @@ export default function App() {
             grow={!split.visible ? 1 : i === 0 ? split.ratio : 1 - split.ratio}
           />
         ))}
+        {state.downloads.count > 0 && (
+          <button
+            className={`icon${state.downloads.active > 0 ? ' on' : ''}`}
+            aria-label={state.downloads.active > 0 ? 'Téléchargements (en cours)' : 'Téléchargements'}
+            title="Téléchargements"
+            onClick={e => {
+              const box = e.currentTarget.getBoundingClientRect();
+              send({ type: 'downloads.open', x: box.right, y: box.bottom + 6 });
+            }}
+          >
+            <Icon d="M8 2.5v8M4.5 7.5L8 11l3.5-3.5M3 13.5h10" />
+          </button>
+        )}
         <button
           className="icon"
           aria-label="Favoris et historique"
@@ -69,6 +82,33 @@ function TitleBar({ state, icons }: { state: State; icons: Icons }) {
   const maximize = (e: MouseEvent) => {
     if (e.target === e.currentTarget) send({ type: 'window.maximize' });
   };
+
+  // Réordonner : tant que le bouton reste enfoncé, l'onglet saisi prend la place de celui dont la souris
+  // dépasse le milieu. (Le glisser-déposer HTML ne fonctionne pas dans ce type de vue.)
+  useEffect(() => {
+    const move = (e: globalThis.MouseEvent) => {
+      if (!draggedTab) return;
+      if (e.buttons !== 1) return void (draggedTab = null);
+      const all = [...document.querySelectorAll<HTMLElement>('[data-tab-id]')];
+      const mine = all.find(el => el.dataset.tabId === draggedTab);
+      if (!mine) return void (draggedTab = null);
+      const from = Number(mine.dataset.tabIndex);
+      for (const el of all) {
+        const to = Number(el.dataset.tabIndex);
+        const box = el.getBoundingClientRect();
+        const middle = box.left + box.width / 2;
+        const crossed = to > from ? e.clientX > middle && e.clientX < box.right + 40 : e.clientX < middle && e.clientX > box.left - 40;
+        if (to !== from && crossed) return void send({ type: 'tab.move', id: draggedTab, index: to });
+      }
+    };
+    const stop = () => (draggedTab = null);
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', stop);
+    return () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', stop);
+    };
+  }, []);
 
   const { tabs, split, activeId } = state;
   const items: ReactNode[] = [];
@@ -117,25 +157,15 @@ function TabItem({ tab, index, icon, active }: { tab: Tab; index: number; icon: 
       aria-selected={active}
       className={`tab${active ? ' active' : ''}`}
       title={label}
+      data-tab-id={tab.id}
+      data-tab-index={index}
       onMouseDown={e => {
-        if (e.button === 0) send({ type: 'tab.activate', id: tab.id });
+        if (e.button === 0) {
+          send({ type: 'tab.activate', id: tab.id });
+          draggedTab = tab.id; // le glisser est suivi dans TitleBar
+        }
         if (e.button === 1) send({ type: 'tab.close', id: tab.id });
       }}
-      // Réordonner : glisser un onglet au-dessus d'un autre le déplace à cette position.
-      draggable
-      onDragStart={e => {
-        draggedTab = tab.id;
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', tab.id);
-      }}
-      onDragOver={e => {
-        if (!draggedTab) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        if (draggedTab !== tab.id) send({ type: 'tab.move', id: draggedTab, index });
-      }}
-      onDrop={e => e.preventDefault()}
-      onDragEnd={() => (draggedTab = null)}
     >
       {tab.loading ? <span className="spinner" aria-hidden /> : icon ? <img className="favicon" src={icon} alt="" draggable={false} /> : null}
       <span className="tab-title">{label}</span>
