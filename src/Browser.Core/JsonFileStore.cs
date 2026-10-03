@@ -38,6 +38,9 @@ public sealed class Settings
     public bool AutoPip { get; set; } = true;
     /// <summary>Largeur du lecteur flottant, réglée par l'utilisateur.</summary>
     public double PipWidth { get; set; } = 392;
+    /// <summary>Place du lecteur flottant : écart avec le bord droit et le bord bas de la zone des pages.</summary>
+    public double PipRight { get; set; } = 18;
+    public double PipBottom { get; set; } = 18;
     /// <summary>Largeur de la carte latérale, réglée en tirant son bord droit.</summary>
     public double SidebarWidth { get; set; } = 296;
     /// <summary>Écrans affichés côte à côte par la comparaison d'écrans ; vide : le choix par défaut.</summary>

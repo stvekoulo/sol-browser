@@ -109,7 +109,11 @@ public sealed class BrowserController
                 return;
             case "settings.text": if (id == "home") SetHomePage(c.Input!); return;
             case "dock.ready": _dock.Ready(); return;
-            case "dock.size": if (_dockShown) _dock.SetSize(c.Width!.Value, c.Height!.Value); return;
+            case "dock.size":
+                if (!_dockShown) return;
+                _dock.SetSize(c.Width!.Value, c.Height!.Value);
+                _pages.DockHeight = Math.Clamp(c.Height!.Value, 44, 420); // le lecteur flottant se pose au-dessus
+                return;
             case "shortcut.menu": OpenShortcutMenu(c.Index!.Value, c.X!.Value, c.Y!.Value); return;
             case "shortcut.update": UpdateShortcut(id, c.Title!, c.Input!); break;
             case "shortcut.open": OpenShortcut(c.Index!.Value); break;
@@ -253,7 +257,11 @@ public sealed class BrowserController
         var changed = _dockShown != shown.Count > 0;
         _dockShown = shown.Count > 0;
         if (_dockShown) _dock.Post(DownloadsJson(shown)); // l'encart répond par sa taille, ce qui l'affiche
-        else _dock.Hide();
+        else
+        {
+            _dock.Hide();
+            _pages.DockHeight = 0;
+        }
         if (changed) Refresh(); // le bouton de la barre apparaît quand l'encart disparaît, et inversement
     }
 

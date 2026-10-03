@@ -90,8 +90,9 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
             var point = view.TransformToVisual(null).TransformPoint(new Windows.Foundation.Point(e.Location.X, e.Location.Y));
             ContextMenuRequested?.Invoke(tab.Id, point.X, point.Y, e);
         };
-        view.SizeChanged += (_, _) => ClipToDevice(view);
+        view.SizeChanged += (_, _) => { if (_pip != tab.Id) ClipToDevice(view); };
         core.SourceChanged += (_, _) => SyncMirrors(tab.Id, core.Source);
+        WatchFrames(tab.Id, core);
         core.DownloadStarting += (_, e) => { _downloading.Add(tab.Id); DownloadStarting?.Invoke(tab.Id, e); };
         // Adresse du lien survolé : la bulle du moteur est coupée, le navigateur l'affiche dans son propre design.
         core.Settings.IsStatusBarEnabled = false;
@@ -217,6 +218,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         _asleep.Remove(id);
         _hiddenSince.Remove(id);
         if (_pip == id) ExitPip(pause: false);
+        _childFrames.Remove(id);
         if (_views.TryGetValue(id, out var closing)) ClearSims(id, closing);
         if (!_views.Remove(id, out var view)) return;
         _loading.Remove(id);
