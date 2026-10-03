@@ -4,15 +4,22 @@ import { onMessage, send } from './bridge';
 type Item = { url: string; title: string; kind?: 'search' | 'go' | 'history' | 'site' };
 type Content =
   | { popup: 'suggestions'; items: Item[] }
-  | { popup: 'library'; bookmarks: Item[]; history: Item[] };
+  | { popup: 'library'; bookmarks: Item[]; history: Item[] }
+  | { popup: 'menu'; items: string[] }; // libellé vide = séparateur
 
 // Contenu de la vue posée sur la page. L'hôte envoie quoi afficher ; la vue annonce sa hauteur.
 export default function Popup() {
   const [content, setContent] = useState<Content | null>(null);
+  const [selected, setSelected] = useState(-1); // suggestion surlignée au clavier
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const off = onMessage(data => setContent(data as Content));
+    const off = onMessage(data => {
+      const select = (data as { select?: unknown }).select;
+      if (typeof select === 'number') return setSelected(select);
+      setSelected(-1);
+      setContent(data as Content);
+    });
     // Perdre le curseur (clic ailleurs) referme la vue.
     const close = () => send({ type: 'popup.close' });
     window.addEventListener('blur', close);
@@ -36,8 +43,23 @@ export default function Popup() {
     return (
       <div ref={root} className="popup" role="listbox" aria-label="Suggestions">
         {content.items.map((item, index) => (
-          <Row key={item.kind + item.url} item={item} onPick={() => send({ type: 'suggest.pick', index })} />
+          <Row key={index} item={item} selected={index === selected} onPick={() => send({ type: 'suggest.pick', index })} />
         ))}
+      </div>
+    );
+
+  if (content.popup === 'menu')
+    return (
+      <div ref={root} className="popup" role="menu">
+        {content.items.map((label, index) =>
+          label === '' ? (
+            <hr key={index} />
+          ) : (
+            <button key={index} className="row" role="menuitem" onMouseDown={e => e.button === 0 && send({ type: 'menu.pick', index })}>
+              <span className="row-title">{label}</span>
+            </button>
+          ),
+        )}
       </div>
     );
 
@@ -59,11 +81,14 @@ function Section({ title, empty, items, onPick }: { title: string; empty: string
   );
 }
 
-function Row({ item, onPick }: { item: Item; onPick: () => void }) {
+function Row({ item, selected = false, onPick }: { item: Item; selected?: boolean; onPick: () => void }) {
   return (
-    <button className="row" role="option" aria-selected={false} onMouseDown={e => e.button === 0 && onPick()}>
+    <button className={`row${selected ? ' selected' : ''}`} role="option" aria-selected={selected} onMouseDown={e => e.button === 0 && onPick()}>
       {item.kind === 'search' ? (
-        <span className="row-title">Rechercher « {item.title} »</span>
+        <>
+          <SearchIcon />
+          <span className="row-title">{item.title}</span>
+        </>
       ) : item.kind === 'go' ? (
         <span className="row-title">Ouvrir {item.title}</span>
       ) : (
@@ -73,5 +98,14 @@ function Row({ item, onPick }: { item: Item; onPick: () => void }) {
         </>
       )}
     </button>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg className="row-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden>
+      <circle cx="7" cy="7" r="4.5" />
+      <path d="M10.5 10.5L14 14" />
+    </svg>
   );
 }

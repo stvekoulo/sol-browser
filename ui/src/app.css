@@ -109,7 +109,9 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   width: 100%; height: 32px; padding: 0 10px;
   border-radius: var(--radius-control); text-align: left;
 }
-.row:hover { background: var(--bg-tab-hover); }
+.row:hover, .row.selected { background: var(--bg-tab-hover); }
+.row-icon { flex: none; align-self: center; color: var(--text-dim); }
+.popup hr { width: calc(100% - 20px); margin: 5px 10px; border: 0; border-top: 0.5px solid var(--border); }
 .row-title { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .row-url { flex: 1 0 auto; max-width: 50%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text-dim); font-size: 12px; }
 

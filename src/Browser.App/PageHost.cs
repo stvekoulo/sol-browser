@@ -15,6 +15,7 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
     public event Action? RuntimeChanged;                         // chargement, historique
     public event Action<string>? Loaded;                         // id, page chargée avec succès
     public event Action<string>? NewTabRequested;
+    public event Action<double, double, CoreWebView2ContextMenuRequestedEventArgs>? ContextMenuRequested; // x, y dans la fenêtre
     public event Action<string, string?>? FaviconChanged;        // id, icône en data: (ou null)
 
     public bool IsLoading(string id) => _loading.Contains(id);
@@ -45,6 +46,12 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
             if (e.IsSuccess) Loaded?.Invoke(tab.Id);
         };
         core.NewWindowRequested += (_, e) => { e.Handled = true; NewTabRequested?.Invoke(e.Uri); };
+        core.ContextMenuRequested += (_, e) =>
+        {
+            // Position du clic dans la fenêtre, pour y poser notre menu.
+            var point = view.TransformToVisual(null).TransformPoint(new Windows.Foundation.Point(e.Location.X, e.Location.Y));
+            ContextMenuRequested?.Invoke(point.X, point.Y, e);
+        };
         core.FaviconChanged += async (_, _) => FaviconChanged?.Invoke(tab.Id, await ReadFaviconAsync(core));
         Navigate(tab.Id, tab.Url);
     }

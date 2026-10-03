@@ -6,6 +6,9 @@ public sealed class Settings
 {
     public string SearchUrlTemplate { get; set; } = "https://www.google.com/search?q={0}";
     public bool BlurEnabled { get; set; } = true;
+    /// <summary>Envoie la saisie de la barre d'adresse au moteur de recherche pour obtenir des complétions.</summary>
+    public bool OnlineSuggestions { get; set; } = true;
+    public string SuggestUrlTemplate { get; set; } = "https://suggestqueries.google.com/complete/search?client=firefox&ie=utf-8&oe=utf-8&q={0}";
     public string HomeUrl { get; set; } = "about:blank";
 }
 

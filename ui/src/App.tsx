@@ -1,5 +1,5 @@
 import { useEffect, useState, type MouseEvent, type ReactNode } from 'react';
-import { onState, send, type State, type Tab } from './bridge';
+import { onMessage, onState, send, type State, type Tab } from './bridge';
 
 export default function App() {
   const [state, setState] = useState<State | null>(null);
@@ -156,6 +156,9 @@ function Pane({ tab, focused, grow }: { tab: Tab | undefined; focused: boolean; 
   const url = !tab || tab.url === 'about:blank' ? '' : tab.url;
   const [text, setText] = useState(url);
   const [editing, setEditing] = useState(false);
+  // Suggestions affichées pour ce champ : leur nombre, et celle surlignée au clavier (-1 = aucune).
+  const [count, setCount] = useState(0);
+  const [selected, setSelected] = useState(-1);
 
   // L'adresse suit la page tant que l'utilisateur n'est pas en train de taper.
   useEffect(() => {
@@ -163,6 +166,24 @@ function Pane({ tab, focused, grow }: { tab: Tab | undefined; focused: boolean; 
   }, [url, editing]);
 
   const id = tab?.id;
+  useEffect(
+    () =>
+      onMessage(data => {
+        const e = data as { event?: string; id?: string; count?: number };
+        if (e.event !== 'suggestions' || e.id !== id) return;
+        setCount(e.count ?? 0);
+        setSelected(-1);
+      }),
+    [id],
+  );
+
+  const move = (step: number) => {
+    if (count === 0) return;
+    // De -1 (le champ) à count-1, en boucle.
+    const next = ((selected + 1 + step + count + 1) % (count + 1)) - 1;
+    setSelected(next);
+    send({ type: 'suggest.select', index: next });
+  };
   return (
     <div className={`pane${focused ? ' focused' : ''}`} style={{ flexGrow: grow }}>
       <button className="icon" aria-label="Précédent" disabled={!tab?.canGoBack} onClick={() => id && send({ type: 'nav.back', id })}>
@@ -184,7 +205,8 @@ function Pane({ tab, focused, grow }: { tab: Tab | undefined; focused: boolean; 
         className="address"
         onSubmit={e => {
           e.preventDefault();
-          if (id && text.trim()) send({ type: 'nav.go', id, input: text });
+          if (id && selected >= 0) send({ type: 'suggest.pick', index: selected });
+          else if (id && text.trim()) send({ type: 'nav.go', id, input: text });
           (document.activeElement as HTMLElement | null)?.blur();
         }}
       >
@@ -204,8 +226,19 @@ function Pane({ tab, focused, grow }: { tab: Tab | undefined; focused: boolean; 
             e.target.select();
             if (id && !focused) send({ type: 'tab.activate', id });
           }}
+          onKeyDown={e => {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+              e.preventDefault();
+              move(e.key === 'ArrowDown' ? 1 : -1);
+            } else if (e.key === 'Escape') {
+              setText(url);
+              e.currentTarget.blur();
+            }
+          }}
           onBlur={() => {
             setEditing(false);
+            setCount(0);
+            setSelected(-1);
             // Requête vide : l'hôte referme les suggestions, sans toucher à un autre panneau.
             if (id) send({ type: 'suggest', id, query: '', x: 0, y: 0, width: 0 });
           }}

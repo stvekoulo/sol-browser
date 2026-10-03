@@ -35,6 +35,7 @@ public sealed class BrowserController
         _pages.NewTabRequested += url => { Open(url); Refresh(); };
         _pages.Loaded += RecordVisit;
         _pages.FaviconChanged += (id, data) => { _favicons[id] = data; PostFavicon(id); };
+        _pages.ContextMenuRequested += OpenContextMenu;
         _window.AppWindow.Changed += (_, e) => { if (e.DidPresenterChange || e.DidSizeChange) Refresh(); };
         _window.Closed += (_, _) => { SaveSession(); _db.Dispose(); };
     }
@@ -50,8 +51,12 @@ public sealed class BrowserController
             case "popup.size": _popup.SetHeight(c.Height!.Value); return;
             case "popup.close":
                 if (!_suggesting) _libraryClosedAt = DateTime.UtcNow;
-                _popup.Hide();
+                HidePopup();
                 return;
+            case "suggest.select":
+                if (_suggesting) _popup.Post(JsonSerializer.Serialize(new { select = c.Index }));
+                return;
+            case "menu.pick": PickMenuItem(c.Index!.Value); return;
             case "window.close": _window.Close(); return;
             case "window.drag": BeginDrag(); return;
 
@@ -85,8 +90,17 @@ public sealed class BrowserController
                 if (Presenter?.State == OverlappedPresenterState.Maximized) Presenter.Restore(); else Presenter?.Maximize();
                 break;
         }
-        _popup.Hide();
+        HidePopup();
         Refresh();
+    }
+
+    private void HidePopup()
+    {
+        _suggesting = false;
+        // Un menu contextuel en attente doit toujours être rendu au moteur, même sans choix.
+        _menu?.Deferral.Complete();
+        _menu = null;
+        _popup.Hide();
     }
 
     /// <summary>Raccourci clavier : agit sur l'onglet actif.</summary>
@@ -153,16 +167,100 @@ public sealed class BrowserController
     private void Suggest(string tabId, string query, double x, double y, double width)
     {
         var q = query.Trim();
-        _suggestions = Suggestions.Build(q, q.Length == 0 ? [] : _db.Suggest(q, 5), _settings.SearchUrlTemplate);
+        var seq = ++_suggestSeq;
         _suggestTab = tabId;
+        IReadOnlyList<Visit> history = q.Length == 0 ? [] : _db.Suggest(q, 3);
+
         // Une requête vide (champ vidé ou quitté) ne referme que les suggestions, pas un autre panneau ouvert entre-temps.
-        if (_suggestions.Count == 0) { if (_suggesting) _popup.Hide(); _suggesting = false; return; }
-        _suggesting = true;
-        _popup.Show(x, y, width, JsonSerializer.Serialize(new
+        if (q.Length == 0) { if (_suggesting) HidePopup(); return; }
+        ShowSuggestions(Suggestions.Build(q, history, _settings.SearchUrlTemplate));
+
+        // Les résultats locaux s'affichent tout de suite ; les complétions du moteur de recherche s'y ajoutent à leur arrivée.
+        // Ce qui ressemble à une adresse (avec « / » ou « : ») n'est pas envoyé.
+        if (_settings.OnlineSuggestions && q.Length >= 2 && !q.Contains('/') && !q.Contains(':'))
+            _ = AddOnlineSuggestionsAsync(seq, q, history);
+
+        void ShowSuggestions(IReadOnlyList<Suggestion> items)
         {
-            popup = "suggestions",
-            items = _suggestions.Select(v => new { url = v.Url, title = v.Title, kind = v.Kind }),
-        }), focus: false); // le curseur reste dans la barre d'adresse
+            _suggestions = items;
+            _suggesting = true;
+            _popup.Show(x, y, width, JsonSerializer.Serialize(new
+            {
+                popup = "suggestions",
+                items = items.Select(v => new { url = v.Url, title = v.Title, kind = v.Kind }),
+            }), focus: false); // le curseur reste dans la barre d'adresse
+            _bridge.Post(JsonSerializer.Serialize(new { @event = "suggestions", id = tabId, count = items.Count }));
+        }
+
+        async Task AddOnlineSuggestionsAsync(int forSeq, string text, IReadOnlyList<Visit> local)
+        {
+            try
+            {
+                var json = await Http.GetStringAsync(string.Format(_settings.SuggestUrlTemplate, Uri.EscapeDataString(text)));
+                if (forSeq != _suggestSeq || !_suggesting) return; // l'utilisateur a continué à taper ou a quitté le champ
+                ShowSuggestions(Suggestions.Build(text, local, _settings.SearchUrlTemplate, Suggestions.ParseGoogle(json)));
+            }
+            catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+            {
+                // hors ligne ou service lent : on garde les suggestions locales
+            }
+        }
+    }
+
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(2) };
+    private int _suggestSeq;
+
+    // Menu du clic droit : le moteur fournit ses commandes (copier, coller, inspecter…), on les affiche dans notre vue.
+    private sealed record PendingMenu(Microsoft.Web.WebView2.Core.CoreWebView2ContextMenuRequestedEventArgs Args,
+        Windows.Foundation.Deferral Deferral, List<(string Label, int? CommandId, string? Own)> Items, string? LinkUrl);
+    private PendingMenu? _menu;
+
+    private static readonly HashSet<string> NativeCommands =
+    [
+        "back", "forward", "reload", "cut", "copy", "paste", "selectAll",
+        "copyLinkLocation", "saveLinkAs", "copyImage", "copyImageLocation", "saveImageAs",
+        "saveAs", "print", "viewPageSource", "inspectElement",
+    ];
+
+    private void OpenContextMenu(double x, double y, Microsoft.Web.WebView2.Core.CoreWebView2ContextMenuRequestedEventArgs e)
+    {
+        HidePopup();
+        var items = new List<(string Label, int? CommandId, string? Own)>();
+        var link = e.ContextMenuTarget.HasLinkUri ? e.ContextMenuTarget.LinkUri : null;
+        if (link is not null && IsWeb(link))
+        {
+            items.Add(("Ouvrir le lien dans un nouvel onglet", null, "tab"));
+            items.Add(("Ouvrir le lien en vue scindée", null, "split"));
+            items.Add(("", null, null));
+        }
+        foreach (var item in e.MenuItems)
+        {
+            if (item.Kind == Microsoft.Web.WebView2.Core.CoreWebView2ContextMenuItemKind.Separator)
+            {
+                if (items.Count > 0 && items[^1].Label != "") items.Add(("", null, null));
+            }
+            else if (item.Kind == Microsoft.Web.WebView2.Core.CoreWebView2ContextMenuItemKind.Command && item.IsEnabled && NativeCommands.Contains(item.Name))
+                items.Add((item.Label.Replace("&", ""), item.CommandId, null));
+        }
+        while (items.Count > 0 && items[^1].Label == "") items.RemoveAt(items.Count - 1);
+        if (items.Count == 0) return;
+
+        e.Handled = true;
+        _menu = new PendingMenu(e, e.GetDeferral(), items, link);
+        _popup.Show(x, y, 260, JsonSerializer.Serialize(new { popup = "menu", items = items.Select(i => i.Label) }), focus: true);
+    }
+
+    private void PickMenuItem(int index)
+    {
+        if (_menu is not { } menu || index < 0 || index >= menu.Items.Count) return;
+        var (_, commandId, own) = menu.Items[index];
+        if (commandId is int id) menu.Args.SelectedCommandId = id;
+        HidePopup(); // rend la main au moteur, qui exécute la commande choisie
+        if (own is null || menu.LinkUrl is null) return;
+
+        var tab = Open(menu.LinkUrl, activate: own == "tab");
+        if (own == "split") Split(tab.Id);
+        Refresh();
     }
 
     private void OpenLibrary(double x, double y)

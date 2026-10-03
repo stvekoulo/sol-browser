@@ -33,6 +33,23 @@ public class SuggestionsTests
     }
 
     [Fact]
+    public void Online_completions_become_searches_after_local_results()
+    {
+        var s = Suggestions.Build("you", [], Search, online: ["you", "youtube music", "you tube"]);
+        Assert.Equal(new[] { "search", "site", "search", "search" }, s.Select(x => x.Kind));
+        Assert.Equal(new Suggestion("https://www.google.com/search?q=youtube%20music", "youtube music", "search"), s[2]);
+    }
+
+    [Theory]
+    [InlineData("""["you",["youtube","youtube music"],[],{"x":1}]""", 2)]
+    [InlineData("""["you",["a", 3, null, "b"]]""", 2)]
+    [InlineData("""["you"]""", 0)]
+    [InlineData("""{"error":true}""", 0)]
+    [InlineData("<html>bloqué</html>", 0)]
+    public void ParseGoogle_reads_completions_and_tolerates_anything_else(string json, int count) =>
+        Assert.Equal(count, Suggestions.ParseGoogle(json).Count);
+
+    [Fact]
     public void Matches_known_sites_by_name_and_respects_the_limit()
     {
         Assert.Contains(Suggestions.Build("gma", [], Search), x => x.Url == "https://mail.google.com");

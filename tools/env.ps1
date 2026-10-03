@@ -15,4 +15,5 @@ $env:TEMP = "$dev\tmp"
 $env:TMP = "$dev\tmp"
 $env:WEBVIEW2_USER_DATA_FOLDER = "$dev\webview2-data"
 $env:NAVIGATEUR_DATA_DIR = "$dev\navigateur-data"
-if ($env:PATH -notlike "*$dev\dotnet*") { $env:PATH = "$dev\dotnet;$env:PATH" }
+# Comparaison exacte : le PATH peut déjà contenir D:\dev\dotnet-home\.dotnet\tools, qui n'est pas le SDK.
+if (($env:PATH -split ';') -notcontains "$dev\dotnet") { $env:PATH = "$dev\dotnet;$env:PATH" }
