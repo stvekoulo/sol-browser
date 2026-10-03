@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using Browser.Core;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 
 namespace Browser.App;
 
@@ -20,11 +21,18 @@ public sealed partial class MainWindow : Window
         (0x09, 2 | 4, "tab.previous"),// Ctrl+Maj+Tab
         (0x25, 1, "nav.back"),        // Alt+Gauche
         (0x27, 1, "nav.forward"),     // Alt+Droite
+        (0xBB, 2, "zoom.in"),         // Ctrl + (touche =/+)
+        (0x6B, 2, "zoom.in"),         // Ctrl + (pavé numérique)
+        (0xBD, 2, "zoom.out"),        // Ctrl -
+        (0x6D, 2, "zoom.out"),        // Ctrl - (pavé numérique)
+        (0x30, 2, "zoom.reset"),      // Ctrl 0
     ];
 
     private readonly nint _hwnd;
     private readonly SubclassProc _wndProc; // gardé en champ : le délégué ne doit pas être libéré
     private BrowserController? _controller;
+    private UiBridge? _bridge;
+    private const double SidebarWidth = 296;
 
     public MainWindow()
     {
@@ -51,14 +59,15 @@ public sealed partial class MainWindow : Window
 
         var pages = new PageHost(Pages, PrimaryColumn, DividerColumn, SecondaryColumn, blur, settings);
         var bridge = new UiBridge(Ui, "index.html", Sidebar, SidebarColumn, pages);
+        _bridge = bridge;
         bridge.PageColorChanged += (r, g, b) =>
             Root.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, r, g, b));
         var popupBridge = new UiBridge(Popup, "index.html#popup");
         bridge.AttachPopup(popupBridge);
-        var popup = new PopupHost(PopupFrame, Popup, popupBridge, Pages);
+        var popup = new PopupHost(PopupFrame, Popup, popupBridge);
         var dockBridge = new UiBridge(Dock, "index.html#dock");
         bridge.AttachPopup(dockBridge);
-        var dock = new DockHost(DockFrame, Dock, dockBridge);
+        var dock = new DockHost(DockFrame, dockBridge);
         _controller = new BrowserController(this, pages, bridge, popup, dock, settings);
         WireDivider();
         WireGestures();
@@ -82,31 +91,42 @@ public sealed partial class MainWindow : Window
         // handledEventsToo : les vues web marquent ces événements comme traités, on les observe quand même.
         Root.AddHandler(UIElement.PointerPressedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler((_, e) =>
         {
-            var p = e.GetCurrentPoint(Root);
-            DebugLog.Write($"pression x={p.Position.X:0} y={p.Position.Y:0} source={e.OriginalSource?.GetType().Name}:{(e.OriginalSource as FrameworkElement)?.Name} gauche={p.Properties.IsLeftButtonPressed} x1={p.Properties.IsXButton1Pressed} x2={p.Properties.IsXButton2Pressed}");
-            if (p.Properties.IsXButton1Pressed) _controller?.Shortcut("nav.back");
-            else if (p.Properties.IsXButton2Pressed) _controller?.Shortcut("nav.forward");
-
-            // Un clic hors du menu le referme. Les clics dans la barre du haut passent par leurs propres commandes
-            // (recliquer l'icône d'un panneau le ferme, cliquer une autre icône ouvre l'autre panneau).
-            if (PopupFrame.Visibility == Visibility.Visible && e.OriginalSource is not Microsoft.UI.Xaml.Controls.WebView2 { Name: "Popup" or "Ui" })
-                _controller?.Execute(new Command("popup.close"));
+            var p = e.GetCurrentPoint(Root).Properties;
+            if (p.IsXButton1Pressed) _controller?.Shortcut("nav.back");
+            else if (p.IsXButton2Pressed) _controller?.Shortcut("nav.forward");
         }), true);
 
-        // Diagnostic temporaire : quelle vue reçoit le survol, notée à chaque changement.
-        string? hovered = null;
+        // Carte latérale fermée : approcher le curseur du bord gauche la fait apparaître par-dessus la page,
+        // sans la redimensionner ; elle se retire quand le curseur s'en éloigne.
         Root.AddHandler(UIElement.PointerMovedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler((_, e) =>
         {
-            var source = $"{e.OriginalSource?.GetType().Name}:{(e.OriginalSource as FrameworkElement)?.Name}";
-            if (source == hovered) return;
-            hovered = source;
             var p = e.GetCurrentPoint(Root).Position;
-            DebugLog.Write($"survol -> {source} x={p.X:0} y={p.Y:0} menu visible={PopupFrame.Visibility} captures menu={Popup.PointerCaptures?.Count ?? 0}");
+            var peeking = Grid.GetColumnSpan(Sidebar) == 2;
+            if (!peeking && SidebarColumn.Width.Value == 0 && p.X <= 6 && p.Y > 52)
+            {
+                Grid.SetColumnSpan(Sidebar, 2);
+                Canvas.SetZIndex(Sidebar, 1);
+                Sidebar.HorizontalAlignment = HorizontalAlignment.Left;
+                Sidebar.Width = SidebarWidth;
+                Sidebar.Visibility = Visibility.Visible;
+                _bridge?.Post("""{"event":"sidebar-peek"}""");
+            }
+            else if (peeking && (p.X > SidebarWidth + 40 || p.Y < 40) && PopupFrame.Visibility != Visibility.Visible)
+            {
+                Sidebar.Visibility = Visibility.Collapsed;
+                UiBridge.DockSidebar(Sidebar);
+            }
         }), true);
 
         Root.AddHandler(UIElement.PointerWheelChangedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler((_, e) =>
         {
             var p = e.GetCurrentPoint(Root).Properties;
+            // Ctrl + molette : zoom de la page.
+            if (!p.IsHorizontalMouseWheel && e.KeyModifiers.HasFlag(Windows.System.VirtualKeyModifiers.Control))
+            {
+                _controller?.Shortcut(p.MouseWheelDelta > 0 ? "zoom.in" : "zoom.out");
+                return;
+            }
             if (!p.IsHorizontalMouseWheel) return;
             var now = DateTime.UtcNow;
             if ((now - _swipeAt).TotalMilliseconds > 350) { _swipe = 0; _swipeDone = false; } // nouveau geste

@@ -118,6 +118,7 @@ public sealed class BrowserController
             case "split.resize": _split.Resize(c.Ratio!.Value); break;
             case "bookmark.add": if (IsWeb(c.Url!)) _db.AddBookmark(c.Url!, c.Title!); break;
             case "bookmark.remove": _db.RemoveBookmark(c.Url!); break;
+            case "zoom.in" or "zoom.out" or "zoom.reset": Zoom(c.Id ?? _tabs.ActiveId, c.Type); return;
             case "window.minimize": Presenter?.Minimize(); break;
             case "window.maximize":
                 if (Presenter?.State == OverlappedPresenterState.Maximized) Presenter.Restore(); else Presenter?.Maximize();
@@ -204,7 +205,7 @@ public sealed class BrowserController
         const double width = 340;
         HidePopup();
         _downloadsOpen = true;
-        _popup.Show(x - width, y, width, DownloadsJson(_downloads), focus: true, animate: true, anchorRight: true);
+        _popup.Show(x - width, y, width, DownloadsJson(_downloads), focus: true);
     }
 
     // Panneau de réglages : des interrupteurs, appliqués tout de suite et enregistrés.
@@ -213,6 +214,7 @@ public sealed class BrowserController
     private string SettingsJson() => JsonSerializer.Serialize(new
     {
         popup = "settings",
+        zoom = _tabs.ActiveId is { } activeId ? (int)Math.Round(_pages.ZoomOf(activeId) * 100) : 100,
         items = new[]
         {
             new { key = "scrollbars", label = "Barre de défilement fine", hint = "Apparaît seulement pendant le défilement", on = !_settings.HideScrollbars },
@@ -229,7 +231,7 @@ public sealed class BrowserController
         const double width = 340;
         HidePopup();
         _settingsOpen = true;
-        _popup.Show(x - width, y, width, SettingsJson(), focus: true, animate: true, anchorRight: true);
+        _popup.Show(x - width, y, width, SettingsJson(), focus: true);
     }
 
     private void SetSetting(string key, bool on)
@@ -292,6 +294,23 @@ public sealed class BrowserController
             case "tab.open" or "tab.reopen": Execute(new Command(action)); break;
             default: if (active is not null) Execute(new Command(action, Id: active)); break;
         }
+    }
+
+    // Crans de zoom, comme dans les navigateurs courants.
+    private static readonly double[] ZoomSteps = [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
+
+    private void Zoom(string? id, string action)
+    {
+        if (id is null) return;
+        var current = _pages.ZoomOf(id);
+        var zoom = action switch
+        {
+            "zoom.in" => ZoomSteps.FirstOrDefault(z => z > current + 0.001, ZoomSteps[^1]),
+            "zoom.out" => ZoomSteps.LastOrDefault(z => z < current - 0.001, ZoomSteps[0]),
+            _ => 1,
+        };
+        _pages.SetZoom(id, zoom); // l'état est renvoyé à l'interface par RuntimeChanged
+        if (_settingsOpen) _popup.Post(SettingsJson());
     }
 
     private OverlappedPresenter? Presenter => _window.AppWindow.Presenter as OverlappedPresenter;
@@ -400,11 +419,11 @@ public sealed class BrowserController
     private List<(string Label, Action? Run)>? _menu;
     private Action? _menuDismissed; // appelé à la fermeture du menu, avec ou sans choix
 
-    private void ShowMenu(double x, double y, List<(string Label, Action? Run)> items, Action? dismissed = null, bool anchorRight = false)
+    private void ShowMenu(double x, double y, List<(string Label, Action? Run)> items, Action? dismissed = null)
     {
         HidePopup();
         (_menu, _menuDismissed) = (items, dismissed);
-        _popup.Show(x, y, 260, JsonSerializer.Serialize(new { popup = "menu", items = items.Select(i => i.Label) }), focus: true, animate: true, anchorRight: anchorRight);
+        _popup.Show(x, y, 260, JsonSerializer.Serialize(new { popup = "menu", items = items.Select(i => i.Label) }), focus: true);
     }
 
     private void PickMenuItem(int index)
@@ -447,7 +466,7 @@ public sealed class BrowserController
             ("Capturer une zone", () => Capture("region")),
             ("Capturer la partie visible", () => Capture("visible")),
             ("Capturer la page entière", () => Capture("full")),
-        ], anchorRight: true);
+        ]);
     }
 
     private void Capture(string mode)
@@ -507,7 +526,7 @@ public sealed class BrowserController
             popup = "library",
             bookmarks = _db.Bookmarks().Select(b => new { url = b.Url, title = b.Title }),
             history = _db.RecentHistory(12).Select(v => new { url = v.Url, title = v.Title }),
-        }), focus: true, animate: true, anchorRight: true); // la vue prend le curseur : la perdre la referme
+        }), focus: true); // la vue prend le curseur : la perdre la referme
     }
 
     private void RecordVisit(string id)
@@ -556,6 +575,7 @@ public sealed class BrowserController
             tabs = _tabs.Tabs.Select(t => new
             {
                 id = t.Id, url = t.Url, title = t.Title, pinned = t.Pinned,
+                zoom = (int)Math.Round(_pages.ZoomOf(t.Id) * 100),
                 loading = _pages.IsLoading(t.Id),
                 canGoBack = _pages.CanGoBack(t.Id),
                 canGoForward = _pages.CanGoForward(t.Id),

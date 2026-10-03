@@ -1,21 +1,85 @@
-/* Mouvement de l'interface. Courbe et durée : --ease-out et --fast de theme.css. */
+/* Mouvement de l'interface. Courbe : --ease-out de theme.css.
+   Le cadre des vues flottantes ne peut pas être animé (voir PopupHost.cs) : c'est leur contenu qui arrive. */
+:root { --slow: 300ms; --stagger: 34ms; }
 
 /* Retour de pression : le bouton s'enfonce légèrement, pour confirmer que le clic est pris. */
-:where(button.pill-surface, .pill-icon-btn, .segment-btn, .inline-btn, .pinned-pill, .pill-action, .sidebar-new-tab, .sidebar-url-btn, .dock-mini-btn):active:not(:disabled) {
-  transform: scale(0.97);
+:where(button.pill-surface, .pill-icon-btn, .segment-btn, .inline-btn, .pinned-pill, .pill-action, .sidebar-new-tab, .sidebar-url-btn, .dock-mini-btn, .stepper button):active:not(:disabled) {
+  transform: scale(0.95);
   transition: transform 120ms var(--ease-out);
 }
 
-/* Un onglet qui arrive dans la liste apparaît en fondu au lieu de surgir. Opacité seule : la liste ne bouge pas. */
+/* Ouverture d'un menu ou d'un panneau : chaque ligne glisse en place à la suite de la précédente. */
+@keyframes arrive {
+  from { opacity: 0; transform: translateY(-10px) scale(0.97); }
+}
+.popup.arriving > *,
+.popup.arriving > .popup-list > * {
+  animation: arrive var(--slow) var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * var(--stagger));
+}
+.popup.arriving > .popup-list { animation: none; }
+.popup.arriving :nth-child(2) { --i: 1; }
+.popup.arriving :nth-child(3) { --i: 2; }
+.popup.arriving :nth-child(4) { --i: 3; }
+.popup.arriving :nth-child(5) { --i: 4; }
+.popup.arriving :nth-child(6) { --i: 5; }
+.popup.arriving :nth-child(7) { --i: 6; }
+.popup.arriving :nth-child(n + 8) { --i: 7; }
+
+/* Encart des téléchargements : il monte depuis le bas de la fenêtre. */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(18px) scale(0.97); }
+}
+.dock { animation: rise 360ms var(--ease-out) both; }
+
+/* Carte latérale apparue au survol du bord gauche : elle glisse depuis ce bord. */
+@keyframes slide-in {
+  from { opacity: 0; transform: translateX(-28px); }
+}
+.sidebar-card.peeking { animation: slide-in var(--slow) var(--ease-out) both; }
+
+/* Un onglet qui arrive dans la liste : fondu et léger glissement. */
 .sidebar-tab, .sidebar-split-group {
-  transition: background var(--fast) var(--ease-out), box-shadow var(--fast) var(--ease-out), opacity 140ms var(--ease-out);
+  transition: background var(--fast) var(--ease-out), box-shadow var(--fast) var(--ease-out), opacity 220ms var(--ease-out), translate 220ms var(--ease-out);
 }
 @starting-style {
-  .sidebar-tab, .sidebar-split-group { opacity: 0; }
+  .sidebar-tab, .sidebar-split-group { opacity: 0; translate: -10px 0; }
 }
 
 /* Mouvement réduit : on garde les fondus, on retire les déplacements et mises à l'échelle. */
 @media (prefers-reduced-motion: reduce) {
-  :where(button.pill-surface, .pill-icon-btn, .segment-btn, .inline-btn, .pinned-pill, .pill-action, .sidebar-new-tab, .sidebar-url-btn, .dock-mini-btn):active:not(:disabled) { transform: none; }
+  :where(button, .pinned-pill):active { transform: none !important; }
   .pinned-pill:hover { transform: none; }
+  @keyframes arrive { from { opacity: 0; } }
+  @keyframes rise { from { opacity: 0; } }
+  @keyframes slide-in { from { opacity: 0; } }
+  @starting-style { .sidebar-tab, .sidebar-split-group { translate: 0 0; } }
 }
+
+/* Réglage à pas : zoom de la page */
+.setting-row.static:hover { background: none; box-shadow: none; }
+.stepper {
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: 28px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-pill-solid);
+  box-shadow: var(--shadow-pill-elevated);
+}
+.stepper button { width: 28px; height: 28px; border-radius: 50%; font-size: 15px; color: var(--text); }
+.stepper button:hover { background: var(--bg-tab-hover); }
+.stepper .stepper-value { width: 52px; border-radius: var(--radius-pill); font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+/* Zoom différent de 100 % : rappel dans la pilule d'adresse, un clic y revient */
+.zoom-chip {
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-tab-hover);
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.zoom-chip:hover { color: var(--text); }

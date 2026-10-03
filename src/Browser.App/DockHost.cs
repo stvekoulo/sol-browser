@@ -3,35 +3,23 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace Browser.App;
 
-/// <summary>Encart flottant en bas à droite de la fenêtre : téléchargements en cours. Sa taille suit son contenu.</summary>
-public sealed class DockHost
+/// <summary>
+/// Encart flottant en bas à droite de la fenêtre : téléchargements en cours. Sa taille suit son contenu.
+/// Comme pour PopupHost : aucun appel à ElementCompositionPreview sur le cadre, sinon la souris le traverse.
+/// </summary>
+public sealed class DockHost(Grid frame, UiBridge bridge)
 {
-    private const float Radius = 20f;
-    private readonly Grid _frame;
-    private readonly WebView2 _view;
-    private readonly UiBridge _bridge;
-
-    public DockHost(Grid frame, WebView2 view, UiBridge bridge)
-    {
-        (_frame, _view, _bridge) = (frame, view, bridge);
-        _frame.SizeChanged += (_, _) => RoundedClip.Apply(_frame, _view, Radius);
-    }
-
-    public bool Visible => _frame.Visibility == Visibility.Visible;
+    public bool Visible => frame.Visibility == Visibility.Visible;
 
     /// <summary>Envoie le contenu ; l'encart apparaît quand il a annoncé sa taille.</summary>
-    public void Post(string json) => _bridge.Post(json);
+    public void Post(string json) => bridge.Post(json);
 
     public void SetSize(double width, double height)
     {
-        var appearing = !Visible;
-        _frame.Width = Math.Clamp(width, 44, 360);
-        _frame.Height = Math.Clamp(height, 44, 420);
-        _frame.Visibility = Visibility.Visible;
-        if (appearing) FloatIn.Play(_frame, (float)_frame.Width, (float)_frame.Height); // depuis son coin bas droit
-        _frame.UpdateLayout();
-        RoundedClip.Apply(_frame, _view, Radius);
+        frame.Width = Math.Clamp(width, 44, 360);
+        frame.Height = Math.Clamp(height, 44, 420);
+        frame.Visibility = Visibility.Visible;
     }
 
-    public void Hide() => _frame.Visibility = Visibility.Collapsed;
+    public void Hide() => frame.Visibility = Visibility.Collapsed;
 }

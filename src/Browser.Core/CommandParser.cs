@@ -24,6 +24,7 @@ public static class CommandParser
         ["download.cancel"] = ["id"], ["download.open"] = ["id"], ["download.reveal"] = ["id"],
         ["downloads.open"] = ["x", "y"],
         ["window.minimize"] = [], ["window.maximize"] = [], ["window.close"] = [], ["window.drag"] = [],
+        ["zoom.in"] = [], ["zoom.out"] = [], ["zoom.reset"] = [],
         ["ui.ready"] = [],
     };
 

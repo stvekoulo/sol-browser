@@ -14,6 +14,7 @@ export default function Sidebar() {
   const [icons, setIcons] = useState<Icons>({});
   const [copied, setCopied] = useState(false);
   const [status, setStatus] = useState(''); // adresse du lien survolé dans la page
+  const [peek, setPeek] = useState(0); // apparitions au survol du bord gauche : rejoue l'entrée de la carte
   const [urlText, setUrlText] = useState('');
   const [editingUrl, setEditingUrl] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -22,6 +23,7 @@ export default function Sidebar() {
     const off = onState(setState, e => {
       if (e.event === 'favicon' && e.id) setIcons(all => ({ ...all, [e.id!]: e.data }));
       if (e.event === 'status') setStatus(e.text ?? '');
+      if (e.event === 'sidebar-peek') setPeek(n => n + 1);
     });
     send({ type: 'ui.ready' });
     return off;
@@ -66,7 +68,7 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="sidebar-card" aria-label="Panneau latéral des onglets">
+    <aside key={peek} className={`sidebar-card${peek ? ' peeking' : ''}`} aria-label="Panneau latéral des onglets">
       <div className="sidebar-url-pill">
         <LockIcon />
         <form

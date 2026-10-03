@@ -121,7 +121,8 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
         s.IsWebMessageEnabled = false;
         // Mots de passe : gestionnaire du moteur (proposition d'enregistrement, stockage chiffré, remplissage).
         s.IsPasswordAutosaveEnabled = settings.SavePasswords;
-        s.IsSwipeNavigationEnabled = true; // balayage horizontal : page précédente ou suivante
+        s.IsSwipeNavigationEnabled = true;
+        s.IsZoomControlEnabled = false; // le zoom est géré par le navigateur (Ctrl +, Ctrl -, Ctrl molette), pas par le moteur // balayage horizontal : page précédente ou suivante
         s.IsGeneralAutofillEnabled = false;
         s.IsReputationCheckingRequired = true; // SmartScreen
         // ponytail: tout est refusé tant qu'il n'y a pas d'invite ; à remplacer par une demande à l'utilisateur
@@ -134,6 +135,7 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
         if (!_views.Remove(id, out var view)) return;
         _loading.Remove(id);
         _blurScriptIds.Remove(id);
+        _zoom.Remove(id);
         container.Children.Remove(view);
         view.Close();
     }
@@ -160,6 +162,31 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
             view.Visibility = column < 0 ? Visibility.Collapsed : Visibility.Visible;
             if (column >= 0) Grid.SetColumn(view, column);
         }
+    }
+
+    // Zoom d'une page. Ce type de vue n'expose pas le zoom du moteur : il est appliqué à la racine du document,
+    // maintenant et à chaque nouvelle page de l'onglet.
+    private readonly Dictionary<string, (double Zoom, string? ScriptId)> _zoom = new();
+
+    public double ZoomOf(string id) => _zoom.TryGetValue(id, out var z) ? z.Zoom : 1;
+
+    public async void SetZoom(string id, double zoom)
+    {
+        if (Core(id) is not { } core) return;
+        if (_zoom.TryGetValue(id, out var old) && old.ScriptId is not null) core.RemoveScriptToExecuteOnDocumentCreated(old.ScriptId);
+        var value = zoom == 1 ? "" : zoom.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+        _zoom[id] = (zoom, null);
+        RuntimeChanged?.Invoke();
+        try
+        {
+            await core.ExecuteScriptAsync($"document.documentElement.style.zoom = '{value}'");
+            if (zoom == 1) return;
+            var script = $"(() => {{ const z = () => document.documentElement.style.zoom = '{value}'; document.documentElement ? z() : document.addEventListener('DOMContentLoaded', z, {{ once: true }}); }})()";
+            var scriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(script);
+            if (_zoom.TryGetValue(id, out var now) && now.Zoom == zoom) _zoom[id] = (zoom, scriptId);
+            else core.RemoveScriptToExecuteOnDocumentCreated(scriptId); // le zoom a encore changé entre-temps
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { /* vue fermée entre-temps */ }
     }
 
     public CoreWebView2? CoreOf(string id) => Core(id);

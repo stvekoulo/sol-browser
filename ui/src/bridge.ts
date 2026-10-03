@@ -4,6 +4,7 @@ export type Tab = {
   url: string;
   title: string;
   pinned: boolean;
+  zoom: number; // en pour cent
   loading: boolean;
   canGoBack: boolean;
   canGoForward: boolean;

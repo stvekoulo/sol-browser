@@ -9,7 +9,7 @@ type Content =
   | { popup: 'library'; bookmarks: Item[]; history: Item[] }
   | { popup: 'menu'; items: string[] }
   | { popup: 'downloads'; items: Download[] }
-  | { popup: 'settings'; items: Setting[] };
+  | { popup: 'settings'; zoom: number; items: Setting[] };
 
 type Setting = { key: string; label: string; hint: string; on: boolean };
 
@@ -37,22 +37,23 @@ export default function Popup() {
   const [selected, setSelected] = useState(-1);
   const [libTab, setLibTab] = useState<'bookmarks' | 'history'>('bookmarks');
   const root = useRef<HTMLDivElement>(null);
+  const fresh = useRef(false);
+  const [opening, setOpening] = useState(0); // change à chaque ouverture : rejoue l'apparition
 
   useEffect(() => {
     const off = onMessage(data => {
       const select = (data as { select?: unknown }).select;
       if (typeof select === 'number') return setSelected(select);
+      // « fresh » précède le contenu d'une nouvelle ouverture : celui-ci jouera son apparition.
+      if ((data as { fresh?: boolean }).fresh) return void (fresh.current = true);
+      if (fresh.current) setOpening(n => n + 1);
+      fresh.current = false;
       const next = data as Content;
       setSelected(-1);
       if (next.popup === 'library')
         setLibTab(next.bookmarks.length > 0 ? 'bookmarks' : 'history');
       setContent(next);
     });
-    // Diagnostic temporaire : ce que la vraie souris envoie à cette vue, lisible par le port de débogage.
-    const log: unknown[] = ((window as unknown as { __log: unknown[] }).__log = []);
-    for (const type of ['pointerdown', 'mousedown', 'mouseup', 'click', 'focus', 'blur', 'mouseover'])
-      window.addEventListener(type, e => log.length < 300 && log.push([Math.round(performance.now()), type, (e.target as Element)?.className ?? 'window', document.hasFocus()]), true);
-
     const close = () => send({ type: 'popup.close' });
     // Perdre le curseur referme la vue, mais pas tout de suite : un clic dans la vue lui fait perdre puis
     // reprendre le curseur, et une fermeture immédiate avalerait ce clic.
@@ -102,7 +103,7 @@ export default function Popup() {
 
   if (content.popup === 'menu')
     return (
-      <div ref={root} className="popup" role="menu">
+      <div key={opening} ref={root} className="popup arriving" role="menu">
         {content.items.map((label, index) => {
           if (label === '') return <hr key={index} />;
           const danger = label.toLowerCase().includes('fermer');
@@ -125,7 +126,7 @@ export default function Popup() {
 
   if (content.popup === 'downloads')
     return (
-      <div ref={root} className="popup">
+      <div key={opening} ref={root} className="popup arriving">
         <div className="popup-header">
           <span className="popup-header-title">Téléchargements</span>
           <span className="popup-badge">{content.items.length}</span>
@@ -140,9 +141,22 @@ export default function Popup() {
 
   if (content.popup === 'settings')
     return (
-      <div ref={root} className="popup">
+      <div key={opening} ref={root} className="popup arriving">
         <div className="popup-header">
           <span className="popup-header-title">Réglages</span>
+        </div>
+        <div className="setting-row static">
+          <span className="setting-text">
+            <span className="row-title">Zoom de la page</span>
+            <span className="row-sub">Ctrl + et Ctrl −, ou Ctrl avec la molette</span>
+          </span>
+          <span className="stepper" role="group" aria-label="Zoom de la page">
+            <button aria-label="Réduire" onClick={() => send({ type: 'zoom.out' })}>−</button>
+            <button className="stepper-value" aria-label="Revenir à 100 %" title="Revenir à 100 %" onClick={() => send({ type: 'zoom.reset' })}>
+              {content.zoom} %
+            </button>
+            <button aria-label="Agrandir" onClick={() => send({ type: 'zoom.in' })}>+</button>
+          </span>
         </div>
         <div className="popup-list">
           {content.items.map(s => (
@@ -168,7 +182,7 @@ export default function Popup() {
   const items = libTab === 'bookmarks' ? content.bookmarks : content.history;
 
   return (
-    <div ref={root} className="popup">
+    <div key={opening} ref={root} className="popup arriving">
       <div className="popup-segment" role="tablist">
         <button
           role="tab"

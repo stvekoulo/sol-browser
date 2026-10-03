@@ -251,6 +251,11 @@ function AddressPill({ tab, focused, grow }: { tab: Tab | undefined; focused: bo
       </form>
 
       <div className="address-trail">
+        {tab && tab.zoom !== 100 && (
+          <button className="zoom-chip" aria-label={`Zoom ${tab.zoom} %, revenir à 100 %`} title="Revenir à 100 %" onClick={() => send({ type: 'zoom.reset', id: tab.id })}>
+            {tab.zoom} %
+          </button>
+        )}
         {rawUrl && (
           <button
             className={`inline-btn${tab?.bookmarked ? ' on' : ''}`}
