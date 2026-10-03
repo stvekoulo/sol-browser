@@ -186,28 +186,49 @@ export default function Sidebar() {
   );
 }
 
+const GAP = 8; // écart entre deux pilules (sidebar.css)
+const NAMED_PILL = 104; // largeur à partir de laquelle une pilule affiche son nom lisiblement
+
 // Deux rangées de pilules : les raccourcis (modifiables et retirables par clic droit), puis les onglets épinglés.
 function PinnedStrip({ shortcuts, tabs, icons, activeId }: { shortcuts: State['shortcuts']; tabs: Tab[]; icons: Icons; activeId: string | null }) {
   const pinnedTabs = tabs.filter(tab => tab.pinned && !shortcuts.some(s => s.tabId === tab.id));
+
+  // Les pilules suivent la largeur de la carte, que l'utilisateur règle en tirant son bord :
+  // - assez de place pour tous les noms : chaque pilule affiche le sien, à largeur égale ;
+  // - sinon, des ronds, et le nom sur la dernière pilule d'une rangée de trois au plus ;
+  // - une rangée de ronds seuls se partage toute la largeur.
+  const strip = useRef<HTMLDivElement>(null);
+  const [room, setRoom] = useState(0);
+  useEffect(() => {
+    const el = strip.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => setRoom(el.clientWidth));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  const named = (count: number) => count > 0 && (room - GAP * (count - 1)) / count >= NAMED_PILL;
+  const wideAt = (index: number, count: number) => named(count) || (index === count - 1 && count <= 3);
+  const rowClass = (count: number) => `pinned-row${!named(count) && count > 3 ? ' even' : ''}`;
+
   return (
-    <>
+    <div ref={strip} className="pinned-strip">
       {shortcuts.length > 0 && (
-        <div className="pinned-row" aria-label={t('Accès rapides', 'Shortcuts')}>
+        <div className={rowClass(shortcuts.length)} aria-label={t('Accès rapides', 'Shortcuts')}>
           {shortcuts.map((shortcut, index) => (
             <ShortcutPill
               key={`${index}-${shortcut.url}`}
               shortcut={shortcut}
               index={index}
-              wide={index === shortcuts.length - 1 && shortcuts.length <= 3}
+              wide={wideAt(index, shortcuts.length)}
               active={!!shortcut.tabId && shortcut.tabId === activeId}
             />
           ))}
         </div>
       )}
       {pinnedTabs.length > 0 && (
-        <div className="pinned-row" aria-label={t('Onglets épinglés', 'Pinned tabs')}>
+        <div className={rowClass(pinnedTabs.length)} aria-label={t('Onglets épinglés', 'Pinned tabs')}>
           {pinnedTabs.map((tab, idx) => {
-            const wide = idx === pinnedTabs.length - 1 && pinnedTabs.length <= 3;
+            const wide = wideAt(idx, pinnedTabs.length);
             const label = tab.title && tab.title !== 'about:blank' ? tab.title.split(' - ')[0].split(' · ')[0] : t('Épinglé', 'Pinned');
             const icon = icons[tab.id];
             return (
@@ -231,7 +252,7 @@ function PinnedStrip({ shortcuts, tabs, icons, activeId }: { shortcuts: State['s
           })}
         </div>
       )}
-    </>
+    </div>
   );
 }
 

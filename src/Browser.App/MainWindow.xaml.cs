@@ -243,21 +243,24 @@ public sealed partial class MainWindow : Window
             // Le curseur est en pixels de l'écran, la carte en unités d'affichage.
             _sidebar!.Resize(point.X / Root.XamlRoot.RasterizationScale + 3);
         };
+        // Deux pressions rapprochées : retour à la largeur d'origine. (Compté ici : l'évènement de double-clic de
+        // l'interface n'arrive pas sur cette poignée, dont la pression est déjà prise pour le glisser.)
+        long lastPress = 0;
         SidebarGrip.PointerPressed += (_, e) =>
         {
             e.Handled = true;
-            timer.Start();
-        };
-        // Double-clic sur le bord : retour à la largeur d'origine.
-        SidebarGrip.DoubleTapped += (_, e) =>
-        {
-            e.Handled = true;
+            var now = Environment.TickCount64;
+            var doubleClick = now - lastPress <= GetDoubleClickTime();
+            lastPress = doubleClick ? 0 : now;
+            if (!doubleClick) { timer.Start(); return; }
             timer.Stop();
             _sidebar!.Resize(SidebarHost.DefaultWidth);
             settings.SidebarWidth = _sidebar.Width;
             JsonFileStore.Save(AppPaths.Settings, settings);
         };
     }
+
+    [DllImport("user32.dll")] private static extern uint GetDoubleClickTime();
 
     private DispatcherTimer CreateDividerTimer()
     {
