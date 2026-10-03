@@ -112,6 +112,7 @@ public sealed partial class MainWindow : Window
         WireGestures();
 
         await bridge.InitAsync(uiFolder, _controller.Execute);
+        _ = AdBlock.ApplyExtensionAsync(Ui.CoreWebView2.Profile, settings.BlockAds);
         await popupBridge.InitAsync(uiFolder, _controller.Execute);
         await dockBridge.InitAsync(uiFolder, _controller.Execute);
         popup.Hide();

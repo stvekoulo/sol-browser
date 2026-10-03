@@ -3,3 +3,4 @@ obj/
 node_modules/
 dist/
 *.user
+src/Browser.App/extensions/

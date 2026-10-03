@@ -37,7 +37,7 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
         var view = new WebView2 { Visibility = Visibility.Collapsed };
         _views[tab.Id] = view;
         container.Children.Add(view);
-        await view.EnsureCoreWebView2Async();
+        await view.EnsureCoreWebView2Async(await AdBlock.EnvironmentAsync());
         if (!_views.ContainsKey(tab.Id)) return; // fermé pendant l'initialisation
 
         var core = view.CoreWebView2;
@@ -442,7 +442,7 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
         var view = new WebView2 { Visibility = main.Visibility };
         Grid.SetColumn(view, Grid.GetColumn(main));
         container.Children.Add(view);
-        await view.EnsureCoreWebView2Async();
+        await view.EnsureCoreWebView2Async(await AdBlock.EnvironmentAsync());
         var core = view.CoreWebView2;
         Harden(core);
         Shield(core, countFor: null);

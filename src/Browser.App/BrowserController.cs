@@ -432,7 +432,10 @@ public sealed class BrowserController
     {
         switch (key)
         {
-            case "blocker": _settings.BlockAds = on; break;
+            case "blocker":
+                _settings.BlockAds = on;
+                if (_tabs.ActiveId is { } shown && _pages.CoreOf(shown) is { } shownCore) _ = AdBlock.ApplyExtensionAsync(shownCore.Profile, on);
+                break;
             case "scrollbars": _settings.HideScrollbars = !on; break;
             case "blur": _settings.BlurEnabled = on; break;
             case "floatingDownloads": _settings.FloatingDownloads = on; break;
