@@ -25,6 +25,7 @@ public static class CommandParser
         ["downloads.open"] = ["x", "y"],
         ["window.minimize"] = [], ["window.maximize"] = [], ["window.close"] = [], ["window.drag"] = [],
         ["zoom.in"] = [], ["zoom.out"] = [], ["zoom.reset"] = [],
+        ["permission.answer"] = ["index"], ["permissions.clear"] = [],
         ["group.new"] = ["id"], ["group.create"] = ["id", "title"], ["group.add"] = ["id", "query"], ["group.remove"] = ["id"],
         ["group.toggle"] = ["id"], ["group.menu"] = ["id", "x", "y"], ["group.rename"] = ["id", "title"],
         ["profile.menu"] = ["x", "y"],

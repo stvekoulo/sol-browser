@@ -9,8 +9,9 @@ type Content =
   | { popup: 'library'; bookmarks: Item[]; history: Item[] }
   | { popup: 'menu'; items: string[] }
   | { popup: 'downloads'; items: Download[] }
-  | { popup: 'settings'; zoom: number; theme: number; tint: Setting[]; items: Setting[] }
+  | { popup: 'settings'; zoom: number; theme: number; permissions: number; tint: Setting[]; items: Setting[] }
   | { popup: 'profiles'; items: Profile[] }
+  | { popup: 'permission'; site: string; what: string; secure: boolean }
   | { popup: 'prompt'; title: string; hint: string; placeholder: string; submit: string; value: string; command: string; id: string | null };
 
 type Profile = { id: string; name: string; current: boolean; deletable: boolean };
@@ -196,12 +197,37 @@ export default function Popup() {
               <span className={`switch${s.on ? ' on' : ''}`} aria-hidden />
             </button>
           ))}
+          <div className="setting-row static">
+            <span className="setting-text">
+              <span className="row-title">Accès accordés aux sites</span>
+              <span className="row-sub">
+                {content.permissions === 0 ? 'Aucune réponse retenue : chaque site demandera.' : `${content.permissions} réponse${content.permissions > 1 ? 's' : ''} retenue${content.permissions > 1 ? 's' : ''} (micro, caméra, position, notifications…)`}
+              </span>
+            </span>
+            <button className="pill-action" disabled={content.permissions === 0} onClick={() => send({ type: 'permissions.clear' })}>Tout oublier</button>
+          </div>
         </div>
       </div>
     );
 
   if (content.popup === 'profiles')
     return <ProfileList key={opening} rootRef={root} items={content.items} />;
+
+  if (content.popup === 'permission')
+    return (
+      <div key={opening} ref={root} className="popup arriving" role="alertdialog" aria-label="Demande d'accès">
+        <div className="name-form">
+          <span className="name-form-title">{content.site} souhaite {content.what}</span>
+          <p className="row-sub">
+            {content.secure ? 'Votre réponse sera retenue pour ce site.' : "Attention : la connexion à ce site n'est pas chiffrée. Votre réponse sera retenue pour ce site."}
+          </p>
+          <div className="name-form-actions">
+            <button className="pill-action" autoFocus onClick={() => send({ type: 'permission.answer', index: 0 })}>Refuser</button>
+            <button className="pill-action primary" onClick={() => send({ type: 'permission.answer', index: 1 })}>Autoriser</button>
+          </div>
+        </div>
+      </div>
+    );
 
   if (content.popup === 'prompt')
     return <NameForm key={opening} rootRef={root} ask={content} />;

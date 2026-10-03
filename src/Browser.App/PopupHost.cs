@@ -34,11 +34,12 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge)
     public Func<double>? PageLeft { get; set; }
 
     /// <summary>Fenêtre de saisie, au milieu de la zone des pages.</summary>
-    public void ShowCentered(double width, string contentJson)
+    /// <param name="top">Distance au haut de la fenêtre ; par défaut, vers le milieu.</param>
+    public void ShowCentered(double width, string contentJson, double? top = null)
     {
         var window = (FrameworkElement)frame.Parent;
         var left = PageLeft?.Invoke() ?? 0;
-        Show(left + Math.Max(0, (window.ActualWidth - left - width) / 2), Math.Max(90, window.ActualHeight / 2 - 150), width, contentJson, focus: true);
+        Show(left + Math.Max(0, (window.ActualWidth - left - width) / 2), top ?? Math.Max(90, window.ActualHeight / 2 - 150), width, contentJson, focus: true);
     }
 
     public void Post(string json) => bridge.Post(json);

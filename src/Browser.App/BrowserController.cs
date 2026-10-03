@@ -46,6 +46,7 @@ public sealed class BrowserController
                 _bridge.Post(JsonSerializer.Serialize(new { @event = "status", text }));
         };
         _pages.DownloadStarting += OnDownloadStarting;
+        _pages.PermissionRequested += OnPermissionRequested;
         _window.AppWindow.Changed += (_, e) => { if (e.DidPresenterChange || e.DidSizeChange) Refresh(); };
         _window.Closed += (_, _) => { SaveSession(); _db.Dispose(); };
     }
@@ -92,6 +93,8 @@ public sealed class BrowserController
                 return;
             case "dock.size": if (_dockShown) _dock.SetSize(c.Width!.Value, c.Height!.Value); return;
             case "tab.menu": OpenTabMenu(id, c.X!.Value, c.Y!.Value); return;
+            case "permission.answer": AnswerPermission(c.Index != 0); return;
+            case "permissions.clear": _permissions.Clear(); if (_settingsOpen) _popup.Post(SettingsJson()); return;
             case "profile.menu": OpenProfileMenu(c.X!.Value, c.Y!.Value); return;
             case "profile.new": AskProfileName(); return;
             case "profile.create": SwitchProfile(Profiles.Create(AppPaths.BaseDir, c.Title!)); return;
@@ -225,6 +228,61 @@ public sealed class BrowserController
         _popup.Show(x - width, y, width, DownloadsJson(_downloads), focus: true);
     }
 
+    // Demandes d'accès des sites. Une réponse est retenue pour ce site et ce type d'accès ; fermer la question
+    // sans répondre refuse pour cette fois seulement.
+    private readonly PermissionStore _permissions = new(AppPaths.Permissions);
+    private (Microsoft.Web.WebView2.Core.CoreWebView2PermissionRequestedEventArgs Args, Windows.Foundation.Deferral Deferral, string Origin)? _asking;
+
+    private static string PermissionLabel(Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind kind) => kind switch
+    {
+        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.Microphone => "utiliser votre micro",
+        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.Camera => "utiliser votre caméra",
+        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.Geolocation => "connaître votre position",
+        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.Notifications => "vous envoyer des notifications",
+        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.ClipboardRead => "lire le contenu du presse-papiers",
+        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.MultipleAutomaticDownloads => "télécharger plusieurs fichiers à la suite",
+        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.FileReadWrite => "lire et modifier des fichiers de cet ordinateur",
+        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.OtherSensors => "lire les capteurs de mouvement",
+        _ => $"utiliser une fonction sensible ({kind})",
+    };
+
+    private void OnPermissionRequested(Microsoft.Web.WebView2.Core.CoreWebView2PermissionRequestedEventArgs e)
+    {
+        e.SavesInProfile = false; // les réponses sont gardées par le navigateur, pas par le moteur
+        var origin = PermissionStore.OriginOf(e.Uri);
+        // Pas de site identifiable, ou une question déjà affichée : refus, sans rien retenir.
+        if (origin is null || _asking is not null)
+        {
+            e.State = Microsoft.Web.WebView2.Core.CoreWebView2PermissionState.Deny;
+            return;
+        }
+        if (_permissions.Get(origin, e.PermissionKind.ToString()) is { } known)
+        {
+            e.State = known ? Microsoft.Web.WebView2.Core.CoreWebView2PermissionState.Allow : Microsoft.Web.WebView2.Core.CoreWebView2PermissionState.Deny;
+            return;
+        }
+
+        HidePopup();
+        _asking = (e, e.GetDeferral(), origin);
+        _popup.ShowCentered(360, JsonSerializer.Serialize(new
+        {
+            popup = "permission",
+            site = new Uri(origin).Host,
+            what = PermissionLabel(e.PermissionKind),
+            secure = origin.StartsWith("https://", StringComparison.Ordinal),
+        }), top: 70);
+    }
+
+    private void AnswerPermission(bool allow)
+    {
+        if (_asking is not var (args, deferral, origin)) return;
+        _asking = null;
+        _permissions.Set(origin, args.PermissionKind.ToString(), allow);
+        args.State = allow ? Microsoft.Web.WebView2.Core.CoreWebView2PermissionState.Allow : Microsoft.Web.WebView2.Core.CoreWebView2PermissionState.Deny;
+        deferral.Complete();
+        HidePopup();
+    }
+
     // Panneau de réglages : des interrupteurs, appliqués tout de suite et enregistrés.
     private bool _settingsOpen;
 
@@ -233,6 +291,7 @@ public sealed class BrowserController
         popup = "settings",
         zoom = _tabs.ActiveId is { } activeId ? (int)Math.Round(_pages.ZoomOf(activeId) * 100) : 100,
         theme = Math.Max(0, Array.IndexOf(Themes, _settings.Theme)),
+        permissions = _permissions.Count, // réponses retenues aux demandes d'accès des sites
         // Sous-menu : où la couleur du site teinte l'interface.
         tint = new[]
         {
@@ -317,6 +376,13 @@ public sealed class BrowserController
         _downloadsOpen = false;
         _settingsOpen = false;
         _profilesOpen = false;
+        // Question d'accès fermée sans réponse : refus pour cette fois, rien n'est retenu.
+        if (_asking is var (pendingArgs, pendingDeferral, _))
+        {
+            _asking = null;
+            pendingArgs.State = Microsoft.Web.WebView2.Core.CoreWebView2PermissionState.Deny;
+            pendingDeferral.Complete();
+        }
         var dismissed = _menuDismissed;
         (_menu, _menuDismissed) = (null, null);
         dismissed?.Invoke();

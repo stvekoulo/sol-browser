@@ -18,6 +18,7 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
     public event Action<string>? NewTabRequested;
     public event Action<double, double, CoreWebView2ContextMenuRequestedEventArgs>? ContextMenuRequested; // x, y dans la fenêtre
     public event Action<string, CoreWebView2DownloadStartingEventArgs>? DownloadStarting; // onglet d'origine
+    public event Action<CoreWebView2PermissionRequestedEventArgs>? PermissionRequested;
     public event Action<string, string>? StatusChanged;         // id, adresse du lien survolé (vide = aucun)
     public event Action<string, string?>? FaviconChanged;        // id, icône en data: (ou null)
 
@@ -132,9 +133,13 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
         s.IsZoomControlEnabled = false; // le zoom est géré par le navigateur (Ctrl +, Ctrl -, Ctrl molette), pas par le moteur // balayage horizontal : page précédente ou suivante
         s.IsGeneralAutofillEnabled = false;
         s.IsReputationCheckingRequired = true; // SmartScreen
-        // ponytail: tout est refusé tant qu'il n'y a pas d'invite ; à remplacer par une demande à l'utilisateur
-        // (caméra, micro, position, notifications, presse-papiers) quand l'interface des permissions existera.
-        core.PermissionRequested += (_, e) => e.State = CoreWebView2PermissionState.Deny;
+        // Accès sensibles (micro, caméra, position, notifications…) : jamais accordés d'office, le navigateur
+        // demande à l'utilisateur. Sans personne pour répondre, la demande est refusée.
+        core.PermissionRequested += (_, e) =>
+        {
+            if (PermissionRequested is null) e.State = CoreWebView2PermissionState.Deny;
+            else PermissionRequested(e);
+        };
     }
 
     public void Remove(string id)

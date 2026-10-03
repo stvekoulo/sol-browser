@@ -16,6 +16,7 @@ public static class AppPaths
 
     public static string Settings => Path.Combine(DataDir, "settings.json");
     public static string Session => Path.Combine(DataDir, "session.json");
+    public static string Permissions => Path.Combine(DataDir, "permissions.json");
     public static string Database => Path.Combine(DataDir, "browser.db");
     public static string WebData => Path.Combine(DataDir, "webview2");
 }
