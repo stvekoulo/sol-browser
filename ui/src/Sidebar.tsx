@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { onState, send, type State, type Tab } from './bridge';
 import { CopyIcon, GoogleLogo, Icon, LockIcon, XLogo, YoutubeLogo } from './Icons';
 import { startSlotDrag, useVerticalDrag } from './useVerticalDrag';
@@ -87,7 +87,7 @@ export default function Sidebar() {
     } else {
       while (tabs[end + 1]?.groupId === group.id) end++;
       normalItems.push(
-        <div key={group.id} className={`tab-group-block${group.collapsed ? ' collapsed' : ''}`} data-color={group.color}>
+        <div key={group.id} className={`tab-group-block${group.collapsed ? ' collapsed' : ''}`} style={{ '--group': group.color } as CSSProperties}>
           <button
             className="tab-group-header"
             aria-expanded={!group.collapsed}
@@ -98,7 +98,7 @@ export default function Sidebar() {
               send({ type: 'group.menu', id: group.id, x: e.clientX + OFFSET_X, y: e.clientY + OFFSET_Y });
             }}
           >
-            <span className="tab-group-dot" aria-hidden />
+            {group.icon ? <span className="tab-group-icon" aria-hidden>{group.icon}</span> : <span className="tab-group-dot" aria-hidden />}
             <span className="tab-group-name">{group.name}</span>
             <span className="tab-group-count">{end - i + 1}</span>
             <span className="tab-group-chevron" aria-hidden>

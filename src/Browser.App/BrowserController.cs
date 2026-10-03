@@ -115,14 +115,15 @@ public sealed class BrowserController
             case "tab.open": Open(c.Url is null ? _settings.HomeUrl : Resolve(c.Url)); break;
             case "tab.close": Close(id); break;
             case "tab.activate": Activate(id); break;
-            case "group.new": AskName("Nouveau groupe", "Les onglets du groupe restent ensemble, sous son nom.", "Nom du groupe", "Créer le groupe", "", "group.create", id); return;
-            case "group.create": _tabs.CreateGroup(id, c.Title!); break;
+            case "group.new": EditGroup(tabId: id, group: null); return;
+            // query = couleur « #rrggbb », input = icône ; une valeur invalide est ignorée par TabManager.
+            case "group.create": _tabs.CreateGroup(id, c.Title!, c.Query, icon: c.Input); break;
+            case "group.update": _tabs.UpdateGroup(id, name: c.Title!, color: c.Query, icon: c.Input); break;
             case "group.add": _tabs.AddToGroup(id, c.Query!); KeepPairAdjacent(); break;
             case "group.remove": _tabs.RemoveFromGroup(id); KeepPairAdjacent(); break;
             case "group.toggle":
                 if (_tabs.Groups.FirstOrDefault(g => g.Id == id) is { } toggled) _tabs.UpdateGroup(id, collapsed: !toggled.Collapsed);
                 break;
-            case "group.rename": _tabs.UpdateGroup(id, name: c.Title!); break;
             case "group.menu": OpenGroupMenu(id, c.X!.Value, c.Y!.Value); return;
             case "tab.move":
                 if (_tabs.Move(id, c.Index!.Value)) KeepPairAdjacent();
@@ -613,16 +614,30 @@ public sealed class BrowserController
     private void OpenGroupMenu(string groupId, double x, double y)
     {
         if (_tabs.Groups.FirstOrDefault(g => g.Id == groupId) is not { } group) return;
-        var colors = TabManager.GroupColors;
         var members = _tabs.Tabs.Where(t => t.GroupId == groupId).Select(t => t.Id).ToList();
         ShowMenu(x, y,
         [
-            ("Renommer le groupe", () => _afterMenu = () => AskName("Renommer le groupe", "", "Nom du groupe", "Renommer", group.Name, "group.rename", groupId)),
-            ("Changer de couleur", () => _tabs.UpdateGroup(groupId, color: colors[(colors.ToList().IndexOf(group.Color) + 1) % colors.Count])),
+            ("Modifier le groupe (nom, couleur, icône)", () => _afterMenu = () => EditGroup(tabId: null, group)),
             ("", null),
             ("Dissocier le groupe", () => _tabs.Ungroup(groupId)),
             ("Fermer les onglets du groupe", () => { foreach (var member in members) Close(member); }),
         ]);
+    }
+
+    // Fenêtre d'édition d'un groupe : nom, couleur libre, icône. Sert aussi à en créer un autour d'un onglet.
+    private void EditGroup(string? tabId, TabGroup? group)
+    {
+        HidePopup();
+        _popup.ShowCentered(340, JsonSerializer.Serialize(new
+        {
+            popup = "group-edit",
+            create = group is null,
+            id = group?.Id ?? tabId,
+            name = group?.Name ?? "",
+            color = group?.Color ?? TabManager.GroupColors[_tabs.Groups.Count % TabManager.GroupColors.Count],
+            icon = group?.Icon ?? "",
+            presets = TabManager.GroupColors,
+        }), top: 64);
     }
 
     // Action à lancer une fois le menu refermé (ouvrir une saisie depuis un menu, par exemple).
@@ -794,7 +809,7 @@ public sealed class BrowserController
             for (var i = 0; i < tabs.Count && i < session.GroupOf.Count; i++)
             {
                 if (session.GroupOf[i] != g) continue;
-                if (group is null) group = _tabs.CreateGroup(tabs[i].Id, session.Groups[g].Name, session.Groups[g].Color, session.Groups[g].Collapsed);
+                if (group is null) group = _tabs.CreateGroup(tabs[i].Id, session.Groups[g].Name, session.Groups[g].Color, session.Groups[g].Collapsed, session.Groups[g].Icon);
                 else _tabs.AddToGroup(tabs[i].Id, group.Id);
             }
         }
@@ -814,7 +829,7 @@ public sealed class BrowserController
         {
             Urls = tabs.Select(t => t.Url).ToList(),
             PinnedCount = _tabs.PinnedCount,
-            Groups = _tabs.Groups.Select(g => new SessionGroup { Name = g.Name, Color = g.Color, Collapsed = g.Collapsed }).ToList(),
+            Groups = _tabs.Groups.Select(g => new SessionGroup { Name = g.Name, Color = g.Color, Icon = g.Icon, Collapsed = g.Collapsed }).ToList(),
             GroupOf = tabs.Select(t => t.GroupId is null ? (int?)null : _tabs.Groups.ToList().FindIndex(g => g.Id == t.GroupId)).ToList(),
             ActiveIndex = IndexOf(_tabs.ActiveId) ?? 0,
             PrimaryIndex = IndexOf(_split.PrimaryId),
@@ -840,7 +855,7 @@ public sealed class BrowserController
                 // Seules les pages affichées ont une étoile : inutile d'interroger la base pour les autres.
                 bookmarked = (t.Id == _tabs.ActiveId || (showSplit && _split.Contains(t.Id))) && _db.IsBookmarked(t.Url),
             }),
-            groups = _tabs.Groups.Select(g => new { id = g.Id, name = g.Name, color = g.Color, collapsed = g.Collapsed }),
+            groups = _tabs.Groups.Select(g => new { id = g.Id, name = g.Name, color = g.Color, icon = g.Icon, collapsed = g.Collapsed }),
             activeId = _tabs.ActiveId,
             profile = Profiles.NameOf(AppPaths.BaseDir, AppPaths.Profile),
             split = new { primaryId = _split.PrimaryId, secondaryId = _split.SecondaryId, ratio = _split.Ratio, visible = showSplit },

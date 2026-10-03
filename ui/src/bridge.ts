@@ -12,7 +12,7 @@ export type Tab = {
   bookmarked: boolean;
 };
 
-export type TabGroup = { id: string; name: string; color: string; collapsed: boolean };
+export type TabGroup = { id: string; name: string; color: string; icon: string; collapsed: boolean };
 
 export type State = {
   tabs: Tab[];

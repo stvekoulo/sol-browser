@@ -377,3 +377,42 @@
 .theme-row { display: flex; flex-direction: column; gap: 6px; padding: 7px 10px 9px 12px; }
 .theme-row .popup-segment { margin: 0; }
 .theme-row .popup-seg-btn { font-size: 12px; }
+
+/* Éditeur de groupe d'onglets : aperçu, couleur libre, icône */
+.group-editor fieldset { margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.group-editor legend { padding: 0; margin-bottom: 2px; font-size: 11px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; }
+.group-preview {
+  height: 30px; padding: 0 12px;
+  display: flex; align-items: center; gap: 8px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--group) 30%, transparent);
+  font-size: 12px; font-weight: 600;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.group-preview-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--group); }
+.group-preview-icon, .icon-choice { font-family: "Segoe UI Emoji", "Apple Color Emoji", sans-serif; }
+
+.swatches { display: flex; gap: 7px; flex-wrap: wrap; }
+.swatch { width: 24px; height: 24px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12); }
+.swatch.on { outline: 2px solid var(--text); outline-offset: 2px; }
+
+.slider { display: flex; align-items: center; gap: 10px; font-size: 11.5px; color: var(--text-dim); }
+.slider > span { width: 52px; flex: none; }
+.slider input[type="range"] {
+  flex: 1; min-width: 0; height: 10px; margin: 0;
+  appearance: none; -webkit-appearance: none;
+  border-radius: var(--radius-pill);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+}
+.slider input[type="range"].hue { background: linear-gradient(90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+.slider input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+  background: #ffffff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(0, 0, 0, 0.1);
+}
+.name-form input.hex { flex: 1; min-width: 0; height: 30px; padding: 0 12px; font-size: 12px; font-variant-numeric: tabular-nums; }
+
+.icons { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
+.icon-choice { height: 30px; border-radius: 10px; font-size: 15px; line-height: 1; }
+.icon-choice.none { grid-column: span 2; font-family: inherit; font-size: 11.5px; color: var(--text-dim); }
+.icon-choice:hover { background: var(--bg-tab-hover); }
+.icon-choice.on { background: var(--bg-pill-solid); box-shadow: var(--shadow-pill-elevated); color: var(--text); }

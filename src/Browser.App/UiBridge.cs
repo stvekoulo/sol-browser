@@ -15,7 +15,8 @@ public sealed class UiBridge(WebView2 view, string page = "index.html", WebView2
     // parmi son en-tête, ses boutons et ses liens. Un site sans couleur vive n'a pas d'accent.
     private const string ThemeProbeScript = """
         (() => {
-          if (location.href === 'about:blank') {
+          // Onglet vide : fond du navigateur. Une page d'erreur du navigateur (même adresse) garde ses propres couleurs.
+          if (location.href === 'about:blank' && !document.documentElement.hasAttribute('data-nav-error')) {
             document.documentElement.style.background = '#eef0e2';
             return { bg: 'rgb(238, 240, 226)', dark: false, accent: null };
           }

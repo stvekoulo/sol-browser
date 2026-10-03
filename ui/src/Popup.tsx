@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { formatDomain, onMessage, send } from './bridge';
 import { DownloadCard, type Download } from './Downloads';
+import GroupEditor from './GroupEditor';
 import { Icon } from './Icons';
 
 type Item = { url: string; title: string; kind?: 'search' | 'go' | 'history' | 'site' };
@@ -11,6 +12,7 @@ type Content =
   | { popup: 'downloads'; items: Download[] }
   | { popup: 'settings'; zoom: number; theme: number; permissions: number; tint: Setting[]; items: Setting[] }
   | { popup: 'profiles'; items: Profile[] }
+  | { popup: 'group-edit'; create: boolean; id: string; name: string; color: string; icon: string; presets: string[] }
   | { popup: 'permission'; site: string; what: string; secure: boolean }
   | { popup: 'prompt'; title: string; hint: string; placeholder: string; submit: string; value: string; command: string; id: string | null };
 
@@ -212,6 +214,9 @@ export default function Popup() {
 
   if (content.popup === 'profiles')
     return <ProfileList key={opening} rootRef={root} items={content.items} />;
+
+  if (content.popup === 'group-edit')
+    return <GroupEditor key={opening} rootRef={root} group={content} />;
 
   if (content.popup === 'permission')
     return (

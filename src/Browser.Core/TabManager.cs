@@ -2,8 +2,11 @@ namespace Browser.Core;
 
 public sealed record Tab(string Id, string Url, string Title, bool Pinned = false, string? GroupId = null);
 
-/// <summary>Groupe d'onglets : un nom, une couleur, et un état replié (ses onglets sont alors masqués dans la barre).</summary>
-public sealed record TabGroup(string Id, string Name, string Color, bool Collapsed = false);
+/// <summary>
+/// Groupe d'onglets : un nom, une couleur libre (« #rrggbb »), une icône facultative (un emoji), et un état
+/// replié (ses onglets sont alors masqués dans la barre).
+/// </summary>
+public sealed record TabGroup(string Id, string Name, string Color, bool Collapsed = false, string Icon = "");
 
 /// <summary>
 /// Onglets ouverts, dans l'ordre de la barre. Les onglets épinglés sont toujours en tête et ne sont jamais
@@ -11,7 +14,31 @@ public sealed record TabGroup(string Id, string Name, string Color, bool Collaps
 /// </summary>
 public sealed class TabManager
 {
-    public static readonly IReadOnlyList<string> GroupColors = ["blue", "green", "yellow", "orange", "pink", "purple", "grey"];
+    /// <summary>Couleurs proposées par défaut, douces ; l'utilisateur peut en choisir n'importe quelle autre.</summary>
+    public static readonly IReadOnlyList<string> GroupColors = ["#8fa8e8", "#8ccfa6", "#e3cf7a", "#edb07f", "#eba3c2", "#b9a2ec", "#b3b6bf"];
+
+    // Noms de couleurs des sessions enregistrées avant les couleurs libres.
+    private static readonly Dictionary<string, string> LegacyColors = new()
+    {
+        ["blue"] = "#8fa8e8", ["green"] = "#8ccfa6", ["yellow"] = "#e3cf7a", ["orange"] = "#edb07f",
+        ["pink"] = "#eba3c2", ["purple"] = "#b9a2ec", ["grey"] = "#b3b6bf",
+    };
+    private const int MaxIconLength = 16; // un emoji composé (drapeau, famille…) tient en quelques unités
+
+    /// <summary>Une couleur valide en « #rrggbb » minuscules, ou null. Accepte aussi les anciens noms.</summary>
+    public static string? NormalizeColor(string? color)
+    {
+        if (color is null) return null;
+        if (LegacyColors.TryGetValue(color, out var legacy)) return legacy;
+        return color.Length == 7 && color[0] == '#' && color.Skip(1).All(Uri.IsHexDigit) ? color.ToLowerInvariant() : null;
+    }
+
+    /// <summary>Une icône de groupe : quelques caractères au plus, sans caractère de contrôle.</summary>
+    public static string NormalizeIcon(string? icon)
+    {
+        var text = new string((icon ?? "").Where(c => !char.IsControl(c)).ToArray()).Trim();
+        return text.Length <= MaxIconLength ? text : "";
+    }
     private const int MaxGroupName = 30;
 
     private readonly List<Tab> _tabs = new();
@@ -106,13 +133,13 @@ public sealed class TabManager
     }
 
     /// <summary>Crée un groupe autour d'un onglet. Un onglet épinglé ne se groupe pas.</summary>
-    public TabGroup? CreateGroup(string tabId, string name, string? color = null, bool collapsed = false)
+    public TabGroup? CreateGroup(string tabId, string name, string? color = null, bool collapsed = false, string? icon = null)
     {
         var i = IndexOf(tabId);
         if (i < 0 || _tabs[i].Pinned) return null;
         var clean = CleanName(name);
         var group = new TabGroup($"g{_nextGroupId++}", clean.Length > 0 ? clean : "Groupe",
-            color is not null && GroupColors.Contains(color) ? color : GroupColors[_groups.Count % GroupColors.Count], collapsed);
+            NormalizeColor(color) ?? GroupColors[_groups.Count % GroupColors.Count], collapsed, NormalizeIcon(icon));
         _groups.Add(group);
         _tabs[i] = _tabs[i] with { GroupId = group.Id };
         PruneGroups();
@@ -159,14 +186,16 @@ public sealed class TabManager
         Changed?.Invoke();
     }
 
-    /// <summary>Renomme, recolore, replie ou déplie un groupe.</summary>
-    public bool UpdateGroup(string groupId, string? name = null, string? color = null, bool? collapsed = null)
+    /// <summary>Renomme, recolore, change l'icône, replie ou déplie un groupe. Une valeur invalide est ignorée.</summary>
+    public bool UpdateGroup(string groupId, string? name = null, string? color = null, bool? collapsed = null, string? icon = null)
     {
         var g = _groups.FindIndex(x => x.Id == groupId);
         if (g < 0) return false;
         var group = _groups[g];
         if (name is not null && CleanName(name) is { Length: > 0 } clean) group = group with { Name = clean };
-        if (color is not null && GroupColors.Contains(color)) group = group with { Color = color };
+        if (NormalizeColor(color) is { } valid) group = group with { Color = valid };
+        // Une icône vide la retire ; une icône invalide (trop longue) est ignorée.
+        if (icon is not null && (icon.Trim().Length == 0 || NormalizeIcon(icon).Length > 0)) group = group with { Icon = NormalizeIcon(icon) };
         if (collapsed is { } fold)
         {
             // Replier le groupe de l'onglet actif : un onglet d'ailleurs prend la main. S'il n'y en a pas, on ne replie pas.

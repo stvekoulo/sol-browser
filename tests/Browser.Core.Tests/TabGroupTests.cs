@@ -15,9 +15,9 @@ public class TabGroupTests
     {
         var (m, a, _, c, _) = Four();
         var g1 = m.CreateGroup(a.Id, "  Travail  ")!;
-        var g2 = m.CreateGroup(c.Id, "", "pink")!;
-        Assert.Equal(("Travail", "blue"), (g1.Name, g1.Color));
-        Assert.Equal(("Groupe", "pink"), (g2.Name, g2.Color));
+        var g2 = m.CreateGroup(c.Id, "", "#FF8800", icon: "📚")!;
+        Assert.Equal(("Travail", "#8fa8e8"), (g1.Name, g1.Color));
+        Assert.Equal(("Groupe", "#ff8800", "📚"), (g2.Name, g2.Color, g2.Icon));
         Assert.Equal("ag1 b cg2 d", Layout(m));
     }
 
@@ -112,10 +112,41 @@ public class TabGroupTests
     {
         var (m, a, _, _, _) = Four();
         var g = m.CreateGroup(a.Id, "x")!;
-        Assert.True(m.UpdateGroup(g.Id, name: "Lecture", color: "green"));
+        Assert.True(m.UpdateGroup(g.Id, name: "Lecture", color: "#12ab9c", icon: "🎬"));
         Assert.True(m.UpdateGroup(g.Id, name: "   ", color: "fuchsia fluo")); // ignorés
-        Assert.Equal(new TabGroup(g.Id, "Lecture", "green"), m.Groups[0]);
+        Assert.Equal(new TabGroup(g.Id, "Lecture", "#12ab9c", Icon: "🎬"), m.Groups[0]);
         Assert.False(m.UpdateGroup("nope", name: "y"));
+    }
+
+    [Theory]
+    [InlineData("#A1B2C3", "#a1b2c3")]
+    [InlineData("blue", "#8fa8e8")] // nom d'une ancienne session
+    [InlineData("#12345", null)]
+    [InlineData("#12345g", null)]
+    [InlineData("red; background:url(x)", null)]
+    [InlineData("rgb(1,2,3)", null)]
+    [InlineData(null, null)]
+    public void NormalizeColor_accepts_only_plain_hex_colours(string? input, string? expected) =>
+        Assert.Equal(expected, TabManager.NormalizeColor(input));
+
+    [Theory]
+    [InlineData("📚", "📚")]
+    [InlineData("  ⭐  ", "⭐")]
+    [InlineData("👨‍👩‍👧‍👦", "👨‍👩‍👧‍👦")]
+    [InlineData("un texte beaucoup trop long pour une icône", "")]
+    [InlineData(null, "")]
+    public void NormalizeIcon_keeps_short_icons_only(string? input, string expected) =>
+        Assert.Equal(expected, TabManager.NormalizeIcon(input));
+
+    [Fact]
+    public void An_icon_can_be_removed()
+    {
+        var (m, a, _, _, _) = Four();
+        var g = m.CreateGroup(a.Id, "x", icon: "🎮")!;
+        m.UpdateGroup(g.Id, icon: "un texte beaucoup trop long pour une icône"); // ignoré
+        Assert.Equal("🎮", m.Groups[0].Icon);
+        m.UpdateGroup(g.Id, icon: "");
+        Assert.Equal("", m.Groups[0].Icon);
     }
 
     [Fact]

@@ -39,15 +39,32 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
         await ApplySettingsAsync(tab.Id, core);
         if (!_views.ContainsKey(tab.Id)) return;
 
-        core.SourceChanged += (_, _) => PageChanged?.Invoke(tab.Id, core.Source, null);
+        // Pendant qu'une page d'erreur est affichée, l'onglet garde l'adresse demandée, pas celle de la page d'erreur.
+        core.SourceChanged += (_, _) => PageChanged?.Invoke(tab.Id, _errorUrl.GetValueOrDefault(tab.Id, core.Source), null);
         core.DocumentTitleChanged += (_, _) => PageChanged?.Invoke(tab.Id, null, core.DocumentTitle);
         core.HistoryChanged += (_, _) => RuntimeChanged?.Invoke();
-        core.NavigationStarting += (_, _) => { _loading.Add(tab.Id); RuntimeChanged?.Invoke(); };
+        core.Settings.IsBuiltInErrorPageEnabled = false; // les erreurs de chargement sont affichées par le navigateur
+        core.NavigationStarting += (_, e) =>
+        {
+            // Toute navigation autre que l'affichage de notre page d'erreur remet l'onglet dans son état normal.
+            if (!_showingError.Remove(tab.Id)) _errorUrl.Remove(tab.Id);
+            _target[tab.Id] = _errorUrl.GetValueOrDefault(tab.Id, e.Uri);
+            _loading.Add(tab.Id);
+            RuntimeChanged?.Invoke();
+        };
         core.NavigationCompleted += (_, e) =>
         {
             _loading.Remove(tab.Id);
             RuntimeChanged?.Invoke();
-            if (e.IsSuccess) Loaded?.Invoke(tab.Id);
+            if (e.IsSuccess) { if (!_errorUrl.ContainsKey(tab.Id)) Loaded?.Invoke(tab.Id); }
+            // Ni une navigation annulée (arrêt, remplacement), ni un lien devenu téléchargement ne sont des erreurs.
+            else if (e.WebErrorStatus != CoreWebView2WebErrorStatus.OperationCanceled && !_downloading.Remove(tab.Id))
+                ShowError(tab.Id, core, _target.GetValueOrDefault(tab.Id, core.Source), ErrorKind(e.WebErrorStatus));
+        };
+        core.ProcessFailed += (_, e) =>
+        {
+            if (e.ProcessFailedKind == CoreWebView2ProcessFailedKind.RenderProcessExited && _views.ContainsKey(tab.Id))
+                ShowError(tab.Id, core, _errorUrl.GetValueOrDefault(tab.Id, core.Source), "crash");
         };
         core.NewWindowRequested += (_, e) => { e.Handled = true; NewTabRequested?.Invoke(e.Uri); };
         core.ContextMenuRequested += (_, e) =>
@@ -56,13 +73,39 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
             var point = view.TransformToVisual(null).TransformPoint(new Windows.Foundation.Point(e.Location.X, e.Location.Y));
             ContextMenuRequested?.Invoke(point.X, point.Y, e);
         };
-        core.DownloadStarting += (_, e) => DownloadStarting?.Invoke(tab.Id, e);
+        core.DownloadStarting += (_, e) => { _downloading.Add(tab.Id); DownloadStarting?.Invoke(tab.Id, e); };
         // Adresse du lien survolé : la bulle du moteur est coupée, le navigateur l'affiche dans son propre design.
         core.Settings.IsStatusBarEnabled = false;
         core.StatusBarTextChanged += (_, _) => StatusChanged?.Invoke(tab.Id, core.StatusBarText);
         core.FaviconChanged += async (_, _) => FaviconChanged?.Invoke(tab.Id, await ReadFaviconAsync(core));
         Navigate(tab.Id, tab.Url);
     }
+
+    // Pages d'erreur du navigateur. _target : adresse de la navigation en cours ; _errorUrl : adresse dont la page
+    // d'erreur est affichée ; _showingError : notre page d'erreur est en train de se charger.
+    private readonly Dictionary<string, string> _target = new(), _errorUrl = new();
+    private readonly HashSet<string> _showingError = new(), _downloading = new();
+
+    private void ShowError(string id, CoreWebView2 core, string url, string kind)
+    {
+        _errorUrl[id] = url;
+        _showingError.Add(id);
+        try { core.NavigateToString(ErrorPages.Html(url, kind)); }
+        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { _showingError.Remove(id); }
+        PageChanged?.Invoke(id, url, ErrorPages.Describe(kind).Title);
+    }
+
+    private static string ErrorKind(CoreWebView2WebErrorStatus status) => status switch
+    {
+        CoreWebView2WebErrorStatus.HostNameNotResolved => "dns",
+        CoreWebView2WebErrorStatus.Timeout => "timeout",
+        CoreWebView2WebErrorStatus.Disconnected or CoreWebView2WebErrorStatus.CannotConnect or CoreWebView2WebErrorStatus.ConnectionAborted
+            or CoreWebView2WebErrorStatus.ConnectionReset or CoreWebView2WebErrorStatus.ServerUnreachable => "offline",
+        CoreWebView2WebErrorStatus.CertificateCommonNameIsIncorrect or CoreWebView2WebErrorStatus.CertificateExpired
+            or CoreWebView2WebErrorStatus.CertificateIsInvalid or CoreWebView2WebErrorStatus.CertificateRevoked
+            or CoreWebView2WebErrorStatus.ClientCertificateContainsErrors => "certificate",
+        _ => "other",
+    };
 
     /// <summary>Applique les réglages aux pages déjà ouvertes, sans les recharger.</summary>
     public async void ApplySettings()
@@ -148,6 +191,7 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
         _loading.Remove(id);
         _blurScriptIds.Remove(id);
         _zoom.Remove(id);
+        _target.Remove(id); _errorUrl.Remove(id); _showingError.Remove(id); _downloading.Remove(id);
         container.Children.Remove(view);
         view.Close();
     }
@@ -159,7 +203,12 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
 
     public void Back(string id) => Core(id)?.GoBack();
     public void Forward(string id) => Core(id)?.GoForward();
-    public void Reload(string id) => Core(id)?.Reload();
+    // Recharger une page d'erreur, c'est retenter l'adresse qui a échoué.
+    public void Reload(string id)
+    {
+        if (_errorUrl.TryGetValue(id, out var failed)) Navigate(id, failed);
+        else Core(id)?.Reload();
+    }
     public void Stop(string id) => Core(id)?.Stop();
 
     public void ApplyLayout(string? activeId, string? secondaryId, double ratio)

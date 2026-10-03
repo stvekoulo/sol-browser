@@ -197,13 +197,6 @@
 
 /* Groupes d'onglets : un en-tête à la couleur du groupe, ses onglets en retrait derrière un filet de même couleur */
 .tab-group-block { display: flex; flex-direction: column; gap: 2px; --group: #8fa8e8; }
-.tab-group-block[data-color="blue"] { --group: #8fa8e8; }
-.tab-group-block[data-color="green"] { --group: #8ccfa6; }
-.tab-group-block[data-color="yellow"] { --group: #e3cf7a; }
-.tab-group-block[data-color="orange"] { --group: #edb07f; }
-.tab-group-block[data-color="pink"] { --group: #eba3c2; }
-.tab-group-block[data-color="purple"] { --group: #b9a2ec; }
-.tab-group-block[data-color="grey"] { --group: #b3b6bf; }
 
 .tab-group-header {
   flex: none;
@@ -221,6 +214,7 @@
   transition: background var(--fast) var(--ease-out);
 }
 .tab-group-header:hover { background: color-mix(in srgb, var(--group) 40%, transparent); }
+.tab-group-icon { flex: none; width: 16px; text-align: center; font-size: 13px; line-height: 1; font-family: "Segoe UI Emoji", "Apple Color Emoji", sans-serif; }
 .tab-group-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--group); }
 .tab-group-name { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .tab-group-count { flex: none; font-weight: 500; color: var(--text-dim); font-variant-numeric: tabular-nums; }
