@@ -93,13 +93,16 @@ public sealed partial class MainWindow : Window
         var dockBridge = new UiBridge(Dock, "index.html#dock");
         bridge.AttachPopup(dockBridge);
         var dock = new DockHost(DockFrame, Dock, dockBridge);
-        _controller = new BrowserController(this, pages, bridge, popup, dock, settings);
+        var uiFolder = Path.Combine(AppContext.BaseDirectory, "ui");
+        var panelBridge = new UiBridge(Panel, "index.html#panel");
+        bridge.AttachPopup(panelBridge);
+        var panel = new PanelHost(PanelRow, panelBridge, () => panelBridge.InitAsync(uiFolder, c => _controller!.Execute(c)));
+        _controller = new BrowserController(this, pages, bridge, popup, dock, panel, settings);
         WireDivider();
         _sidebar.Resize(settings.SidebarWidth);
         WireSidebarGrip(settings);
         WireGestures();
 
-        var uiFolder = Path.Combine(AppContext.BaseDirectory, "ui");
         await bridge.InitAsync(uiFolder, _controller.Execute);
         await popupBridge.InitAsync(uiFolder, _controller.Execute);
         await dockBridge.InitAsync(uiFolder, _controller.Execute);

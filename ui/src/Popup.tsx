@@ -43,6 +43,7 @@ function menuIconPath(label: string): string {
   if (has('recharger', 'actualiser', 'reload', 'refresh')) return 'M12.8 8a4.8 4.8 0 1 1-1.4-3.4M12.8 3.2v3h-3';
   if (has('précédent', 'retour', 'back')) return 'M9.5 4L5.5 8l4 4';
   if (has('suivant', 'avancer', 'forward')) return 'M6.5 4l4 4-4 4';
+  if (has('réseau', 'network')) return 'M2.5 12.5h2v-3h-2zM7 12.5h2v-6H7zM11.5 12.5h2v-9h-2z';
   if (has('inspecter', 'source', 'inspect')) return 'M5.5 5L2.5 8l3 3M10.5 5l3 3-3 3';
   return 'M4 8h8M8 4l4 4-4 4';
 }

@@ -27,9 +27,13 @@ public sealed class BrowserController
 
     private readonly DockHost _dock;
 
-    public BrowserController(Window window, PageHost pages, UiBridge bridge, PopupHost popup, DockHost dock, Settings settings)
+    private readonly PanelHost _tools; // panneau du bas : outils de développement
+    private readonly NetworkInspector _network;
+
+    public BrowserController(Window window, PageHost pages, UiBridge bridge, PopupHost popup, DockHost dock, PanelHost panel, Settings settings)
     {
-        (_window, _pages, _bridge, _popup, _dock, _settings) = (window, pages, bridge, popup, dock, settings);
+        (_window, _pages, _bridge, _popup, _dock, _tools, _settings) = (window, pages, bridge, popup, dock, panel, settings);
+        _network = new NetworkInspector(panel.Post);
         Directory.CreateDirectory(AppPaths.DataDir);
         _db = new BrowserDb(AppPaths.Database);
         _capture = new CaptureService(window);
@@ -104,6 +108,12 @@ public sealed class BrowserController
             case "shortcut.menu": OpenShortcutMenu(c.Index!.Value, c.X!.Value, c.Y!.Value); return;
             case "shortcut.update": UpdateShortcut(id, c.Title!, c.Input!); break;
             case "shortcut.open": OpenShortcut(c.Index!.Value); break;
+            case "network.toggle": ToggleNetwork(); return;
+            case "network.ready": _network.Post(); return;
+            case "network.clear": if (_network.Shown is { } listed) _network.Clear(listed); return;
+            case "network.detail":
+                if (_network.Shown is { } inspected && _pages.CoreOf(inspected) is { } inspectedCore) _ = _network.PostDetailAsync(inspected, inspectedCore, id);
+                return;
             case "device.compare": SetComparison(id, c.Query!); return;
             case "device.rotate": _pages.RotateDevice(id); return;
             case "device.set": _pages.SetDevice(id, c.Query!.Length == 0 ? null : c.Query); HidePopup(); return;
@@ -527,6 +537,7 @@ public sealed class BrowserController
         _pages.Remove(id);
         _favicons.Remove(id);
         _split.OnTabClosed(id);
+        _network.Forget(id);
         foreach (var shortcut in _shortcutTabs.Where(p => p.Value == id).Select(p => p.Key).ToList()) _shortcutTabs.Remove(shortcut);
         // Dernier onglet fermé : la fenêtre reste ouverte sur un onglet vide. Elle ne se ferme que par son bouton.
         if (_tabs.Tabs.Count == 0) Open(_settings.HomePage);
@@ -1036,6 +1047,31 @@ public sealed class BrowserController
         return items;
     }
 
+    // Inspecteur réseau : panneau du bas, qui suit l'onglet affiché.
+    private void ToggleNetwork()
+    {
+        if (_tools.IsOpen)
+        {
+            _tools.Hide();
+            _network.Shown = null;
+        }
+        else
+        {
+            _ = _tools.ShowAsync();
+            FollowNetwork();
+        }
+        Refresh();
+    }
+
+    private void FollowNetwork()
+    {
+        if (!_tools.IsOpen || _tabs.ActiveId is not { } active || _pages.CoreOf(active) is not { } core) return;
+        if (_network.Shown == active) return;
+        _network.Shown = active;
+        _ = _network.ListenAsync(active, core);
+        _network.Post();
+    }
+
     private void OpenContextMenu(string tabId, double x, double y, Microsoft.Web.WebView2.Core.CoreWebView2ContextMenuRequestedEventArgs e)
     {
         var items = new List<(string Label, Action? Run)>();
@@ -1061,6 +1097,7 @@ public sealed class BrowserController
         if (items.Count > 0 && items[^1].Label != "") items.Add(("", null));
         items.Add((T("Capturer une zone", "Capture an area"), () => Capture("region")));
         items.AddRange(DeviceEntries(tabId, x, y));
+        items.Add((_tools.IsOpen ? T("Masquer l'inspecteur réseau", "Hide network inspector") : T("Inspecter le réseau", "Inspect network"), () => _afterMenu = ToggleNetwork));
 
         // Le moteur attend notre réponse : il est toujours libéré à la fermeture du menu, avec ou sans choix.
         e.Handled = true;
@@ -1149,6 +1186,7 @@ public sealed class BrowserController
     private void Refresh()
     {
         var showSplit = _split.Contains(_tabs.ActiveId);
+        FollowNetwork();
         _pages.ApplyLayout(showSplit ? _split.PrimaryId : _tabs.ActiveId, showSplit ? _split.SecondaryId : null, _split.Ratio);
         _bridge.Post(JsonSerializer.Serialize(new
         {

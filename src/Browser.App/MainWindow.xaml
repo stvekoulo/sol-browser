@@ -17,13 +17,21 @@
       <WebView2 x:Name="Sidebar" Grid.Column="0" />
       <!-- Bord droit de la carte latérale : le tirer change sa largeur. Dans la marge de la carte, donc sur rien d'utile. -->
       <local:DividerGrip x:Name="SidebarGrip" Grid.Column="0" Width="8" HorizontalAlignment="Right" Background="Transparent" />
-      <Grid x:Name="Pages" Grid.Column="1">
+      <!-- Les pages, et dessous le panneau des outils de développement (fermé : hauteur nulle). -->
+      <Grid Grid.Column="1">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="*" />
+          <RowDefinition x:Name="PanelRow" Height="0" />
+        </Grid.RowDefinitions>
+        <WebView2 x:Name="Panel" Grid.Row="1" />
+      <Grid x:Name="Pages" Grid.Row="0">
         <Grid.ColumnDefinitions>
           <ColumnDefinition x:Name="PrimaryColumn" Width="*" />
           <ColumnDefinition x:Name="DividerColumn" Width="0" MinWidth="0" />
           <ColumnDefinition x:Name="SecondaryColumn" Width="0" />
         </Grid.ColumnDefinitions>
         <local:DividerGrip x:Name="Divider" Grid.Column="1" Background="#40808080" />
+      </Grid>
       </Grid>
     </Grid>
     <!-- Pastille du balayage à deux doigts (page précédente ou suivante) : sort du bord pendant le geste. -->

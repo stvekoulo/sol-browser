@@ -33,6 +33,7 @@ public static class CommandParser
         ["profile.edit"] = ["id"], ["profile.rename"] = ["id", "title"],
         ["shortcut.menu"] = ["index", "x", "y"], ["shortcut.open"] = ["index"], ["shortcut.update"] = ["id", "title", "input"],
         ["device.set"] = ["id", "query"], ["device.rotate"] = ["id"], ["device.compare"] = ["id", "query"],
+        ["network.toggle"] = [], ["network.ready"] = [], ["network.clear"] = [], ["network.detail"] = ["id"],
         ["ui.ready"] = [],
     };
 
