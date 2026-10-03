@@ -1,0 +1,38 @@
+using Browser.Core;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.Web.WebView2.Core;
+
+namespace Browser.App;
+
+/// <summary>Vue d'interface : ne charge que les fichiers locaux, reçoit les commandes, envoie l'état.</summary>
+public sealed class UiBridge(WebView2 view)
+{
+    private const string Origin = "https://ui.navigateur/";
+
+    public async Task InitAsync(string uiFolder, Action<Command> onCommand)
+    {
+        await view.EnsureCoreWebView2Async();
+        var core = view.CoreWebView2;
+        core.SetVirtualHostNameToFolderMapping("ui.navigateur", uiFolder, CoreWebView2HostResourceAccessKind.Deny);
+        core.Settings.AreDefaultContextMenusEnabled = false;
+        core.Settings.IsStatusBarEnabled = false;
+        core.Settings.IsZoomControlEnabled = false;
+
+        // L'interface ne quitte jamais ses fichiers locaux.
+        core.NavigationStarting += (_, e) => { if (!e.Uri.StartsWith(Origin, StringComparison.Ordinal)) e.Cancel = true; };
+        core.NewWindowRequested += (_, e) => e.Handled = true;
+
+        core.WebMessageReceived += (_, e) =>
+        {
+            string json;
+            try { json = e.TryGetWebMessageAsString(); }
+            catch (ArgumentException) { return; } // message non textuel
+            if (e.Source.StartsWith(Origin, StringComparison.Ordinal) && CommandParser.Parse(json) is { } command)
+                onCommand(command);
+        };
+
+        core.Navigate(Origin + "index.html");
+    }
+
+    public void Post(string stateJson) => view.CoreWebView2?.PostWebMessageAsJson(stateJson);
+}

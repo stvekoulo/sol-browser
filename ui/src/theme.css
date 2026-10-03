@@ -1,0 +1,45 @@
+/* Tout le design passe par ces variables : c'est le seul fichier à modifier pour rhabiller le navigateur. */
+:root {
+  color-scheme: light dark;
+
+  --font: Inter, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-size: 13px;
+
+  --titlebar-height: 40px;
+  --toolbar-height: 48px;
+  --radius-control: 8px;
+  --radius-tab: 9px;
+  --gap: 8px;
+
+  --bg-chrome: #ececee;
+  --bg-toolbar: #f7f7f8;
+  --bg-tab-hover: rgba(0, 0, 0, 0.06);
+  --bg-tab-active: #f7f7f8;
+  --bg-field: #e6e6e9;
+  --bg-field-focus: #ffffff;
+  --text: #1d1d1f;
+  --text-dim: #6e6e73;
+  --border: rgba(0, 0, 0, 0.1);
+  --accent: #0a84ff;
+
+  --light-close: #ff5f57;
+  --light-minimize: #febc2e;
+  --light-maximize: #28c840;
+
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --fast: 120ms;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-chrome: #1e1e20;
+    --bg-toolbar: #2a2a2d;
+    --bg-tab-hover: rgba(255, 255, 255, 0.07);
+    --bg-tab-active: #2a2a2d;
+    --bg-field: #1c1c1e;
+    --bg-field-focus: #141416;
+    --text: #f5f5f7;
+    --text-dim: #98989d;
+    --border: rgba(255, 255, 255, 0.1);
+  }
+}

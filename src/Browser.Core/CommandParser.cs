@@ -17,7 +17,8 @@ public static class CommandParser
         ["bookmark.add"] = ["url", "title"], ["bookmark.remove"] = ["url"],
         ["history.search"] = ["query"],
         ["download.cancel"] = ["id"], ["download.open"] = ["id"],
-        ["window.minimize"] = [], ["window.maximize"] = [], ["window.close"] = [],
+        ["window.minimize"] = [], ["window.maximize"] = [], ["window.close"] = [], ["window.drag"] = [],
+        ["ui.ready"] = [],
     };
 
     public static Command? Parse(string json)

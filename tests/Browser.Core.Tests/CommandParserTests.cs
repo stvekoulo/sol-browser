@@ -16,6 +16,13 @@ public class CommandParserTests
         Assert.Equal("https://a.test", CommandParser.Parse("""{"type":"tab.open","url":"https://a.test"}""")!.Url);
     }
 
+    [Fact]
+    public void Accepts_host_lifecycle_commands()
+    {
+        Assert.NotNull(CommandParser.Parse("""{"type":"ui.ready"}"""));
+        Assert.NotNull(CommandParser.Parse("""{"type":"window.drag"}"""));
+    }
+
     [Theory]
     [InlineData("not json")]
     [InlineData("[]")]
