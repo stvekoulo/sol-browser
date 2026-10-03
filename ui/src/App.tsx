@@ -264,6 +264,16 @@ function AddressPill({ tab, focused, grow }: { tab: Tab | undefined; focused: bo
       </form>
 
       <div className="address-trail">
+        {tab?.device && (
+          <button
+            className="zoom-chip"
+            aria-label={t(`Vue ${tab.device}, revenir à la vue ordinateur`, `${tab.device} view, back to desktop view`)}
+            title={t('Revenir à la vue ordinateur', 'Back to desktop view')}
+            onClick={() => send({ type: 'device.set', id: tab.id, query: '' })}
+          >
+            {tab.device}
+          </button>
+        )}
         {tab && tab.zoom !== 100 && (
           <button className="zoom-chip" aria-label={t(`Zoom ${tab.zoom} %, revenir à 100 %`, `Zoom ${tab.zoom}%, reset to 100%`)} title={t('Revenir à 100 %', 'Reset to 100%')} onClick={() => send({ type: 'zoom.reset', id: tab.id })}>
             {tab.zoom} %

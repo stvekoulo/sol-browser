@@ -7,6 +7,7 @@ export type Tab = {
   title: string;
   pinned: boolean;
   groupId: string | null;
+  device: string | null; // vue mobile : appareil simulé (« iPhone », « iPad »)
   zoom: number; // en pour cent
   loading: boolean;
   canGoBack: boolean;

@@ -28,6 +28,8 @@ function menuIconPath(label: string): string {
   const has = (...words: string[]) => words.some(w => l.includes(w));
   if (has('épingler', 'détacher', 'pin')) return 'M5.5 2.5h5l.5 4 2 2v1h-9v-1l2-2zM8 9.5v4.5';
   if (isClosing(label)) return 'M4.5 4.5l7 7M11.5 4.5l-7 7';
+  if (has('mobile', 'tablette', 'tablet')) return 'M5 2.5h6v11H5zM7.3 11.5h1.4';
+  if (has('ordinateur', 'desktop')) return 'M2.5 3.5h11v7h-11zM6 13h4M8 10.5V13';
   if (has('zone', 'area')) return 'M2.5 5.5v-3h3M10.5 2.5h3v3M13.5 10.5v3h-3M5.5 13.5h-3v-3';
   if (has('visible', 'entière', 'capturer', 'capture'))
     return 'M2.5 5.5h2l1-1.5h5l1 1.5h2v7h-11zM8 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4';

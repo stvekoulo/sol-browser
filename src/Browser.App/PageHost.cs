@@ -16,7 +16,7 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
     public event Action? RuntimeChanged;                         // chargement, historique
     public event Action<string>? Loaded;                         // id, page chargée avec succès
     public event Action<string>? NewTabRequested;
-    public event Action<double, double, CoreWebView2ContextMenuRequestedEventArgs>? ContextMenuRequested; // x, y dans la fenêtre
+    public event Action<string, double, double, CoreWebView2ContextMenuRequestedEventArgs>? ContextMenuRequested; // id, x, y dans la fenêtre
     public event Action<string, CoreWebView2DownloadStartingEventArgs>? DownloadStarting; // onglet d'origine
     public event Action<CoreWebView2PermissionRequestedEventArgs>? PermissionRequested;
     public event Action<string, string>? StatusChanged;         // id, adresse du lien survolé (vide = aucun)
@@ -76,8 +76,9 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
         {
             // Position du clic dans la fenêtre, pour y poser notre menu.
             var point = view.TransformToVisual(null).TransformPoint(new Windows.Foundation.Point(e.Location.X, e.Location.Y));
-            ContextMenuRequested?.Invoke(point.X, point.Y, e);
+            ContextMenuRequested?.Invoke(tab.Id, point.X, point.Y, e);
         };
+        view.SizeChanged += (_, _) => CornerClip.Set(view, _device.ContainsKey(tab.Id) ? DeviceRadius : 0);
         core.DownloadStarting += (_, e) => { _downloading.Add(tab.Id); DownloadStarting?.Invoke(tab.Id, e); };
         // Adresse du lien survolé : la bulle du moteur est coupée, le navigateur l'affiche dans son propre design.
         core.Settings.IsStatusBarEnabled = false;
@@ -193,6 +194,8 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
     public void Remove(string id)
     {
         _asleep.Remove(id);
+        _device.Remove(id);
+        if (_frames.Remove(id, out var frame)) container.Children.Remove(frame);
         if (!_views.Remove(id, out var view)) return;
         _loading.Remove(id);
         _blurScriptIds.Remove(id);
@@ -231,7 +234,72 @@ public sealed class PageHost(Grid container, ColumnDefinition primary, ColumnDef
             var column = id == activeId ? 0 : split && id == secondaryId ? 2 : -1;
             view.Visibility = column < 0 ? Visibility.Collapsed : Visibility.Visible;
             if (column >= 0) Grid.SetColumn(view, column);
+            if (_frames.TryGetValue(id, out var frame))
+            {
+                frame.Visibility = view.Visibility;
+                if (column >= 0) Grid.SetColumn(frame, column);
+            }
         }
+    }
+
+    // Vue mobile : la vue de l'onglet prend la taille d'un appareil, au centre, dans un cadre ; le site reçoit l'agent
+    // de cet appareil, un écran tactile et une fenêtre d'affichage mobile. Rien n'est injecté dans la page.
+    public static readonly IReadOnlyDictionary<string, (int Width, int Height, string UserAgent)> Devices = new Dictionary<string, (int, int, string)>
+    {
+        ["iPhone"] = (393, 852, "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"),
+        ["iPad"] = (820, 1180, "Mozilla/5.0 (iPad; CPU OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"),
+    };
+    private const float DeviceRadius = 34;
+    private readonly Dictionary<string, string> _device = new();
+    private readonly Dictionary<string, Border> _frames = new(); // cadre de l'appareil, dessiné sous la vue
+    private string? _desktopUserAgent;
+
+    public string? DeviceOf(string id) => _device.GetValueOrDefault(id);
+
+    /// <summary>Affiche l'onglet comme sur l'appareil donné ; null revient à la vue ordinateur. La page est rechargée.</summary>
+    public async void SetDevice(string id, string? device)
+    {
+        if (!_views.TryGetValue(id, out var view) || view.CoreWebView2 is not { } core) return;
+        if (device is not null && !Devices.ContainsKey(device)) return;
+        _desktopUserAgent ??= core.Settings.UserAgent;
+        if (_frames.Remove(id, out var old)) container.Children.Remove(old);
+
+        if (device is null)
+        {
+            _device.Remove(id);
+            (view.MaxWidth, view.MaxHeight, view.Margin) = (double.PositiveInfinity, double.PositiveInfinity, new Thickness(0));
+        }
+        else
+        {
+            var (width, height, _) = Devices[device];
+            _device[id] = device;
+            // Taille plafonnée, donc centrée. Fenêtre plus petite que l'appareil : l'écran est rogné d'autant, pas réduit
+            // (une vue web ne se met pas à l'échelle).
+            (view.MaxWidth, view.MaxHeight, view.Margin) = (width, height, new Thickness(26));
+            var frame = new Border
+            {
+                MaxWidth = width + 20, MaxHeight = height + 20, Margin = new Thickness(16), CornerRadius = new CornerRadius(DeviceRadius + 10),
+                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 17, 17, 20)),
+                BorderBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 78, 78, 84)),
+                BorderThickness = new Thickness(1.5), Visibility = view.Visibility,
+            };
+            Grid.SetColumn(frame, Grid.GetColumn(view));
+            _frames[id] = frame;
+            container.Children.Insert(container.Children.IndexOf(view), frame);
+        }
+
+        core.Settings.UserAgent = device is null ? _desktopUserAgent : Devices[device].UserAgent;
+        RuntimeChanged?.Invoke();
+        try
+        {
+            var on = device is null ? "false" : "true";
+            await core.CallDevToolsProtocolMethodAsync("Emulation.setTouchEmulationEnabled", $$"""{"enabled":{{on}},"maxTouchPoints":5}""");
+            await core.CallDevToolsProtocolMethodAsync("Emulation.setEmitTouchEventsForMouse", $$"""{"enabled":{{on}},"configuration":"mobile"}""");
+            if (device is null) await core.CallDevToolsProtocolMethodAsync("Emulation.clearDeviceMetricsOverride", "{}");
+            else await core.CallDevToolsProtocolMethodAsync("Emulation.setDeviceMetricsOverride", """{"width":0,"height":0,"deviceScaleFactor":0,"mobile":true}""");
+            core.Reload();
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { /* vue fermée entre-temps */ }
     }
 
     // Zoom d'une page. Ce type de vue n'expose pas le zoom du moteur : il est appliqué à la racine du document,
