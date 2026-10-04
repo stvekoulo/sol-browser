@@ -135,7 +135,7 @@ public sealed partial class MainWindow : Window
         var welcomeBridge = new UiBridge(Welcome, "index.html#welcome");
         bridge.AttachPopup(welcomeBridge);
         var welcome = new WelcomeHost(Welcome, welcomeBridge, () => welcomeBridge.InitAsync(uiFolder, c => _controller!.Execute(c)));
-        _controller = new BrowserController(this, pages, bridge, popup, dock, panel, welcome, settings);
+        _controller = new BrowserController(this, pages, bridge, popup, dock, panel, welcome, settings) { ExtensionPopup = new ExtensionPopupHost(ExtensionFrame, Extension) };
         WireDivider();
         _sidebar.Resize(settings.SidebarWidth);
         WireSidebarGrip(settings);

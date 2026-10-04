@@ -160,6 +160,18 @@ export default function App() {
           </span>
         )}
         <button
+          className="pill-icon-btn"
+          aria-label={t('Extensions', 'Extensions')}
+          title={t('Extensions', 'Extensions')}
+          onClick={e => {
+            const box = e.currentTarget.getBoundingClientRect();
+            send({ type: 'extensions.menu', x: box.right, y: box.bottom + 6 });
+          }}
+        >
+          {/* Pièce de puzzle */}
+          <Icon d="M6.2 3.2a1.4 1.4 0 1 1 2.8 0v.6h2.6v2.7h.6a1.4 1.4 0 1 1 0 2.8h-.6v3H8.9v-.7a1.3 1.3 0 1 0-2.6 0v.7H3.4V9.2h.7a1.3 1.3 0 1 0 0-2.6h-.7V3.8h2.8z" />
+        </button>
+        <button
           className="pill-icon-btn profile-btn"
           aria-label={t(`Profil : ${state.profile}`, `Profile: ${state.profile}`)}
           title={t(`Profil : ${state.profile}`, `Profile: ${state.profile}`)}

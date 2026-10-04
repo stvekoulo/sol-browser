@@ -167,9 +167,14 @@ public sealed class BrowserController
             case "extension.folder": _ = AddExtensionFolderAsync(); return;
             case "extension.toggle": _ = ChangeExtensionAsync(id, remove: false); return;
             case "extension.remove": _ = ChangeExtensionAsync(id, remove: true); return;
+            case "extensions.menu": _ = OpenExtensionsMenuAsync(c.X!.Value, c.Y!.Value); return;
             case "extension.show":
-                if (ExtensionCatalog.IsId(id) && ExtensionCatalog.Read(Path.Combine(ExtensionsDir, id), id) is { } shownExtension && (shownExtension.Popup ?? shownExtension.Options) is { } extensionPage)
-                { HidePopup(); Open($"chrome-extension://{id}/{extensionPage.TrimStart('/')}"); break; }
+                if (ExtensionCatalog.IsId(id) && ExtensionCatalog.Read(Path.Combine(ExtensionsDir, id), id) is { } shownExtension)
+                {
+                    HidePopup();
+                    ShowExtension(shownExtension, _window.Content is FrameworkElement root ? root.ActualWidth - 14 : 1200, 58);
+                    break;
+                }
                 return;
             case "update.later": _updateDismissed = true; UpdateDock(); return;
             case "update.check": _updateDismissed = false; _ = Program.CheckForUpdateAsync(); return;
@@ -1251,6 +1256,37 @@ public sealed class BrowserController
     // Extensions. Le moteur les charge depuis un dossier : Sol reprend celles des autres navigateurs de l'ordinateur,
     // ou un dossier désigné, et en garde sa copie dans son dossier de données. Chaque profil de Sol a les siennes.
     private bool _extensionsOpen;
+
+    private ExtensionPopupHost? _extensionPopup;
+    /// <summary>Encart flottant où s'ouvre la fenêtre d'une extension.</summary>
+    public ExtensionPopupHost? ExtensionPopup
+    {
+        get => _extensionPopup;
+        init { _extensionPopup = value; if (value is not null) value.TabRequested += url => { Open(url); Refresh(); }; }
+    }
+
+    // La fenêtre de l'extension s'ouvre dans l'encart, sous la barre ; une extension qui n'a que des réglages les ouvre en onglet.
+    private void ShowExtension(ExtensionInfo extension, double right, double top)
+    {
+        if (extension.Popup is { } popup && ExtensionPopup is { } host) _ = host.ShowAsync($"chrome-extension://{extension.Id}/{popup.TrimStart('/')}", right, top);
+        else if ((extension.Popup ?? extension.Options) is { } page) { Open($"chrome-extension://{extension.Id}/{page.TrimStart('/')}"); Refresh(); }
+    }
+
+    // Bouton de la barre : les extensions actives qui ont une fenêtre, puis l'accès à leur gestion.
+    private async Task OpenExtensionsMenuAsync(double x, double y)
+    {
+        if (AppPaths.Private) return;
+        if (ClosesPanel("extensions")) return;
+        var entries = new List<(string Label, Action? Run)>();
+        if (EngineProfile is { } profile)
+            foreach (var installed in await profile.GetBrowserExtensionsAsync())
+                if (installed.IsEnabled && installed.Id != AdBlock.ExtensionId && ExtensionCatalog.Read(Path.Combine(ExtensionsDir, installed.Id), installed.Id) is { } info && (info.Popup ?? info.Options) is not null)
+                    entries.Add((info.Name, () => _afterMenu = () => ShowExtension(info, x, y)));
+        if (entries.Count == 0) { await OpenExtensionsAsync(); return; }
+        entries.Add(("", null));
+        entries.Add((T("Gérer les extensions…", "Manage extensions…"), () => _afterMenu = () => _ = OpenExtensionsAsync()));
+        ShowMenu(x - 260, y, entries);
+    }
     private Dictionary<string, ExtensionInfo> _extensionOffers = new();
     private static string ExtensionsDir => Path.Combine(AppPaths.BaseDir, "extensions");
     private Microsoft.Web.WebView2.Core.CoreWebView2Profile? EngineProfile => _tabs.ActiveId is { } active ? _pages.CoreOf(active)?.Profile : null;
