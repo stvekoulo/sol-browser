@@ -20,6 +20,8 @@ public sealed class Settings
     public bool TintSidebar { get; set; } = true;
     public bool TintMenus { get; set; } = true;
     public bool TintBackground { get; set; } = true;
+    /// <summary>La couleur de l'interface suit ce que la page affiche à l'instant (vidéo, défilement), pas seulement la couleur du site.</summary>
+    public bool LiveColor { get; set; } = true;
     /// <summary>Propose d'enregistrer les mots de passe et les remplit ; le stockage chiffré est celui du moteur.</summary>
     public bool SavePasswords { get; set; } = true;
     /// <summary>Envoie la saisie de la barre d'adresse au moteur de recherche pour obtenir des complétions.</summary>

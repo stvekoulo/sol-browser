@@ -95,10 +95,12 @@ function applyTheme(ev: HostEvent) {
   // Couleur d'accent du site. Chaque vue ne la prend que si les réglages l'autorisent pour sa zone ;
   // sans elle, ses surfaces gardent la couleur du fond.
   const zone = location.hash === '#sidebar' ? 'sidebar' : location.hash ? 'menus' : 'topbar';
-  if (ev.accent && (ev.tint?.[zone] ?? true)) root.setProperty('--site-accent', ev.accent);
-  else root.removeProperty('--site-accent');
   // Arrière-plan : le fond de la barre et de la colonne se teinte légèrement (jamais celui des menus).
-  if (ev.accent && zone !== 'menus' && (ev.tint?.background ?? true)) root.setProperty('--site-chrome-accent', ev.accent);
+  // Posée d'un coup : animer cette couleur redessinerait toute l'interface à chaque image.
+  const site = ev.tint?.[zone] ?? true, chrome = zone !== 'menus' && (ev.tint?.background ?? true);
+  if (ev.accent && site) root.setProperty('--site-accent', ev.accent);
+  else root.removeProperty('--site-accent');
+  if (ev.accent && chrome) root.setProperty('--site-chrome-accent', ev.accent);
   else root.removeProperty('--site-chrome-accent');
 }
 

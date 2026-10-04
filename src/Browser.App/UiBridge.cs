@@ -7,7 +7,7 @@ using Microsoft.Web.WebView2.Core;
 namespace Browser.App;
 
 // Vue d'interface : synchronise la barre, la sidebar et adapte la couleur de coque à la page active.
-public sealed class UiBridge(WebView2 view, string page = "index.html", WebView2? sidebar = null, ColumnDefinition? sidebarColumn = null, PageHost? pages = null)
+public sealed partial class UiBridge(WebView2 view, string page = "index.html", WebView2? sidebar = null, ColumnDefinition? sidebarColumn = null, PageHost? pages = null)
 {
     private const string Origin = "https://ui.navigateur/";
     // Lit les couleurs de la page active : son fond, et sa couleur d'accent (celle qui fait son identité).
@@ -110,6 +110,7 @@ public sealed class UiBridge(WebView2 view, string page = "index.html", WebView2
     public void BroadcastTheme()
     {
         if (s_lastProbe is not var (bg, dark, accent)) return;
+        accent = AmbientAccent ?? accent; // ce que la page montre à l'instant, sinon la couleur annoncée par le site
         var on = Settings;
         s_lastThemeMsg = JsonSerializer.Serialize(new
         {
@@ -139,6 +140,7 @@ public sealed class UiBridge(WebView2 view, string page = "index.html", WebView2
         {
             pages.Loaded += _ => ProbeActiveThemeAsync(withDelays: true);
             pages.PageChanged += (_, _, _) => ProbeActiveThemeAsync(withDelays: false);
+            StartAmbient();
         }
     }
 

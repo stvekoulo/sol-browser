@@ -53,4 +53,15 @@ public class BackupTests : IDisposable
         Assert.Empty(PasswordImport.ReadCsv("a,b\n1,2\n"));
         Assert.Empty(PasswordImport.ReadCsv(""));
     }
+
+    [Fact]
+    public void The_ambient_colour_is_the_vivid_one_and_grey_pictures_have_none()
+    {
+        byte[] red = [230, 30, 30, 255], white = [255, 255, 255, 255], black = [0, 0, 0, 255], grey = [120, 120, 120, 255];
+        // Une image surtout blanche et noire, avec un quart de rouge : le rouge donne le ton.
+        var (r, g, b) = AmbientColor.From([.. red, .. white, .. black, .. white])!.Value;
+        Assert.True(r > 200 && g < 60 && b < 60);
+        Assert.Null(AmbientColor.From([.. white, .. black, .. grey, .. grey]));
+        Assert.Null(AmbientColor.From([]));
+    }
 }

@@ -442,6 +442,7 @@ public sealed class BrowserController
             new { key = "tint.sidebar", label = T("Carte latérale", "Sidebar"), hint = "", on = _settings.TintSidebar },
             new { key = "tint.menus", label = T("Menus et panneaux", "Menus and panels"), hint = "", on = _settings.TintMenus },
             new { key = "tint.background", label = T("Arrière-plan de l'interface", "Interface background"), hint = T("Le fond de la barre et de la colonne prend une teinte légère", "The bar and sidebar background takes a light tint"), on = _settings.TintBackground },
+            new { key = "tint.live", label = T("Couleurs en temps réel", "Live colours"), hint = T("La couleur suit ce qui est affiché : la vidéo en cours, la partie de la page à l'écran", "The colour follows what is shown: the playing video, the visible part of the page"), on = _settings.LiveColor },
         },
         items = new[]
         {
@@ -620,6 +621,7 @@ public sealed class BrowserController
             case "tint.sidebar": _settings.TintSidebar = on; break;
             case "tint.menus": _settings.TintMenus = on; break;
             case "tint.background": _settings.TintBackground = on; break;
+            case "tint.live": _settings.LiveColor = on; break;
             default: return;
         }
         JsonFileStore.Save(AppPaths.Settings, _settings);
