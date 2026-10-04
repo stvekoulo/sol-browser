@@ -11,7 +11,7 @@ type Content =
   | { popup: 'library'; bookmarks: Item[]; history: Item[] }
   | { popup: 'menu'; items: string[] }
   | { popup: 'downloads'; items: Download[] }
-  | { popup: 'settings'; zoom: number; theme: number; language: number; home: string; font: number; customFonts: number; ublock: string | null; engine: number; engines: string[]; sites: { origin: string; host: string; summary: string }[]; permissions: number; tint: Setting[]; items: Setting[] }
+  | { popup: 'settings'; zoom: number; theme: number; language: number; home: string; font: number; ublock: string | null; engine: number; engines: string[]; sites: { origin: string; host: string; summary: string }[]; permissions: number; tint: Setting[]; items: Setting[] }
   | { popup: 'profiles'; items: Profile[] }
   | { popup: 'group-edit'; create: boolean; id: string; name: string; color: string; icon: string; presets: string[] }
   | { popup: 'shortcut-edit'; id: string; name: string; url: string }
@@ -214,7 +214,7 @@ export default function Popup() {
         <div className="theme-row">
           <span className="row-title">{t('Police', 'Font')}</span>
           <div className="popup-segment" role="radiogroup" aria-label={t('Police', 'Font')}>
-            {[t('Défaut', 'Default'), t('Système', 'System'), 'Inter', t('Perso', 'Custom')].map((label, index) => (
+            {[t('Défaut', 'Default'), t('Système', 'System'), 'Inter', 'SF Pro'].map((label, index) => (
               <button
                 key={label}
                 role="radio"
@@ -226,12 +226,6 @@ export default function Popup() {
               </button>
             ))}
           </div>
-          <span className="row-sub font-note">
-            {content.customFonts > 0
-              ? t(`Perso : ${content.customFonts} fichier${content.customFonts > 1 ? 's' : ''} de police dans votre dossier.`, `Custom: ${content.customFonts} font file${content.customFonts > 1 ? 's' : ''} in your folder.`)
-              : t('Perso : déposez vos fichiers de police (SF Pro, par exemple) dans votre dossier.', 'Custom: drop your font files (SF Pro, for example) into your folder.')}{' '}
-            <button className="link-action" onClick={() => send({ type: 'fonts.open' })}>{t('Ouvrir le dossier', 'Open the folder')}</button>
-          </span>
         </div>
         <div className="theme-row">
           <span className="row-title">{t('Moteur de recherche', 'Search engine')}</span>

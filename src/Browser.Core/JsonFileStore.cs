@@ -31,8 +31,8 @@ public sealed class Settings
     /// <summary>Langue de l'interface : "system" (celle de Windows), "fr" ou "en".</summary>
     public string Language { get; set; } = "system";
     /// <summary>
-    /// Police de l'interface : "default" (celle d'origine), "system" (celle de Windows), "inter" (livrée avec le
-    /// navigateur) ou "custom" (les fichiers déposés par l'utilisateur dans le dossier « fonts »).
+    /// Police de l'interface : "default" (celle d'origine), "system" (celle de Windows), "inter" ou "sf" (SF Pro),
+    /// ces deux dernières livrées avec le navigateur.
     /// </summary>
     public string Font { get; set; } = "default";
     /// <summary>Bloque les requêtes vers les domaines connus de publicité et de pistage.</summary>

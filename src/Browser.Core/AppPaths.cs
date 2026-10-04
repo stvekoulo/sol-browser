@@ -8,9 +8,6 @@ public static class AppPaths
             ? dir
             : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "projet-navigateur");
 
-    /// <summary>Polices déposées par l'utilisateur (communes aux profils) : proposées comme police de l'interface.</summary>
-    public static string Fonts => Path.Combine(BaseDir, "fonts");
-
     /// <summary>Profil de cette fenêtre, choisi au lancement par <c>--profile=nom</c>.</summary>
     public static string Profile { get; } = Profiles.FromArgs(Environment.GetCommandLineArgs());
 

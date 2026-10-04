@@ -140,5 +140,8 @@
 /* Police de l'interface, au choix de l'utilisateur. Sans choix : la pile d'origine, ci-dessus. */
 :root[data-font="system"] { --font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
 :root[data-font="inter"] { --font: "Inter Variable", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
-/* « Police perso » : les fichiers déposés par l'utilisateur (voir bridge.ts), ou SF Pro si elle est installée sur l'ordinateur. */
-:root[data-font="custom"] { --font: "Police perso", "SF Pro Display", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+/* SF Pro Display, livrée avec l'interface en trois graisses ; chargée seulement si elle est choisie. */
+@font-face { font-family: "SF Pro Display"; font-weight: 100 450; font-display: swap; src: url('./fonts/SFProDisplay-Regular.otf') format('opentype'); }
+@font-face { font-family: "SF Pro Display"; font-weight: 451 599; font-display: swap; src: url('./fonts/SFProDisplay-Medium.otf') format('opentype'); }
+@font-face { font-family: "SF Pro Display"; font-weight: 600 900; font-display: swap; src: url('./fonts/SFProDisplay-Bold.otf') format('opentype'); }
+:root[data-font="sf"] { --font: "SF Pro Display", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }

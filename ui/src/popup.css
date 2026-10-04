@@ -433,5 +433,7 @@
 
 .setting-row:disabled { opacity: 0.45; }
 
-.font-note { white-space: normal; line-height: 1.35; }
-.link-action { color: var(--accent); font: inherit; text-decoration: underline; text-underline-offset: 2px; }
+/* Dans une liste qui défile, une ligne garde sa hauteur : sans cela, les lignes se tassent et leurs textes se chevauchent. */
+.popup-list > * { flex-shrink: 0; }
+.popup > * { flex-shrink: 0; }
+.setting-text .row-title { white-space: normal; line-height: 1.3; }

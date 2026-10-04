@@ -73,6 +73,7 @@ public sealed partial class MainWindow : Window
     private async Task InitAsync()
     {
         var settings = JsonFileStore.Load<Settings>(AppPaths.Settings);
+        if (settings.Font == "custom") settings.Font = "sf"; // ancien nom du choix « SF Pro »
         AdBlock.PrepareExtension(); // avant la création du moteur
         var blur = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "blur.js"));
 

@@ -136,12 +136,6 @@ public sealed class BrowserController
                 if (_network.Shown is { } inspected && _pages.CoreOf(inspected) is { } inspectedCore) _ = _network.PostDetailAsync(inspected, inspectedCore, id);
                 return;
             // Réglages d'uBlock Origin Lite (listes de filtres, sites sans filtrage) : sa propre page, dans un onglet.
-            // Dossier où déposer ses propres polices : ouvert dans l'explorateur de fichiers.
-            case "fonts.open":
-                Directory.CreateDirectory(AppPaths.Fonts);
-                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{AppPaths.Fonts}\"")); }
-                catch (System.ComponentModel.Win32Exception) { }
-                return;
             case "blocker.options": if (AdBlock.ExtensionId is { } extension) Open($"chrome-extension://{extension}/dashboard.html"); break;
             case "device.compare": SetComparison(id, c.Query!); return;
             case "device.rotate": _pages.RotateDevice(id); return;
@@ -370,7 +364,6 @@ public sealed class BrowserController
         language = Math.Max(0, Array.IndexOf(Languages, _settings.Language)),
         home = _settings.HomePage,
         font = Math.Max(0, Array.IndexOf(Fonts, _settings.Font)),
-        customFonts = UiBridge.Faces.Count, // fichiers de police déposés par l'utilisateur
         ublock = AdBlock.ExtensionId is null ? null : AdBlock.ExtensionVersion, // version installée ; null : extension absente
         engine = Math.Max(0, Array.FindIndex(Engines, e => e.Search == _settings.SearchUrlTemplate)),
         engines = Engines.Select(e => e.Name),
@@ -470,12 +463,11 @@ public sealed class BrowserController
             $"Suspends inactive tabs, then unloads them after 30 minutes. In use: {megabytes} MB, {asleep} tab{(asleep == 1 ? "" : "s")} unloaded.");
     }
 
-    private static readonly string[] Fonts = ["default", "system", "inter", "custom"];
+    private static readonly string[] Fonts = ["default", "system", "inter", "sf"];
 
     private void SetFont(int index)
     {
         if (index < 0 || index >= Fonts.Length) return;
-        UiBridge.RescanFonts(); // l'utilisateur vient peut-être de déposer ses fichiers
         _settings.Font = Fonts[index];
         JsonFileStore.Save(AppPaths.Settings, _settings);
         _bridge.BroadcastTheme(); // la police voyage avec le thème : toutes les vues la reçoivent

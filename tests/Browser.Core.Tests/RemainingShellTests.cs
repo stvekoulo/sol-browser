@@ -84,29 +84,6 @@ public class RemainingShellTests : IDisposable
         Assert.False(Directory.Exists(Path.GetDirectoryName(orphan)));
     }
 
-    [Theory]
-    [InlineData("SFPRODISPLAYREGULAR.OTF", 400, false)]
-    [InlineData("SFPRODISPLAYMEDIUM.OTF", 500, false)]
-    [InlineData("SFPRODISPLAYBOLD.OTF", 700, false)]
-    [InlineData("SFPRODISPLAYSEMIBOLDITALIC.OTF", 600, true)]
-    [InlineData("SFPRODISPLAYULTRALIGHTITALIC.OTF", 200, true)]
-    [InlineData("SFPRODISPLAYHEAVYITALIC.OTF", 800, true)]
-    [InlineData("Inter-ExtraBold.woff2", 800, false)]
-    [InlineData("MaPolice.ttf", 400, false)]
-    public void A_font_file_name_gives_its_weight_and_style(string file, int weight, bool italic) =>
-        Assert.Equal(new FontFace(file, weight, italic), FontFiles.Describe(file));
-
-    [Fact]
-    public void Only_font_files_with_plain_names_are_listed()
-    {
-        var fonts = Path.Combine(_dir, "fonts");
-        Directory.CreateDirectory(fonts);
-        foreach (var name in new[] { "Belle-Regular.otf", "Belle-Bold.ttf", "lisez-moi.txt", "script.js", "Belle'Italic\".otf".Replace("\"", "") })
-            File.WriteAllText(Path.Combine(fonts, name), "");
-        Assert.Equal(["Belle-Bold.ttf", "Belle-Regular.otf"], FontFiles.In(fonts).Select(f => f.File));
-        Assert.Empty(FontFiles.In(Path.Combine(_dir, "absent")));
-    }
-
     [Fact]
     public void Forget_removes_one_site_and_leaves_the_others()
     {

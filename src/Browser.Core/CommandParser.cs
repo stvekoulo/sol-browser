@@ -34,7 +34,7 @@ public static class CommandParser
         ["shortcut.menu"] = ["index", "x", "y"], ["shortcut.open"] = ["index"], ["shortcut.update"] = ["id", "title", "input"],
         ["device.set"] = ["id", "query"], ["device.rotate"] = ["id"], ["device.compare"] = ["id", "query"],
         ["network.toggle"] = [], ["network.ready"] = [], ["network.clear"] = [], ["network.detail"] = ["id"],
-        ["blocker.options"] = [], ["fonts.open"] = [],
+        ["blocker.options"] = [],
         ["ui.ready"] = [],
     };
 
