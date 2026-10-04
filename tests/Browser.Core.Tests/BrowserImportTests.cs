@@ -112,4 +112,33 @@ public class BrowserImportTests : IDisposable
         Assert.Equal(["https://a.test/", "https://b.test/"], history.Select(v => v.Url));
         Assert.Equal(("A ici", 5, recent), (history[0].Title, history[0].Count, history[0].Last)); // la visite la plus récente garde son titre et sa date
     }
+
+    [Fact]
+    public void Extensions_of_another_browser_are_found_with_their_real_name_and_latest_version()
+    {
+        var id = "abcdefghijklmnopabcdefghijklmnop";
+        var userData = Path.Combine(_dir, "Local", "Navigateur", "User Data");
+        foreach (var version in new[] { "1.2.0_0", "1.10.0_0" })
+        {
+            var dir = Path.Combine(userData, "Default", "Extensions", id, version);
+            Directory.CreateDirectory(Path.Combine(dir, "_locales", "en"));
+            Directory.CreateDirectory(Path.Combine(dir, "_metadata"));
+            File.WriteAllText(Path.Combine(dir, "manifest.json"), $$"""{ "name": "__MSG_extName__", "version": "{{version.Split('_')[0]}}", "default_locale": "en", "action": { "default_popup": "popup.html" }, "options_ui": { "page": "options.html" } }""");
+            File.WriteAllText(Path.Combine(dir, "_locales", "en", "messages.json"), """{ "extName": { "message": "Coffre" } }""");
+            File.WriteAllText(Path.Combine(dir, "_metadata", "verified_contents.json"), "{}");
+        }
+        // Ni un thème, ni un dossier qui n'a pas la forme d'un identifiant, ne sont des extensions à proposer.
+        var theme = Path.Combine(userData, "Default", "Extensions", "ponmlkjihgfedcbaponmlkjihgfedcba", "1.0_0");
+        Directory.CreateDirectory(theme);
+        File.WriteAllText(Path.Combine(theme, "manifest.json"), """{ "name": "Nuit", "version": "1.0", "theme": {} }""");
+        Directory.CreateDirectory(Path.Combine(userData, "Default", "Extensions", "Temp"));
+
+        var found = Assert.Single(ExtensionCatalog.Scan(userData, "Navigateur"));
+        Assert.Equal((id, "Coffre", "1.10.0", "popup.html", "options.html", "Navigateur"), (found.Id, found.Name, found.Version, found.Popup, found.Options, found.From));
+
+        var copy = ExtensionCatalog.CopyTo(found.Folder, Path.Combine(_dir, "sol", id));
+        Assert.True(File.Exists(Path.Combine(copy, "manifest.json")));
+        Assert.False(Directory.Exists(Path.Combine(copy, "_metadata")));
+        Assert.Empty(ExtensionCatalog.Scan(Path.Combine(_dir, "absent"), "Rien"));
+    }
 }

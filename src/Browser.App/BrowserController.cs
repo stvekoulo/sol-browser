@@ -162,6 +162,15 @@ public sealed class BrowserController
                 return;
             case "import.run": _ = ImportAsync(id, c.Query!); return;
             case "import.csv": _ = ImportCsvAsync(fromSettings: c.Id == "settings"); return;
+            case "extensions.open": _ = OpenExtensionsAsync(); return;
+            case "extension.add": _ = AddExtensionAsync(id); return;
+            case "extension.folder": _ = AddExtensionFolderAsync(); return;
+            case "extension.toggle": _ = ChangeExtensionAsync(id, remove: false); return;
+            case "extension.remove": _ = ChangeExtensionAsync(id, remove: true); return;
+            case "extension.show":
+                if (ExtensionCatalog.IsId(id) && ExtensionCatalog.Read(Path.Combine(ExtensionsDir, id), id) is { } shownExtension && (shownExtension.Popup ?? shownExtension.Options) is { } extensionPage)
+                { HidePopup(); Open($"chrome-extension://{id}/{extensionPage.TrimStart('/')}"); break; }
+                return;
             case "update.later": _updateDismissed = true; UpdateDock(); return;
             case "update.check": _updateDismissed = false; _ = Program.CheckForUpdateAsync(); return;
             case "update.restart":
@@ -656,6 +665,7 @@ public sealed class BrowserController
         _downloadsOpen = false;
         _settingsOpen = false;
         _profilesOpen = false;
+        _extensionsOpen = false;
         // Question d'accès fermée sans réponse : refus pour cette fois, rien n'est retenu.
         if (_asking is var (pendingArgs, pendingDeferral, _))
         {
@@ -1236,6 +1246,114 @@ public sealed class BrowserController
             return;
         }
         Notice(T("Sauvegarde prête", "Backup ready"), T("Fermez puis rouvrez Sol : la sauvegarde remplacera les réglages, onglets, favoris et historique actuels, et ajoutera ses mots de passe.", "Close and reopen Sol: the backup will replace the current settings, tabs, bookmarks and history, and add its passwords."));
+    }
+
+    // Extensions. Le moteur les charge depuis un dossier : Sol reprend celles des autres navigateurs de l'ordinateur,
+    // ou un dossier désigné, et en garde sa copie dans son dossier de données. Chaque profil de Sol a les siennes.
+    private bool _extensionsOpen;
+    private Dictionary<string, ExtensionInfo> _extensionOffers = new();
+    private static string ExtensionsDir => Path.Combine(AppPaths.BaseDir, "extensions");
+    private Microsoft.Web.WebView2.Core.CoreWebView2Profile? EngineProfile => _tabs.ActiveId is { } active ? _pages.CoreOf(active)?.Profile : null;
+
+    private async Task<string> ExtensionsJsonAsync()
+    {
+        var installed = new List<object>();
+        var have = new HashSet<string>();
+        if (EngineProfile is { } profile)
+            foreach (var extension in await profile.GetBrowserExtensionsAsync())
+            {
+                // Le bloqueur intégré a son propre réglage ; seules les extensions rangées dans le dossier de Sol sont listées.
+                if (ExtensionCatalog.Read(Path.Combine(ExtensionsDir, extension.Id), extension.Id) is not { } info || extension.Id == AdBlock.ExtensionId) continue;
+                have.Add(extension.Id);
+                installed.Add(new { id = extension.Id, name = info.Name, version = info.Version, enabled = extension.IsEnabled, page = (info.Popup ?? info.Options) is not null });
+            }
+        _extensionOffers = BrowserImport.Detect(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData))
+            .SelectMany(source => ExtensionCatalog.Scan(source.UserData, source.Name))
+            // Sans le bloqueur déjà intégré, ni les composants internes du navigateur Comet.
+            .Where(e => !have.Contains(e.Id) && !e.Name.StartsWith("uBlock Origin Lite", StringComparison.OrdinalIgnoreCase) && !e.Name.StartsWith("Comet", StringComparison.OrdinalIgnoreCase))
+            .GroupBy(e => e.Id).ToDictionary(g => g.Key, g => g.First());
+        return JsonSerializer.Serialize(new
+        {
+            popup = "extensions",
+            installed,
+            available = _extensionOffers.Values.OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase).Select(e => new { id = e.Id, name = e.Name, version = e.Version, from = e.From }),
+        });
+    }
+
+    private async Task OpenExtensionsAsync()
+    {
+        if (AppPaths.Private) return;
+        HidePopup();
+        var json = await ExtensionsJsonAsync();
+        _extensionsOpen = true;
+        _popup.ShowCentered(420, json, top: 80);
+    }
+
+    private async Task RefreshExtensionsAsync()
+    {
+        if (_extensionsOpen) _popup.Post(await ExtensionsJsonAsync());
+    }
+
+    // Copie le dossier dans celui de Sol, sous l'identifiant de l'extension, puis l'installe dans le profil.
+    private async Task InstallExtensionAsync(string source, string? knownId)
+    {
+        if (EngineProfile is not { } profile) return;
+        try
+        {
+            var id = knownId;
+            if (id is null)
+            {
+                // Dossier désigné à la main : l'identifiant n'est connu qu'une fois l'extension chargée.
+                var trial = ExtensionCatalog.CopyTo(source, Path.Combine(ExtensionsDir, "ajout"));
+                var loaded = await profile.AddBrowserExtensionAsync(trial);
+                id = loaded.Id;
+                await loaded.RemoveAsync();
+                source = trial;
+            }
+            var folder = Path.Combine(ExtensionsDir, id);
+            if (!string.Equals(Path.GetFullPath(source), Path.GetFullPath(folder), StringComparison.OrdinalIgnoreCase)) ExtensionCatalog.CopyTo(source, folder);
+            await profile.AddBrowserExtensionAsync(folder);
+            await RefreshExtensionsAsync();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.Runtime.InteropServices.COMException)
+        {
+            Notice(T("Extension refusée", "Extension rejected"), T($"Le moteur n'a pas pu charger cette extension : {e.Message}", $"The engine could not load this extension: {e.Message}"));
+        }
+    }
+
+    private Task AddExtensionAsync(string id) =>
+        _extensionOffers.TryGetValue(id, out var offer) ? InstallExtensionAsync(offer.Folder, offer.Id) : Task.CompletedTask;
+
+    private async Task AddExtensionFolderAsync()
+    {
+        var picker = new Windows.Storage.Pickers.FolderPicker { SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Downloads };
+        picker.FileTypeFilter.Add("*");
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(_window));
+        if (await picker.PickSingleFolderAsync() is not { } folder) return;
+        if (ExtensionCatalog.Read(folder.Path, "") is null)
+        {
+            Notice(T("Ce n'est pas une extension", "Not an extension"), T("Ce dossier ne contient pas de fichier manifest.json d'extension.", "This folder has no extension manifest.json file."));
+            return;
+        }
+        await InstallExtensionAsync(folder.Path, knownId: null);
+    }
+
+    private async Task ChangeExtensionAsync(string id, bool remove)
+    {
+        if (EngineProfile is not { } profile || !ExtensionCatalog.IsId(id) || id == AdBlock.ExtensionId) return;
+        try
+        {
+            if ((await profile.GetBrowserExtensionsAsync()).FirstOrDefault(e => e.Id == id) is not { } extension) return;
+            if (remove)
+            {
+                await extension.RemoveAsync();
+                try { Directory.Delete(Path.Combine(ExtensionsDir, id), recursive: true); }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { /* utilisée par un autre profil ouvert : le dossier reste */ }
+            }
+            else await extension.EnableAsync(!extension.IsEnabled);
+            await RefreshExtensionsAsync();
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException or ArgumentException) { }
     }
 
     // Profils : chacun a ses données. Le panneau en change, en crée ou en supprime.

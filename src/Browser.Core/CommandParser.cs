@@ -37,6 +37,7 @@ public static class CommandParser
         ["blocker.options"] = [],
         ["welcome.ready"] = [], ["welcome.open"] = [], ["welcome.done"] = [], ["welcome.name"] = ["title"],
         ["import.run"] = ["id", "query"], ["import.csv"] = [], ["update.restart"] = [], ["update.later"] = [], ["update.check"] = [],
+        ["extensions.open"] = [], ["extension.add"] = ["id"], ["extension.folder"] = [], ["extension.toggle"] = ["id"], ["extension.remove"] = ["id"], ["extension.show"] = ["id"],
         ["backup.export"] = [], ["backup.export.key"] = ["title"], ["backup.import"] = [], ["backup.restore"] = ["title"],
         ["ui.ready"] = [],
     };

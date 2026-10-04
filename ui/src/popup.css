@@ -447,3 +447,5 @@
 .dock-update-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 4px; }
 .dock-update-bar { height: 4px; border-radius: 2px; background: var(--border-strong); overflow: hidden; }
 .dock-update-bar > span { display: block; height: 100%; border-radius: 2px; background: var(--accent); transition: width 200ms linear; }
+
+.extension-note { padding: 8px 12px 4px; }

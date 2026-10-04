@@ -18,7 +18,8 @@ type Content =
   | { popup: 'compare-pick'; id: string; min: number; max: number; devices: { name: string; label: string; size: string; on: boolean }[] }
   | { popup: 'permission'; site: string; what: string; secure: boolean }
   | { popup: 'prompt'; title: string; hint: string; placeholder: string; submit: string; value: string; command: string; id: string | null; secret?: boolean }
-  | { popup: 'notice'; title: string; hint: string };
+  | { popup: 'notice'; title: string; hint: string }
+  | { popup: 'extensions'; installed: { id: string; name: string; version: string; enabled: boolean; page: boolean }[]; available: { id: string; name: string; version: string; from: string }[] };
 
 type Profile = { id: string; name: string; current: boolean; renamable: boolean; deletable: boolean };
 
@@ -283,6 +284,13 @@ export default function Popup() {
           </div>
           <div className="setting-row static">
             <span className="setting-text">
+              <span className="row-title">{t('Extensions', 'Extensions')}</span>
+              <span className="row-sub">{t('Ajouter celles de vos autres navigateurs (Mots de passe iCloud, par exemple) ou un dossier d’extension.', 'Add the ones from your other browsers (iCloud Passwords, for example) or an extension folder.')}</span>
+            </span>
+            <button className="pill-action" onClick={() => send({ type: 'extensions.open' })}>{t('Gérer', 'Manage')}</button>
+          </div>
+          <div className="setting-row static">
+            <span className="setting-text">
               <span className="row-title">Sol {content.version}</span>
               <span className="row-sub">
                 {!content.update
@@ -346,6 +354,45 @@ export default function Popup() {
 
   if (content.popup === 'profiles')
     return <ProfileList key={opening} rootRef={root} items={content.items} />;
+
+  if (content.popup === 'extensions')
+    return (
+      <div ref={root} className="popup arriving">
+        <div className="popup-header">
+          <span className="popup-header-title">{t('Extensions', 'Extensions')}</span>
+        </div>
+        <div className="popup-list">
+          {content.installed.length === 0 && <p className="row-sub extension-note">{t('Aucune extension ajoutée pour l’instant.', 'No extension added yet.')}</p>}
+          {content.installed.map(e => (
+            <div key={e.id} className="setting-row static">
+              <span className="setting-text">
+                <span className="row-title">{e.name}</span>
+                <span className="row-sub">{e.enabled ? t(`Version ${e.version}`, `Version ${e.version}`) : t('Désactivée', 'Disabled')}</span>
+              </span>
+              <span className="row-actions">
+                {e.page && e.enabled && <button className="pill-action" onClick={() => send({ type: 'extension.show', id: e.id })}>{t('Ouvrir', 'Open')}</button>}
+                <button className="pill-action" onClick={() => send({ type: 'extension.toggle', id: e.id })}>{e.enabled ? t('Désactiver', 'Disable') : t('Activer', 'Enable')}</button>
+                <button className="pill-action" onClick={() => send({ type: 'extension.remove', id: e.id })}>{t('Retirer', 'Remove')}</button>
+              </span>
+            </div>
+          ))}
+          {content.available.length > 0 && <p className="row-sub extension-note">{t('Trouvées dans vos autres navigateurs :', 'Found in your other browsers:')}</p>}
+          {content.available.map(e => (
+            <div key={e.id} className="setting-row static">
+              <span className="setting-text">
+                <span className="row-title">{e.name}</span>
+                <span className="row-sub">{e.from}</span>
+              </span>
+              <button className="pill-action" onClick={() => send({ type: 'extension.add', id: e.id })}>{t('Ajouter', 'Add')}</button>
+            </div>
+          ))}
+        </div>
+        <hr />
+        <button className="row" onClick={() => send({ type: 'extension.folder' })}>
+          <span className="row-title">{t('Ajouter depuis un dossier…', 'Add from a folder…')}</span>
+        </button>
+      </div>
+    );
 
   if (content.popup === 'group-edit')
     return <GroupEditor key={opening} rootRef={root} group={content} />;

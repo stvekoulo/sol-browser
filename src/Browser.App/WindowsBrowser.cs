@@ -93,8 +93,10 @@ public static class WindowsBrowser
         foreach (var arg in args.Skip(1))
         {
             if (arg.StartsWith("--", StringComparison.Ordinal)) continue;
-            if (Uri.TryCreate(arg, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https") targets.Add(uri.AbsoluteUri);
-            else if (File.Exists(arg)) targets.Add(new Uri(Path.GetFullPath(arg)).AbsoluteUri);
+            if (!Uri.TryCreate(arg, UriKind.Absolute, out var uri)) { if (File.Exists(arg)) targets.Add(new Uri(Path.GetFullPath(arg)).AbsoluteUri); }
+            else if (uri.Scheme is "http" or "https") targets.Add(uri.AbsoluteUri);
+            // Un fichier, donné par son chemin (lancement par Windows) ou déjà sous forme d'adresse (remis par un autre lancement).
+            else if (uri.IsFile && File.Exists(uri.LocalPath)) targets.Add(uri.AbsoluteUri);
         }
         return targets;
     }
