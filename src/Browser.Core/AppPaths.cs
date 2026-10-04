@@ -21,5 +21,7 @@ public static class AppPaths
     public static string Session => Path.Combine(DataDir, "session.json");
     public static string Permissions => Path.Combine(DataDir, "permissions.json");
     public static string Database => Path.Combine(DataDir, "browser.db");
+    /// <summary>Mots de passe repris d'un autre navigateur, en attente d'écriture au prochain démarrage (fichier protégé par Windows).</summary>
+    public static string PendingPasswords => Path.Combine(DataDir, "passwords.pending");
     public static string WebData => Path.Combine(DataDir, "webview2");
 }

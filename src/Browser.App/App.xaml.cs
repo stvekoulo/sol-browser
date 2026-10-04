@@ -47,6 +47,10 @@ public partial class App : Application
         if (AppPaths.Profile != Profiles.Default || string.IsNullOrEmpty(LaunchEnvironment[WebDataVariable]))
             Environment.SetEnvironmentVariable(WebDataVariable, AppPaths.WebData);
 
+        // Mots de passe repris d'un autre navigateur pendant la session précédente : écrits avant que le moteur ne s'ouvre.
+        if (!AppPaths.Private)
+            PasswordImport.ApplyPending(AppPaths.PendingPasswords, Path.Combine(Environment.GetEnvironmentVariable(WebDataVariable)!, "EBWebView"));
+
         // Options du moteur, ajoutées à celles déjà demandées par l'environnement :
         // - barres de défilement fines qui n'apparaissent qu'au défilement (quand le réglage les affiche) ;
         // - retour et avance par balayage horizontal à deux doigts sur le pavé tactile.

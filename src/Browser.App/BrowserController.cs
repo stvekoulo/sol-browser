@@ -508,16 +508,23 @@ public sealed class BrowserController
         }));
     }
 
-    // Reprend les favoris et l'historique d'un profil d'un autre navigateur. La lecture des fichiers se fait hors du fil
+    // Reprend les favoris, l'historique et les mots de passe d'un profil d'un autre navigateur. La lecture des fichiers se fait hors du fil
     // de l'interface ; seul un profil détecté par le navigateur lui-même est accepté.
     private async Task ImportAsync(string browser, string folder)
     {
         if (BrowserImport.ProfileDir(_importSources, browser, folder) is not { } dir) return;
         var temp = Path.Combine(AppPaths.DataDir, "import");
         var (bookmarks, visits) = await Task.Run(() => (BrowserImport.ReadBookmarks(dir), BrowserImport.ReadHistory(dir, ImportedHistory, temp)));
+        // Mots de passe : lus maintenant, écrits dans la base du moteur au prochain démarrage (il la garde verrouillée).
+        var (logins, locked) = await Task.Run(() =>
+        {
+            var read = PasswordImport.Read(BrowserImport.UserData(_importSources, browser)!, dir, temp);
+            PasswordImport.Queue(AppPaths.PendingPasswords, read.Logins);
+            return (read.Logins.Count, read.Unreadable);
+        });
         try { _db.Import(bookmarks, visits); }
         catch (Microsoft.Data.Sqlite.SqliteException) { (bookmarks, visits) = ([], []); }
-        _welcome.Post(JsonSerializer.Serialize(new { welcome = "imported", id = browser, folder, bookmarks = bookmarks.Count, history = visits.Count }));
+        _welcome.Post(JsonSerializer.Serialize(new { welcome = "imported", id = browser, folder, bookmarks = bookmarks.Count, history = visits.Count, passwords = logins, locked }));
         Refresh();
     }
 

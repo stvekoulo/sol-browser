@@ -18,7 +18,7 @@ type Setup = {
   first: boolean; name: string; theme: number; font: number; language: number; engine: number; engines: string[];
   blocker: boolean; pip: boolean; browsers: Browser[];
 };
-type Imported = Record<string, { bookmarks: number; history: number } | 'running'>;
+type Imported = Record<string, { bookmarks: number; history: number; passwords: number; locked: number } | 'running'>;
 
 const key = (browser: string, folder: string) => `${browser}|${folder}`;
 
@@ -34,7 +34,7 @@ export default function Welcome() {
 
   useEffect(() => {
     const off = onMessage(data => {
-      const message = data as { welcome?: string; id?: string; folder?: string; bookmarks?: number; history?: number };
+      const message = data as { welcome?: string; id?: string; folder?: string; bookmarks?: number; history?: number; passwords?: number; locked?: number };
       if (message.welcome === 'reset') send({ type: 'welcome.ready' });
       if (message.welcome === 'state') {
         const next = data as unknown as Setup;
@@ -44,7 +44,7 @@ export default function Welcome() {
         setStep(next.first ? 0 : 1); // déjà accueilli : on vient pour l'import
       }
       if (message.welcome === 'imported' && message.id !== undefined)
-        setImported(all => ({ ...all, [key(message.id!, message.folder ?? '')]: { bookmarks: message.bookmarks ?? 0, history: message.history ?? 0 } }));
+        setImported(all => ({ ...all, [key(message.id!, message.folder ?? '')]: { bookmarks: message.bookmarks ?? 0, history: message.history ?? 0, passwords: message.passwords ?? 0, locked: message.locked ?? 0 } }));
     });
     send({ type: 'welcome.ready' });
     return off;
@@ -81,7 +81,7 @@ export default function Welcome() {
 
     <>
       <h1>{t('Importer vos données', 'Import your data')}</h1>
-      <p className="welcome-lead">{t('Importez les favoris et l’historique de vos autres navigateurs. Les mots de passe ne sont pas importés.', 'Import bookmarks and history from your other browsers. Passwords are not imported.')}</p>
+      <p className="welcome-lead">{t('Importez les favoris, l’historique et les mots de passe de vos autres navigateurs. Les mots de passe seront disponibles au prochain démarrage de Sol.', 'Import bookmarks, history and passwords from your other browsers. Passwords will be available the next time Sol starts.')}</p>
       <div className="welcome-list">
         {setup.browsers.length === 0 && <p className="welcome-empty">{t('Aucun autre navigateur n’a été trouvé sur cet ordinateur.', 'No other browser was found on this computer.')}</p>}
         {setup.browsers.flatMap(browser =>
@@ -95,8 +95,9 @@ export default function Welcome() {
                   <span className="welcome-row-title">{browser.name}{many && ` · ${profile.name}`}</span>
                   <span className="welcome-row-sub" aria-live="polite">
                     {state === 'running' ? t('Importation en cours…', 'Importing…')
-                      : state ? t(`${state.bookmarks} favori${state.bookmarks > 1 ? 's' : ''} et ${state.history} page${state.history > 1 ? 's' : ''} d’historique importés`, `${state.bookmarks} bookmark${state.bookmarks === 1 ? '' : 's'} and ${state.history} history page${state.history === 1 ? '' : 's'} imported`)
-                      : t('Favoris et historique', 'Bookmarks and history')}
+                      : state ? t(`${state.bookmarks} favori${state.bookmarks > 1 ? 's' : ''}, ${state.history} page${state.history > 1 ? 's' : ''} d’historique, ${state.passwords} mot${state.passwords > 1 ? 's' : ''} de passe`, `${state.bookmarks} bookmark${state.bookmarks === 1 ? '' : 's'}, ${state.history} history page${state.history === 1 ? '' : 's'}, ${state.passwords} password${state.passwords === 1 ? '' : 's'}`)
+                        + (state.locked ? t(` (${state.locked} protégé${state.locked > 1 ? 's' : ''} par ce navigateur, non importé${state.locked > 1 ? 's' : ''})`, ` (${state.locked} protected by that browser, not imported)`) : '')
+                      : t('Favoris, historique et mots de passe', 'Bookmarks, history and passwords')}
                   </span>
                 </span>
                 {state && state !== 'running' ? (

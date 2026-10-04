@@ -10,8 +10,8 @@ public sealed record ImportedVisit(string Url, string Title, int Count, DateTime
 /// <summary>
 /// Reprise des favoris et de l'historique d'un autre navigateur installé sur l'ordinateur. Tous ceux visés ici sont
 /// bâtis sur Chromium et rangent leurs données de la même façon : un fichier « Bookmarks » (JSON) et une base
-/// « History » par profil. Les mots de passe et les cookies ne sont pas repris : ces navigateurs les chiffrent pour
-/// eux seuls.
+/// « History » par profil. Les mots de passe sont repris à part (<see cref="PasswordImport"/>) ; les cookies ne le
+/// sont pas.
 /// </summary>
 public static class BrowserImport
 {
@@ -69,6 +69,8 @@ public static class BrowserImport
     }
 
     /// <summary>Le dossier d'un profil détecté ; null si le navigateur ou le profil n'est pas de ceux qui ont été trouvés.</summary>
+    public static string? UserData(IReadOnlyList<ImportSource> sources, string id) => sources.FirstOrDefault(s => s.Id == id)?.UserData;
+
     public static string? ProfileDir(IReadOnlyList<ImportSource> sources, string id, string folder) =>
         sources.FirstOrDefault(s => s.Id == id) is { } source && source.Profiles.Any(p => p.Folder == folder)
             ? Path.Combine(source.UserData, folder) : null;

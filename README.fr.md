@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/images/logo.png" alt="Sol" width="120"></p>
+
 # Sol
 
 **Sol browser** — un navigateur web léger pour Windows, pensé pour les développeurs, avec une interface calme qui prend les couleurs de la page visitée.
@@ -70,7 +72,8 @@ gh attestation verify .\Sol-0.1.0-win-x64.zip --repo stvekoulo/sol-browser
 - Aucune télémétrie, aucun compte.
 - Ce qui sort de votre ordinateur à l'initiative du navigateur : les suggestions de recherche envoyées à votre moteur
   pendant la saisie dans la barre d'adresse (désactivable), une vérification hebdomadaire d'une nouvelle version
-  d'uBlock Origin Lite sur GitHub, et les icônes des sites de vos raccourcis.
+  d'uBlock Origin Lite sur GitHub, une vérification d'une nouvelle version de Sol sur GitHub au démarrage (copies
+  installées seulement), et les icônes des sites de vos raccourcis.
 - Les pages web n'ont aucun canal vers le code du navigateur.
 
 ## Raccourcis clavier
@@ -116,6 +119,16 @@ Archives publiables pour les trois architectures : `pwsh tools/publish.ps1 -Arch
 1. Régler `<Version>` dans `src/Browser.App/Browser.App.csproj`.
 2. Poser l'étiquette et la pousser : `git tag v0.1.0 && git push origin v0.1.0`.
 3. Le flux *Release* construit les trois archives, publie leurs empreintes et leurs attestations de provenance, et crée la version sur GitHub.
+
+## Politique de signature du code
+
+Les versions ne sont pas encore signées. Une demande à la [SignPath Foundation](https://signpath.org), qui signe
+gratuitement les projets open source, est prévue ; en attendant, utilisez les empreintes et l'attestation de provenance
+décrites plus haut.
+
+- Auteur des modifications, relecteur et approbateur : [Steven KOULO](https://github.com/stvekoulo).
+- Chaque fichier publié est construit par le [workflow de publication](.github/workflows/release.yml) à partir d'un commit étiqueté de ce dépôt ; rien n'est construit ni déposé à la main.
+- Vie privée : Sol n'envoie aucune information à son auteur. Voir [Vie privée](#vie-privée) pour les seules connexions qu'il établit de lui-même.
 
 ## Licence
 
