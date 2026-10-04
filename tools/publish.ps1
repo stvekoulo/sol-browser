@@ -2,6 +2,7 @@
 # chez l'utilisateur), son archive zip, et le fichier des empreintes SHA-256 de toutes les archives.
 #   pwsh tools\publish.ps1                         x64 seulement
 #   pwsh tools\publish.ps1 -Arch x64,arm64,x86     les trois architectures de Windows
+# Avec l'outil Velopack (dotnet tool install -g vpk), chaque architecture reçoit aussi son installateur Setup.exe.
 #   pwsh tools\publish.ps1 -Out release            dossier de sortie (sinon D:\dev\sol-release sur le poste de dev)
 # Seul le moteur web de Windows (WebView2 Runtime, présent d'origine sur Windows 11) reste requis sur la machine.
 param(
@@ -55,12 +56,26 @@ foreach ($a in $Arch) {
     $zip = Join-Path $Out "Sol-$version-win-$a.zip"
     if (Test-Path $zip) { [IO.File]::Delete($zip) }
     Compress-Archive -Path (Join-Path $app '*') -DestinationPath $zip
+    # Installateur (Setup.exe) et paquet de mise à jour, si l'outil Velopack est là : installation par utilisateur,
+    # sans droits d'administrateur, raccourcis, désinstallation, et mises à jour prises dans les publications GitHub.
+    $vpk = if (Test-Path 'D:\dev\tools\vpk.exe') { 'D:\dev\tools\vpk.exe' } else { (Get-Command vpk -ErrorAction SilentlyContinue).Source }
+    if ($vpk) {
+        $env:DOTNET_ROLL_FORWARD = 'Major'
+        # Identifiant « SolBrowser » : le dossier d'installation ne doit pas être celui des données (%LocalAppData%\Sol).
+        & $vpk pack --packId SolBrowser --packTitle Sol --packAuthors 'Steven KOULO' --packVersion $version --packDir $app --mainExe Sol.exe `
+            --icon (Join-Path $root 'src\Browser.App\Assets\Sol.ico') --splashImage (Join-Path $root 'src\Browser.App\Assets\setup-splash.png') `
+            --runtime "win-$a" --channel "win-$a" --outputDir (Join-Path $Out 'installer') | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "Installateur $a en échec" }
+        $env:DOTNET_ROLL_FORWARD = $null
+        Copy-Item (Join-Path $Out "installer\SolBrowser-win-$a-Setup.exe") (Join-Path $Out "Sol-$version-win-$a-Setup.exe") -Force
+    }
+
     $size = [math]::Round(((Get-ChildItem $app -Recurse -File | Measure-Object Length -Sum).Sum) / 1MB)
     Write-Host "Sol $version $a : $size Mo, archive $([math]::Round((Get-Item $zip).Length / 1MB)) Mo -> $zip"
 }
 
 # Empreintes : chacun peut vérifier que l'archive téléchargée est bien celle qui a été publiée.
 $sums = Join-Path $Out 'SHA256SUMS.txt'
-Get-ChildItem $Out -Filter "Sol-$version-win-*.zip" | Sort-Object Name |
+Get-ChildItem $Out -File | Where-Object { $_.Name -like "Sol-$version-win-*" } | Sort-Object Name |
     ForEach-Object { "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)" } | Set-Content $sums -Encoding utf8
 Write-Host "Empreintes -> $sums"

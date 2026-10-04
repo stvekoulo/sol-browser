@@ -13,6 +13,8 @@
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
     <Platform Condition="'$(Platform)' == '' Or '$(Platform)' == 'AnyCPU'">x64</Platform>
     <UseWinUI>true</UseWinUI>
+    <!-- Point d'entrée écrit à la main (Program.cs) : l'installateur doit pouvoir agir avant l'interface. -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <EnableMsixTooling>true</EnableMsixTooling>
@@ -23,6 +25,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.*" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.*" />
+    <PackageReference Include="Velopack" Version="1.2.161" />
     <ProjectReference Include="..\Browser.Core\Browser.Core.csproj" />
   </ItemGroup>
   <ItemGroup>

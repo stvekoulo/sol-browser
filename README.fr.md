@@ -44,7 +44,9 @@ Prenez la dernière archive sur la page [Releases](../../releases/latest) :
 | ARM (PC Snapdragon, Surface Pro X…) | `Sol-<version>-win-arm64.zip` |
 | 32 bits | `Sol-<version>-win-x86.zip` |
 
-Décompressez-la où vous voulez et lancez `Sol.exe`. Il n'y a pas encore d'installateur, et rien d'autre à
+Chaque architecture a aussi son installateur, `Sol-<version>-win-<arch>-Setup.exe` : il installe Sol pour votre
+compte (sans droits d'administrateur), crée les raccourcis et tient Sol à jour depuis cette page. Sinon, décompressez
+l'archive où vous voulez et lancez `Sol.exe`. Dans les deux cas, il n'y a rien d'autre à
 installer : seul le **WebView2 Runtime** de Microsoft Edge est requis ; il est livré avec Windows 11 et la plupart des
 Windows 10 ([à télécharger](https://developer.microsoft.com/microsoft-edge/webview2/) s'il manque). Windows 10 version 1809 ou plus récent.
 

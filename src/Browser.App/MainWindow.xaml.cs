@@ -70,6 +70,13 @@ public sealed partial class MainWindow : Window
                 AppWindow.MoveAndResize(new Windows.Graphics.RectInt32(n[0], n[1], n[2], n[3]));
         }
         if (args.Contains("--maximized") && AppWindow.Presenter is OverlappedPresenter presenter) presenter.Maximize();
+        // Première ouverture : la configuration s'affiche dans une grande fenêtre centrée (88 % de l'écran).
+        else if (parts is null && !AppPaths.Private && !JsonFileStore.Load<Settings>(AppPaths.Settings).Onboarded)
+        {
+            var area = Microsoft.UI.Windowing.DisplayArea.GetFromWindowId(AppWindow.Id, Microsoft.UI.Windowing.DisplayAreaFallback.Nearest).WorkArea;
+            int w = area.Width * 88 / 100, h = area.Height * 88 / 100;
+            AppWindow.MoveAndResize(new Windows.Graphics.RectInt32(area.X + (area.Width - w) / 2, area.Y + (area.Height - h) / 2, w, h));
+        }
     }
 
     private async Task InitAsync()

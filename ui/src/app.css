@@ -22,7 +22,7 @@ button {
   transition: transform var(--fast) var(--ease-out), background var(--fast) var(--ease-out), box-shadow var(--fast) var(--ease-out), opacity var(--fast) var(--ease-out);
 }
 button:active:not(:disabled) { transform: scale(0.96); }
-button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 /* Barre supérieure flottante sans cadre (52px) */
 .topbar {

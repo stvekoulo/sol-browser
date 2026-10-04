@@ -1,6 +1,6 @@
 name: Release
 
-# Pushing a tag such as v0.1.0 builds the three Windows architectures, attaches the archives and their
+# Pushing a tag such as v0.1.0 builds the three Windows architectures, attaches the installers, the archives and their
 # checksums to a GitHub release, and records a build provenance attestation for each archive.
 on:
   push:
@@ -37,6 +37,9 @@ jobs:
         working-directory: ui
         run: npm ci
 
+      - name: Installer tool (Velopack)
+        run: dotnet tool install -g vpk --version 1.2.161
+
       - name: Publish x64, ARM64 and x86
         shell: pwsh
         run: ./tools/publish.ps1 -Arch x64,arm64,x86 -Out release
@@ -45,10 +48,12 @@ jobs:
       # by this workflow, from this repository, with `gh attestation verify`.
       - uses: actions/attest-build-provenance@v2
         with:
-          subject-path: release/*.zip
+          subject-path: |
+            release/*.zip
+            release/*-Setup.exe
 
       - name: GitHub release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" (Get-ChildItem release/*.zip) release/SHA256SUMS.txt --title "${{ github.ref_name }}" --generate-notes
+        run: gh release create "${{ github.ref_name }}" (Get-ChildItem release/*.zip, release/*-Setup.exe, release/installer/*.nupkg, release/installer/releases.*.json) release/SHA256SUMS.txt --title "${{ github.ref_name }}" --generate-notes

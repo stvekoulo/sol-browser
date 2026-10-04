@@ -5,7 +5,7 @@
 .welcome {
   height: 100%;
   display: grid;
-  grid-template-columns: minmax(420px, 540px) minmax(0, 1fr);
+  grid-template-columns: clamp(380px, 36vw, 540px) minmax(0, 1fr);
   align-items: center;
   gap: 0;
   padding: 0;
@@ -19,7 +19,7 @@
 
 .welcome-card {
   width: auto;
-  margin: 28px 36px;
+  margin: 28px 24px;
   max-height: calc(100% - 56px);
   display: flex;
   flex-direction: column;
@@ -54,7 +54,7 @@
   background: var(--bg-pill-solid); box-shadow: var(--shadow-pill-elevated);
   font: inherit; font-size: 13.5px; color: var(--text); user-select: text;
 }
-.welcome-field input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.welcome-field input:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .welcome-choice .popup-segment { margin: 0; }
 .welcome-toggle { background: var(--bg-tab-hover); }
 
@@ -108,7 +108,7 @@
 }
 .preview-scene { width: 100%; height: 100%; object-fit: cover; }
 .preview-scene.on, .preview-shot.on { opacity: 1; transform: none; }
-.preview-shot { margin: 0; padding: 28px 32px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
+.preview-shot { margin: 0; padding: 24px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
 .preview-shot img {
   display: block; min-height: 0; max-width: 100%; max-height: calc(100% - 36px);
   width: auto; height: auto; object-fit: contain;
