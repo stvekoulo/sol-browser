@@ -152,7 +152,7 @@ public sealed class BrowserController
                     AskName(T("Renommer le profil", "Rename profile"), "", T("Nom du profil", "Profile name"), T("Renommer", "Rename"), Profiles.NameOf(AppPaths.BaseDir, id), "profile.rename", id);
                 return;
             case "profile.rename":
-                if (Profiles.Rename(AppPaths.BaseDir, id, c.Title!) && id == AppPaths.Profile) _window.Title = $"Navigateur — {ProfileName(id)}";
+                if (Profiles.Rename(AppPaths.BaseDir, id, c.Title!) && id == AppPaths.Profile) _window.Title = $"Sol — {ProfileName(id)}";
                 break;
             // Fenêtre privée : un profil jetable dans une nouvelle fenêtre, à côté de celle-ci, où le moteur n'écrit rien.
             case "profile.isolated" or "window.private":
@@ -716,7 +716,7 @@ public sealed class BrowserController
     private static readonly HttpClient Http = new()
     {
         Timeout = TimeSpan.FromSeconds(4),
-        DefaultRequestHeaders = { { "User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Navigateur" } },
+        DefaultRequestHeaders = { { "User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Sol" } },
     };
     private int _suggestSeq;
 

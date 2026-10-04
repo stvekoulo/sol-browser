@@ -1,13 +1,12 @@
-# Navigateur
+# Sol
 
-Un navigateur web léger pour Windows, pensé pour les développeurs, avec une interface calme qui prend les couleurs de la page visitée.
+**Sol browser** — un navigateur web léger pour Windows, pensé pour les développeurs, avec une interface calme qui prend les couleurs de la page visitée.
 
 *[English version](README.md)*
 
 ![Le navigateur affichant une page, la carte des onglets à gauche](docs/images/browser.png)
 
-> **Nom de travail.** « Navigateur » est le titre provisoire du projet ; le nom définitif reste à choisir.
-> C'est un projet personnel, partagé tel quel. La version 0.1.0 est une première version.
+> Un projet personnel, partagé tel quel. La version 0.1.0 est une première version.
 
 ## Ce qu'il fait
 
@@ -41,11 +40,11 @@ Prenez la dernière archive sur la page [Releases](../../releases/latest) :
 
 | Votre Windows | Fichier |
 |---|---|
-| 64 bits Intel ou AMD (la plupart des PC) | `Navigateur-<version>-win-x64.zip` |
-| ARM (PC Snapdragon, Surface Pro X…) | `Navigateur-<version>-win-arm64.zip` |
-| 32 bits | `Navigateur-<version>-win-x86.zip` |
+| 64 bits Intel ou AMD (la plupart des PC) | `Sol-<version>-win-x64.zip` |
+| ARM (PC Snapdragon, Surface Pro X…) | `Sol-<version>-win-arm64.zip` |
+| 32 bits | `Sol-<version>-win-x86.zip` |
 
-Décompressez-la où vous voulez et lancez `Navigateur.exe`. Il n'y a pas encore d'installateur, et rien d'autre à
+Décompressez-la où vous voulez et lancez `Sol.exe`. Il n'y a pas encore d'installateur, et rien d'autre à
 installer : seul le **WebView2 Runtime** de Microsoft Edge est requis ; il est livré avec Windows 11 et la plupart des
 Windows 10 ([à télécharger](https://developer.microsoft.com/microsoft-edge/webview2/) s'il manque). Windows 10 version 1809 ou plus récent.
 
@@ -58,10 +57,10 @@ Vous n'avez pas à nous croire sur parole. Chaque version se vérifie de deux fa
 
 ```powershell
 # 1. L'empreinte est celle publiée avec la version (SHA256SUMS.txt)
-Get-FileHash .\Navigateur-0.1.0-win-x64.zip -Algorithm SHA256
+Get-FileHash .\Sol-0.1.0-win-x64.zip -Algorithm SHA256
 
 # 2. L'archive a bien été construite par ce dépôt (GitHub CLI)
-gh attestation verify .\Navigateur-0.1.0-win-x64.zip --repo OWNER/REPO
+gh attestation verify .\Sol-0.1.0-win-x64.zip --repo stvekoulo/sol-browser
 ```
 
 ## Vie privée

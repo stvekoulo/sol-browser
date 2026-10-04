@@ -1,13 +1,12 @@
-# Navigateur
+# Sol
 
-A light, developer-minded web browser for Windows, with a calm interface that takes the colours of the page you are on.
+**Sol browser** — a light, developer-minded web browser for Windows, with a calm interface that takes the colours of the page you are on.
 
 *[Version française](README.fr.md)*
 
 ![The browser showing a page, with the tab sidebar on the left](docs/images/browser.png)
 
-> **Working name.** "Navigateur" is the project's working title; the final name is still to be chosen.
-> This is a personal project, shared as is. Version 0.1.0 is an early release.
+> A personal project, shared as is. Version 0.1.0 is an early release.
 
 ## What it does
 
@@ -41,11 +40,11 @@ Get the latest archive from the [Releases](../../releases/latest) page:
 
 | Your Windows | File |
 |---|---|
-| 64-bit Intel or AMD (most PCs) | `Navigateur-<version>-win-x64.zip` |
-| ARM (Snapdragon PCs, Surface Pro X…) | `Navigateur-<version>-win-arm64.zip` |
-| 32-bit | `Navigateur-<version>-win-x86.zip` |
+| 64-bit Intel or AMD (most PCs) | `Sol-<version>-win-x64.zip` |
+| ARM (Snapdragon PCs, Surface Pro X…) | `Sol-<version>-win-arm64.zip` |
+| 32-bit | `Sol-<version>-win-x86.zip` |
 
-Unzip it anywhere and run `Navigateur.exe`. There is no installer yet, and nothing else to install: the only
+Unzip it anywhere and run `Sol.exe`. There is no installer yet, and nothing else to install: the only
 requirement is the Microsoft Edge **WebView2 Runtime**, which ships with Windows 11 and most Windows 10 machines
 ([download](https://developer.microsoft.com/microsoft-edge/webview2/) if it is missing). Windows 10 version 1809 or later.
 
@@ -58,10 +57,10 @@ You do not have to take that on trust. Each release can be checked two ways:
 
 ```powershell
 # 1. The checksum matches the one published with the release (SHA256SUMS.txt)
-Get-FileHash .\Navigateur-0.1.0-win-x64.zip -Algorithm SHA256
+Get-FileHash .\Sol-0.1.0-win-x64.zip -Algorithm SHA256
 
 # 2. The archive was built by this repository's release workflow (GitHub CLI)
-gh attestation verify .\Navigateur-0.1.0-win-x64.zip --repo OWNER/REPO
+gh attestation verify .\Sol-0.1.0-win-x64.zip --repo stvekoulo/sol-browser
 ```
 
 ## Privacy

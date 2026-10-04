@@ -6,7 +6,7 @@ public static class AppPaths
     public static string BaseDir { get; } =
         Environment.GetEnvironmentVariable("NAVIGATEUR_DATA_DIR") is { Length: > 0 } dir
             ? dir
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "projet-navigateur");
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Sol");
 
     /// <summary>Profil de cette fenêtre, choisi au lancement par <c>--profile=nom</c>.</summary>
     public static string Profile { get; } = Profiles.FromArgs(Environment.GetCommandLineArgs());

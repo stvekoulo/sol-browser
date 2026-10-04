@@ -2,7 +2,7 @@
 # chez l'utilisateur), son archive zip, et le fichier des empreintes SHA-256 de toutes les archives.
 #   pwsh tools\publish.ps1                         x64 seulement
 #   pwsh tools\publish.ps1 -Arch x64,arm64,x86     les trois architectures de Windows
-#   pwsh tools\publish.ps1 -Out release            dossier de sortie (sinon D:\dev\navigateur-release sur le poste de dev)
+#   pwsh tools\publish.ps1 -Out release            dossier de sortie (sinon D:\dev\sol-release sur le poste de dev)
 # Seul le moteur web de Windows (WebView2 Runtime, présent d'origine sur Windows 11) reste requis sur la machine.
 param(
     [string[]]$Arch = @('x64'),
@@ -17,7 +17,7 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 # Poste de développement : outils et caches sont sur D: (voir env.ps1). Ailleurs (intégration continue), ceux du système.
 $dev = Test-Path 'D:\dev\dotnet'
 if ($dev) { . (Join-Path $PSScriptRoot 'env.ps1') }
-if (-not $Out) { $Out = if ($dev) { 'D:\dev\navigateur-release' } else { Join-Path $root 'release' } }
+if (-not $Out) { $Out = if ($dev) { 'D:\dev\sol-release' } else { Join-Path $root 'release' } }
 New-Item -ItemType Directory -Force $Out | Out-Null
 $Out = (Resolve-Path $Out).Path
 
@@ -52,15 +52,15 @@ foreach ($a in $Arch) {
         if (Test-Path $file) { [IO.File]::Delete($file) }
     }
 
-    $zip = Join-Path $Out "Navigateur-$version-win-$a.zip"
+    $zip = Join-Path $Out "Sol-$version-win-$a.zip"
     if (Test-Path $zip) { [IO.File]::Delete($zip) }
     Compress-Archive -Path (Join-Path $app '*') -DestinationPath $zip
     $size = [math]::Round(((Get-ChildItem $app -Recurse -File | Measure-Object Length -Sum).Sum) / 1MB)
-    Write-Host "Navigateur $version $a : $size Mo, archive $([math]::Round((Get-Item $zip).Length / 1MB)) Mo -> $zip"
+    Write-Host "Sol $version $a : $size Mo, archive $([math]::Round((Get-Item $zip).Length / 1MB)) Mo -> $zip"
 }
 
 # Empreintes : chacun peut vérifier que l'archive téléchargée est bien celle qui a été publiée.
 $sums = Join-Path $Out 'SHA256SUMS.txt'
-Get-ChildItem $Out -Filter "Navigateur-$version-win-*.zip" | Sort-Object Name |
+Get-ChildItem $Out -Filter "Sol-$version-win-*.zip" | Sort-Object Name |
     ForEach-Object { "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)" } | Set-Content $sums -Encoding utf8
 Write-Host "Empreintes -> $sums"

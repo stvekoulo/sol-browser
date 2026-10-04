@@ -133,7 +133,7 @@ public static class AdBlock
             File.WriteAllText(Checked, DateTime.UtcNow.ToString("O"));
 
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(60), MaxResponseContentBufferSize = MaxPackage };
-            http.DefaultRequestHeaders.Add("User-Agent", "Navigateur");
+            http.DefaultRequestHeaders.Add("User-Agent", "Sol-browser");
             using var release = JsonDocument.Parse(await http.GetStringAsync(Releases));
             var tag = release.RootElement.GetProperty("tag_name").GetString() ?? "";
             if (!Regex.IsMatch(tag, @"^\d{4}\.\d{1,4}\.\d{1,4}$") || !Version.TryParse(tag, out var latest) || latest <= current) return;

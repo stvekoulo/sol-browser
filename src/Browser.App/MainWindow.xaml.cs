@@ -38,7 +38,7 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        Title = AppPaths.Profile == Profiles.Default ? "Navigateur" : $"Navigateur — {Profiles.NameOf(AppPaths.BaseDir, AppPaths.Profile)}";
+        Title = AppPaths.Profile == Profiles.Default ? "Sol" : $"Sol — {Profiles.NameOf(AppPaths.BaseDir, AppPaths.Profile)}";
         // Pas de barre de titre système : l'interface dessine la sienne. La bordure reste, pour le redimensionnement.
         if (AppWindow.Presenter is OverlappedPresenter presenter) presenter.SetBorderAndTitleBar(true, false);
         PlaceLikePreviousWindow();
