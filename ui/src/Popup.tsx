@@ -11,7 +11,7 @@ type Content =
   | { popup: 'library'; bookmarks: Item[]; history: Item[] }
   | { popup: 'menu'; items: string[] }
   | { popup: 'downloads'; items: Download[] }
-  | { popup: 'settings'; zoom: number; theme: number; language: number; home: string; font: number; ublock: string | null; engine: number; engines: string[]; sites: { origin: string; host: string; summary: string }[]; permissions: number; tint: Setting[]; items: Setting[] }
+  | { popup: 'settings'; version: string; update: { version: string; percent: number; ready: boolean } | null; zoom: number; theme: number; language: number; home: string; font: number; ublock: string | null; engine: number; engines: string[]; sites: { origin: string; host: string; summary: string }[]; permissions: number; tint: Setting[]; items: Setting[] }
   | { popup: 'profiles'; items: Profile[] }
   | { popup: 'group-edit'; create: boolean; id: string; name: string; color: string; icon: string; presets: string[] }
   | { popup: 'shortcut-edit'; id: string; name: string; url: string }
@@ -273,10 +273,26 @@ export default function Popup() {
           )}
           <div className="setting-row static">
             <span className="setting-text">
-              <span className="row-title">{t('Autres navigateurs', 'Other browsers')}</span>
-              <span className="row-sub">{t('Importer les favoris, l’historique et les mots de passe de Chrome, Edge, Brave, Comet…', 'Import bookmarks, history and passwords from Chrome, Edge, Brave, Comet…')}</span>
+              <span className="row-title">{t('Importer d’un autre navigateur', 'Import from another browser')}</span>
+              <span className="row-sub">{t('Favoris, historique et mots de passe de Chrome, Edge, Brave, Comet… ou mots de passe d’un fichier CSV exporté.', 'Bookmarks, history and passwords from Chrome, Edge, Brave, Comet… or passwords from an exported CSV file.')}</span>
             </span>
-            <button className="pill-action" onClick={() => send({ type: 'welcome.open' })}>{t('Importer', 'Import')}</button>
+            <span className="row-actions">
+              <button className="pill-action" onClick={() => send({ type: 'welcome.open' })}>{t('Importer', 'Import')}</button>
+              <button className="pill-action" onClick={() => send({ type: 'import.csv', id: 'settings' })}>{t('Fichier CSV', 'CSV file')}</button>
+            </span>
+          </div>
+          <div className="setting-row static">
+            <span className="setting-text">
+              <span className="row-title">Sol {content.version}</span>
+              <span className="row-sub">
+                {!content.update
+                  ? t('Les mises à jour se téléchargent automatiquement.', 'Updates are downloaded automatically.')
+                  : content.update.ready
+                    ? t(`La version ${content.update.version} est prête. Redémarrez Sol pour l’installer.`, `Version ${content.update.version} is ready. Restart Sol to install it.`)
+                    : t(`Téléchargement de la version ${content.update.version} : ${content.update.percent} %`, `Downloading version ${content.update.version}: ${content.update.percent}%`)}
+              </span>
+            </span>
+            {content.update?.ready && <button className="pill-action primary" onClick={() => send({ type: 'update.restart' })}>{t('Redémarrer', 'Restart')}</button>}
           </div>
           <div className="setting-row static">
             <span className="setting-text">

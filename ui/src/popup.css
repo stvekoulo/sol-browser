@@ -441,3 +441,9 @@
 .popup-segment.grid { display: grid; grid-template-columns: repeat(3, 1fr); border-radius: 16px; }
 
 .row-actions { display: flex; flex-direction: column; gap: 6px; flex: none; }
+
+/* Mise à jour de Sol, dans l'encart en bas à droite */
+.dock-update { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; min-width: 250px; }
+.dock-update-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 4px; }
+.dock-update-bar { height: 4px; border-radius: 2px; background: var(--border-strong); overflow: hidden; }
+.dock-update-bar > span { display: block; height: 100%; border-radius: 2px; background: var(--accent); transition: width 200ms linear; }

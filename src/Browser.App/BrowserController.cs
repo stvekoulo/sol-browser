@@ -60,6 +60,12 @@ public sealed class BrowserController
         _pages.DownloadStarting += OnDownloadStarting;
         _pages.PermissionRequested += OnPermissionRequested;
         _window.AppWindow.Changed += (_, e) => { if (e.DidPresenterChange || e.DidSizeChange) Refresh(); };
+        // Mise à jour de Sol : l'encart en bas à droite et les réglages suivent le téléchargement, puis proposent de redémarrer.
+        Program.UpdateChanged += () => _window.DispatcherQueue.TryEnqueue(() =>
+        {
+            UpdateDock();
+            if (_settingsOpen) _popup.Post(SettingsJson());
+        });
         _window.Closed += (_, _) =>
         {
             SaveSession();
@@ -125,7 +131,7 @@ public sealed class BrowserController
             case "settings.text": if (id == "home") SetHomePage(c.Input!); return;
             case "dock.ready": _dock.Ready(); return;
             case "dock.size":
-                if (!_dockShown) return;
+                if (!_dockShown && (_updateDismissed || Program.Update is null)) return;
                 _dock.SetSize(c.Width!.Value, c.Height!.Value);
                 _pages.DockHeight = Math.Clamp(c.Height!.Value, 44, 420); // le lecteur flottant se pose au-dessus
                 return;
@@ -155,7 +161,14 @@ public sealed class BrowserController
                 Refresh();
                 return;
             case "import.run": _ = ImportAsync(id, c.Query!); return;
-            case "import.csv": _ = ImportCsvAsync(); return;
+            case "import.csv": _ = ImportCsvAsync(fromSettings: c.Id == "settings"); return;
+            case "update.later": _updateDismissed = true; UpdateDock(); return;
+            case "update.restart":
+                if (Program.Update is not { Ready: true }) return;
+                SaveSession();
+                JsonFileStore.Save(AppPaths.Settings, _settings);
+                Program.RestartToUpdate();
+                return;
             case "backup.export": AskBackupKey(export: true); return;
             case "backup.export.key": _ = ExportBackupAsync(c.Title!); return;
             case "backup.import": _ = PickBackupAsync(); return;
@@ -286,6 +299,7 @@ public sealed class BrowserController
     private static readonly TimeSpan DockLinger = TimeSpan.FromSeconds(6);
     private readonly Dictionary<string, DateTime> _finishedAt = new();
     private bool _dockShown;
+    private bool _updateDismissed; // « Plus tard » : l'encart ne reparle plus de la mise à jour, les réglages si
 
     private void UpdateDock()
     {
@@ -295,7 +309,14 @@ public sealed class BrowserController
             : [];
         var changed = _dockShown != shown.Count > 0;
         _dockShown = shown.Count > 0;
-        if (_dockShown) _dock.Post(DownloadsJson(shown)); // l'encart répond par sa taille, ce qui l'affiche
+        // Mise à jour de Sol en téléchargement ou prête : l'encart l'annonce, jusqu'à « Plus tard ».
+        var update = _updateDismissed ? null : Program.Update;
+        if (_dockShown || update is not null)
+        {
+            var content = System.Text.Json.Nodes.JsonNode.Parse(DownloadsJson(shown))!;
+            content["update"] = update is null ? null : JsonSerializer.SerializeToNode(new { version = update.Version, percent = update.Percent, ready = update.Ready });
+            _dock.Post(content.ToJsonString()); // l'encart répond par sa taille, ce qui l'affiche
+        }
         else
         {
             _dock.Hide();
@@ -387,6 +408,8 @@ public sealed class BrowserController
     private string SettingsJson() => JsonSerializer.Serialize(new
     {
         popup = "settings",
+        version = typeof(App).Assembly.GetName().Version?.ToString(3) ?? "",
+        update = Program.Update is { } update ? new { version = update.Version, percent = update.Percent, ready = update.Ready } : null,
         zoom = _tabs.ActiveId is { } activeId ? (int)Math.Round(_pages.ZoomOf(activeId) * 100) : 100,
         theme = Math.Max(0, Array.IndexOf(Themes, _settings.Theme)),
         language = Math.Max(0, Array.IndexOf(Languages, _settings.Language)),
@@ -684,12 +707,21 @@ public sealed class BrowserController
 
     private void Close(string id)
     {
-        // Fermer un onglet épinglé ferme sa page, pas son emplacement : il reste dans les raccourcis, d'où il se rouvre.
-        if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { Pinned: true } pinned && !_shortcutTabs.ContainsValue(id)
-            && IsWebAddress(pinned.Url) && _settings.Shortcuts.All(s => s.Url != pinned.Url))
+        // Fermer un onglet épinglé ferme sa page, pas son emplacement : il reste à sa place parmi les épinglés, déchargé,
+        // et se recharge quand on y revient. « Détacher l'onglet » puis fermer le retire pour de bon.
+        if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { Pinned: true } pinned && !_shortcutTabs.ContainsValue(id))
         {
-            _settings.Shortcuts.Add(new SiteShortcut { Url = pinned.Url, Name = pinned.Title is { Length: > 0 } title && title != pinned.Url ? title : SiteShortcut.NameOf(pinned.Url), Icon = _favicons.GetValueOrDefault(id) });
-            JsonFileStore.Save(AppPaths.Settings, _settings);
+            if (_tabs.ActiveId == id)
+            {
+                if (_tabs.Tabs.FirstOrDefault(t => !t.Pinned) is { } next) Activate(next.Id);
+                else Open(_settings.HomePage);
+            }
+            _pages.Remove(id);
+            _pages.AddAsleep(pinned);
+            _restored.Add(id); // son rechargement ne sera pas une nouvelle visite
+            _split.OnTabClosed(id);
+            _network.Forget(id);
+            return;
         }
         if (!_tabs.Close(id)) return;
         _pages.Remove(id);
@@ -1076,8 +1108,9 @@ public sealed class BrowserController
     }
 
     // Mots de passe exportés en CSV par un autre navigateur : pour ceux qu'il garde pour lui seul sur le disque.
-    private async Task ImportCsvAsync()
+    private async Task ImportCsvAsync(bool fromSettings)
     {
+        if (fromSettings) HidePopup();
         if (AppPaths.Private || await PickFileAsync("CSV", ".csv") is not { } file) return;
         IReadOnlyList<ImportedLogin> logins = [];
         try
@@ -1087,6 +1120,11 @@ public sealed class BrowserController
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { logins = []; }
         _welcome.Post(JsonSerializer.Serialize(new { welcome = "csv", passwords = logins.Count }));
+        // Depuis les réglages, l'accueil n'est pas à l'écran : le résultat s'affiche dans une fenêtre de message.
+        if (fromSettings)
+            Notice(T("Mots de passe", "Passwords"), logins.Count > 0
+                ? T($"{logins.Count} mot{(logins.Count > 1 ? "s" : "")} de passe importé{(logins.Count > 1 ? "s" : "")}. Ils seront disponibles au prochain démarrage de Sol.", $"{logins.Count} password{(logins.Count == 1 ? "" : "s")} imported. They will be available the next time Sol starts.")
+                : T("Aucun mot de passe trouvé dans ce fichier.", "No password found in this file."));
     }
 
     // Sauvegarde du profil dans un fichier chiffré par une clé que l'utilisateur choisit et garde : Sol ne la retient pas.

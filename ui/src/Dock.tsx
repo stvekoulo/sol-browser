@@ -4,24 +4,54 @@ import { DownloadCard, percent, type Download } from './Downloads';
 import { t, useLang } from './i18n';
 import { Icon } from './Icons';
 
-// Encart en bas à droite de la fenêtre : téléchargements en cours. L'hôte envoie la liste ; l'encart annonce sa taille.
+type Update = { version: string; percent: number; ready: boolean };
+
+// Encart en bas à droite de la fenêtre : téléchargements en cours, et mise à jour de Sol. L'hôte envoie la liste ; l'encart annonce sa taille.
 export default function Dock() {
   const [items, setItems] = useState<Download[]>([]);
+  const [update, setUpdate] = useState<Update | null>(null);
   const [minimized, setMinimized] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   useLang();
 
   useEffect(() => {
-    const off = onMessage(data => setItems((data as { items?: Download[] }).items ?? []));
+    const off = onMessage(data => {
+      const content = data as { items?: Download[]; update?: Update | null };
+      if (content.items === undefined && content.update === undefined) return; // thème, langue…
+      setItems(content.items ?? []);
+      setUpdate(content.update ?? null);
+    });
     send({ type: 'dock.ready' }); // créé au premier téléchargement : il demande ce qu'il doit afficher
     return off;
   }, []);
 
   useLayoutEffect(() => {
-    if (items.length > 0 && root.current) send({ type: 'dock.size', width: root.current.offsetWidth, height: root.current.offsetHeight });
-  }, [items, minimized]);
+    if ((items.length > 0 || update) && root.current) send({ type: 'dock.size', width: root.current.offsetWidth, height: root.current.offsetHeight });
+  }, [items, minimized, update]);
 
-  if (items.length === 0) return null;
+  if (items.length === 0 && !update) return null;
+
+  // Mise à jour de Sol : téléchargement en cours, puis proposition de redémarrer.
+  const updateCard = update && (
+    <div className="dock-update">
+      <span className="row-title">{update.ready ? t(`Sol ${update.version} est prêt`, `Sol ${update.version} is ready`) : t(`Téléchargement de Sol ${update.version}`, `Downloading Sol ${update.version}`)}</span>
+      {update.ready ? (
+        <>
+          <span className="row-sub">{t('Redémarrez Sol pour installer la mise à jour. Vos onglets seront rouverts.', 'Restart Sol to install the update. Your tabs will reopen.')}</span>
+          <div className="dock-update-actions">
+            <button className="pill-action" onClick={() => send({ type: 'update.later' })}>{t('Plus tard', 'Later')}</button>
+            <button className="pill-action primary" onClick={() => send({ type: 'update.restart' })}>{t('Redémarrer', 'Restart')}</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <span className="row-sub">{update.percent} %</span>
+          <span className="dock-update-bar"><span style={{ width: `${update.percent}%` }} /></span>
+        </>
+      )}
+    </div>
+  );
+  if (items.length === 0) return <div ref={root} className="dock">{updateCard}</div>;
   const active = items.filter(d => d.state === 'InProgress');
 
   if (minimized) {
@@ -40,6 +70,7 @@ export default function Dock() {
 
   return (
     <div ref={root} className="dock">
+      {updateCard}
       <div className="popup-header">
         <span className="popup-header-title">{active.length > 0 ? t(`Téléchargement${active.length > 1 ? 's' : ''} en cours`, `Download${active.length > 1 ? 's' : ''} in progress`) : t('Téléchargement terminé', 'Download complete')}</span>
         <button className="dock-minimize" aria-label={t('Réduire', 'Minimize')} title={t('Réduire', 'Minimize')} onClick={() => setMinimized(true)}>
