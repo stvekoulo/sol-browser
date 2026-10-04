@@ -63,6 +63,51 @@ public class RemainingShellTests : IDisposable
     }
 
     [Fact]
+    public void An_interrupted_cleanup_of_a_temporary_profile_is_resumed()
+    {
+        var id = Profiles.CreateTemporary(_dir, "Navigation privée");
+        var dir = Profiles.DataDir(_dir, id);
+        Directory.CreateDirectory(Path.Combine(dir, "webview2"));
+        var held = Path.Combine(dir, "webview2", "Cookies");
+        using (new FileStream(held, FileMode.Create, FileAccess.ReadWrite, FileShare.None)) // tenu par le moteur
+        {
+            Profiles.DeleteClosedTemporary(_dir, _ => false);
+            Assert.True(Profiles.IsTemporary(_dir, id)); // toujours reconnu : sera repris
+        }
+        Profiles.DeleteClosedTemporary(_dir, _ => false);
+        Assert.False(Directory.Exists(dir));
+
+        // Reste d'un ancien effacement interrompu : plus de marque ni de nom, mais un identifiant de profil jetable.
+        var orphan = Path.Combine(_dir, "profiles", "temp-0a1b2c3d", "webview2");
+        Directory.CreateDirectory(orphan);
+        Profiles.DeleteClosedTemporary(_dir, _ => false);
+        Assert.False(Directory.Exists(Path.GetDirectoryName(orphan)));
+    }
+
+    [Theory]
+    [InlineData("SFPRODISPLAYREGULAR.OTF", 400, false)]
+    [InlineData("SFPRODISPLAYMEDIUM.OTF", 500, false)]
+    [InlineData("SFPRODISPLAYBOLD.OTF", 700, false)]
+    [InlineData("SFPRODISPLAYSEMIBOLDITALIC.OTF", 600, true)]
+    [InlineData("SFPRODISPLAYULTRALIGHTITALIC.OTF", 200, true)]
+    [InlineData("SFPRODISPLAYHEAVYITALIC.OTF", 800, true)]
+    [InlineData("Inter-ExtraBold.woff2", 800, false)]
+    [InlineData("MaPolice.ttf", 400, false)]
+    public void A_font_file_name_gives_its_weight_and_style(string file, int weight, bool italic) =>
+        Assert.Equal(new FontFace(file, weight, italic), FontFiles.Describe(file));
+
+    [Fact]
+    public void Only_font_files_with_plain_names_are_listed()
+    {
+        var fonts = Path.Combine(_dir, "fonts");
+        Directory.CreateDirectory(fonts);
+        foreach (var name in new[] { "Belle-Regular.otf", "Belle-Bold.ttf", "lisez-moi.txt", "script.js", "Belle'Italic\".otf".Replace("\"", "") })
+            File.WriteAllText(Path.Combine(fonts, name), "");
+        Assert.Equal(["Belle-Bold.ttf", "Belle-Regular.otf"], FontFiles.In(fonts).Select(f => f.File));
+        Assert.Empty(FontFiles.In(Path.Combine(_dir, "absent")));
+    }
+
+    [Fact]
     public void Forget_removes_one_site_and_leaves_the_others()
     {
         var file = Path.Combine(_dir, "permissions.json");

@@ -57,7 +57,17 @@ public sealed class BrowserController
         _pages.DownloadStarting += OnDownloadStarting;
         _pages.PermissionRequested += OnPermissionRequested;
         _window.AppWindow.Changed += (_, e) => { if (e.DidPresenterChange || e.DidSizeChange) Refresh(); };
-        _window.Closed += (_, _) => { SaveSession(); _db.Dispose(); };
+        _window.Closed += (_, _) =>
+        {
+            SaveSession();
+            _db.Dispose();
+            // Fenêtre privée : ses données sont effacées dès maintenant, par un processus qui attend la fin de celui-ci.
+            if (AppPaths.Private && Environment.ProcessPath is { } exe)
+            {
+                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe, $"--cleanup={AppPaths.Profile}") { UseShellExecute = false, CreateNoWindow = true }); }
+                catch (System.ComponentModel.Win32Exception) { /* elles seront effacées au prochain démarrage */ }
+            }
+        };
         ApplyComparison();
         Profiles.DeleteClosedTemporary(AppPaths.BaseDir, IsProfileOpen); // sessions isolées dont la fenêtre est fermée
     }
@@ -104,6 +114,7 @@ public sealed class BrowserController
             case "settings.set":
                 if (id == "theme") SetTheme(c.Index!.Value);
                 else if (id == "language") SetLanguage(c.Index!.Value);
+                else if (id == "font") SetFont(c.Index!.Value);
                 else if (id == "engine") SetEngine(c.Index!.Value);
                 else SetSetting(id, c.Index != 0);
                 return;
@@ -125,6 +136,12 @@ public sealed class BrowserController
                 if (_network.Shown is { } inspected && _pages.CoreOf(inspected) is { } inspectedCore) _ = _network.PostDetailAsync(inspected, inspectedCore, id);
                 return;
             // Réglages d'uBlock Origin Lite (listes de filtres, sites sans filtrage) : sa propre page, dans un onglet.
+            // Dossier où déposer ses propres polices : ouvert dans l'explorateur de fichiers.
+            case "fonts.open":
+                Directory.CreateDirectory(AppPaths.Fonts);
+                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{AppPaths.Fonts}\"")); }
+                catch (System.ComponentModel.Win32Exception) { }
+                return;
             case "blocker.options": if (AdBlock.ExtensionId is { } extension) Open($"chrome-extension://{extension}/dashboard.html"); break;
             case "device.compare": SetComparison(id, c.Query!); return;
             case "device.rotate": _pages.RotateDevice(id); return;
@@ -352,6 +369,8 @@ public sealed class BrowserController
         theme = Math.Max(0, Array.IndexOf(Themes, _settings.Theme)),
         language = Math.Max(0, Array.IndexOf(Languages, _settings.Language)),
         home = _settings.HomePage,
+        font = Math.Max(0, Array.IndexOf(Fonts, _settings.Font)),
+        customFonts = UiBridge.Faces.Count, // fichiers de police déposés par l'utilisateur
         ublock = AdBlock.ExtensionId is null ? null : AdBlock.ExtensionVersion, // version installée ; null : extension absente
         engine = Math.Max(0, Array.FindIndex(Engines, e => e.Search == _settings.SearchUrlTemplate)),
         engines = Engines.Select(e => e.Name),
@@ -449,6 +468,18 @@ public sealed class BrowserController
         var asleep = _pages.AsleepCount;
         return T($"Met en veille les onglets inactifs, puis les décharge après 30 minutes. Utilisé : {megabytes} Mo, {asleep} onglet{(asleep > 1 ? "s" : "")} déchargé{(asleep > 1 ? "s" : "")}.",
             $"Suspends inactive tabs, then unloads them after 30 minutes. In use: {megabytes} MB, {asleep} tab{(asleep == 1 ? "" : "s")} unloaded.");
+    }
+
+    private static readonly string[] Fonts = ["default", "system", "inter", "custom"];
+
+    private void SetFont(int index)
+    {
+        if (index < 0 || index >= Fonts.Length) return;
+        UiBridge.RescanFonts(); // l'utilisateur vient peut-être de déposer ses fichiers
+        _settings.Font = Fonts[index];
+        JsonFileStore.Save(AppPaths.Settings, _settings);
+        _bridge.BroadcastTheme(); // la police voyage avec le thème : toutes les vues la reçoivent
+        if (_settingsOpen) _popup.Post(SettingsJson());
     }
 
     private static readonly string[] Languages = ["system", "fr", "en"];
@@ -988,12 +1019,7 @@ public sealed class BrowserController
         if (_profilesOpen) _popup.Post(ProfilesJson());
     }
 
-    private static bool IsProfileOpen(string id)
-    {
-        if (!Mutex.TryOpenExisting($"Navigateur.Profil.{id}", out var held)) return false;
-        held.Dispose();
-        return true;
-    }
+    private static bool IsProfileOpen(string id) => App.IsProfileOpen(id);
 
     // Changer de profil : une fenêtre du nouveau profil prend la place de celle-ci, au même endroit.
     // (Les données d'un profil sont fixées au démarrage du moteur : on ne peut pas en changer en cours de route.)
@@ -1276,7 +1302,7 @@ public sealed class BrowserController
             groups = _tabs.Groups.Select(g => new { id = g.Id, name = g.Name, color = g.Color, icon = g.Icon, collapsed = g.Collapsed }),
             activeId = _tabs.ActiveId,
             privateMode = AppPaths.Private, // fenêtre de navigation privée
-            shield = _settings.BlockAds && AdBlock.ExtensionId is not null && !AppPaths.Private, // blocage des publicités et des traqueurs en service
+            shield = _settings.BlockAds && AdBlock.ExtensionId is not null, // blocage des publicités et des traqueurs en service
             shortcuts = _settings.Shortcuts.Select(s => new { url = s.Url, name = s.Name, icon = s.Icon, tabId = _shortcutTabs.GetValueOrDefault(s) }),
             profile = ProfileName(AppPaths.Profile),
             split = new { primaryId = _split.PrimaryId, secondaryId = _split.SecondaryId, ratio = _split.Ratio, visible = showSplit },

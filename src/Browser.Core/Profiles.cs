@@ -85,15 +85,34 @@ public static partial class Profiles
         return id;
     }
 
-    public static bool IsTemporary(string baseDir, string id) =>
-        id != Default && IsValid(id) && File.Exists(Path.Combine(DataDir(baseDir, id), TemporaryFile));
+    [GeneratedRegex("^temp-[0-9a-f]{8}$")]
+    private static partial Regex TemporaryId();
+
+    /// <summary>
+    /// Profil jetable : celui qui porte la marque, ou le reste d'un profil jetable dont l'effacement a été interrompu
+    /// (identifiant de profil jetable, plus de nom).
+    /// </summary>
+    public static bool IsTemporary(string baseDir, string id)
+    {
+        if (id == Default || !IsValid(id)) return false;
+        var dir = DataDir(baseDir, id);
+        return File.Exists(Path.Combine(dir, TemporaryFile)) || (TemporaryId().IsMatch(id) && Directory.Exists(dir) && !File.Exists(Path.Combine(dir, NameFile)));
+    }
 
     /// <summary>Supprime les profils jetables dont la fenêtre est fermée. Un dossier encore tenu sera repris la prochaine fois.</summary>
     public static void DeleteClosedTemporary(string baseDir, Func<string, bool> isOpen)
     {
         foreach (var id in List(baseDir).Where(id => IsTemporary(baseDir, id) && !isOpen(id)))
         {
-            try { Delete(baseDir, id); }
+            // La marque part en dernier : si un fichier est encore tenu par le moteur qui s'arrête, le profil reste
+            // reconnu comme jetable et son effacement est repris.
+            var dir = DataDir(baseDir, id);
+            try
+            {
+                foreach (var folder in Directory.GetDirectories(dir)) Directory.Delete(folder, recursive: true);
+                foreach (var file in Directory.GetFiles(dir).Where(f => Path.GetFileName(f) != TemporaryFile)) File.Delete(file);
+                Directory.Delete(dir, recursive: true);
+            }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         }
     }

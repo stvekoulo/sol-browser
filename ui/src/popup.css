@@ -432,3 +432,6 @@
 .home-row input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 .setting-row:disabled { opacity: 0.45; }
+
+.font-note { white-space: normal; line-height: 1.35; }
+.link-action { color: var(--accent); font: inherit; text-decoration: underline; text-underline-offset: 2px; }

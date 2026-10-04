@@ -30,6 +30,11 @@ public sealed class Settings
     public string HomePage { get; set; } = DefaultHomePage;
     /// <summary>Langue de l'interface : "system" (celle de Windows), "fr" ou "en".</summary>
     public string Language { get; set; } = "system";
+    /// <summary>
+    /// Police de l'interface : "default" (celle d'origine), "system" (celle de Windows), "inter" (livrée avec le
+    /// navigateur) ou "custom" (les fichiers déposés par l'utilisateur dans le dossier « fonts »).
+    /// </summary>
+    public string Font { get; set; } = "default";
     /// <summary>Bloque les requêtes vers les domaines connus de publicité et de pistage.</summary>
     public bool BlockAds { get; set; } = true;
     /// <summary>Met en veille les onglets inactifs, puis les décharge de la mémoire s'ils le restent longtemps.</summary>

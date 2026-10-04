@@ -8,10 +8,13 @@ public static class AppPaths
             ? dir
             : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "projet-navigateur");
 
+    /// <summary>Polices déposées par l'utilisateur (communes aux profils) : proposées comme police de l'interface.</summary>
+    public static string Fonts => Path.Combine(BaseDir, "fonts");
+
     /// <summary>Profil de cette fenêtre, choisi au lancement par <c>--profile=nom</c>.</summary>
     public static string Profile { get; } = Profiles.FromArgs(Environment.GetCommandLineArgs());
 
-    /// <summary>Fenêtre de navigation privée (<c>--private</c>) : rien de ce qui est visité n'est écrit sur le disque.</summary>
+    /// <summary>Fenêtre de navigation privée (<c>--private</c>) : ni historique ni session, et ses données sont effacées à sa fermeture.</summary>
     public static bool Private { get; } = Environment.GetCommandLineArgs().Contains("--private");
 
     /// <summary>Données du profil : rien n'est partagé entre deux profils.</summary>

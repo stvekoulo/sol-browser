@@ -32,16 +32,9 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
 
     public void AddAsleep(Tab tab) => _asleep[tab.Id] = tab;
 
-    // Fenêtre privée : le moteur ne garde rien sur le disque (cookies, cache, historique). Il n'y charge pas les
-    // extensions : les publicités n'y sont donc pas bloquées.
-    private static async Task StartEngineAsync(WebView2 view)
-    {
-        var environment = await AdBlock.EnvironmentAsync();
-        if (!AppPaths.Private) { await view.EnsureCoreWebView2Async(environment); return; }
-        var options = environment.CreateCoreWebView2ControllerOptions();
-        options.IsInPrivateModeEnabled = true;
-        await view.EnsureCoreWebView2Async(environment, options);
-    }
+    // Toutes les vues partagent le même moteur. Une fenêtre privée aussi : elle a son propre dossier de données, effacé
+    // à sa fermeture, ce qui laisse le bloqueur de publicités y fonctionner (le mode privé du moteur l'en empêcherait).
+    private static async Task StartEngineAsync(WebView2 view) => await view.EnsureCoreWebView2Async(await AdBlock.EnvironmentAsync());
 
     public async void Add(Tab tab)
     {
@@ -141,7 +134,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
 
     private async Task ApplySettingsAsync(string id, CoreWebView2 core)
     {
-        core.Settings.IsPasswordAutosaveEnabled = settings.SavePasswords;
+        core.Settings.IsPasswordAutosaveEnabled = settings.SavePasswords && !AppPaths.Private;
         // Thème clair ou sombre imposé : les sites qui proposent les deux versions suivent le même choix.
         core.Profile.PreferredColorScheme = settings.Theme switch
         {
@@ -193,7 +186,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         s.AreHostObjectsAllowed = false;
         s.IsWebMessageEnabled = false;
         // Mots de passe : gestionnaire du moteur (proposition d'enregistrement, stockage chiffré, remplissage).
-        s.IsPasswordAutosaveEnabled = settings.SavePasswords;
+        s.IsPasswordAutosaveEnabled = settings.SavePasswords && !AppPaths.Private; // rien à retenir d'une fenêtre privée
         s.IsSwipeNavigationEnabled = true;
         s.IsZoomControlEnabled = false; // le zoom est géré par le navigateur (Ctrl +, Ctrl -, Ctrl molette), pas par le moteur // balayage horizontal : page précédente ou suivante
         s.IsGeneralAutofillEnabled = false;

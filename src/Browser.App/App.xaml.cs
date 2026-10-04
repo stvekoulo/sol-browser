@@ -21,6 +21,23 @@ public partial class App : Application
             [WebArgsVariable] = Environment.GetEnvironmentVariable(WebArgsVariable),
         };
 
+        // Lancé par une fenêtre privée qui se ferme (« --cleanup=profil ») : attend que cette fenêtre et son moteur aient
+        // rendu les fichiers, efface ses données, puis s'arrête sans rien afficher.
+        const string cleanup = "--cleanup=";
+        if (Environment.GetCommandLineArgs().FirstOrDefault(a => a.StartsWith(cleanup, StringComparison.Ordinal))?[cleanup.Length..] is { } closing)
+        {
+            if (Profiles.IsValid(closing))
+            {
+                var dir = Profiles.DataDir(AppPaths.BaseDir, closing);
+                for (var attempt = 0; attempt < 120 && Directory.Exists(dir); attempt++)
+                {
+                    if (!IsProfileOpen(closing)) Profiles.DeleteClosedTemporary(AppPaths.BaseDir, IsProfileOpen);
+                    if (Directory.Exists(dir)) Thread.Sleep(500);
+                }
+            }
+            Environment.Exit(0);
+        }
+
         // Une seule fenêtre par profil : deux fenêtres sur les mêmes fichiers se marcheraient dessus.
         s_profileLock = new Mutex(initiallyOwned: true, $"Navigateur.Profil.{AppPaths.Profile}", out var first);
         if (!first) Environment.Exit(0);
@@ -41,6 +58,13 @@ public partial class App : Application
         Environment.SetEnvironmentVariable(WebArgsVariable, $"{LaunchEnvironment[WebArgsVariable]} {features} --lang={Language.Current}".Trim());
 
         InitializeComponent();
+    }
+
+    public static bool IsProfileOpen(string id)
+    {
+        if (!Mutex.TryOpenExisting($"Navigateur.Profil.{id}", out var held)) return false;
+        held.Dispose();
+        return true;
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)

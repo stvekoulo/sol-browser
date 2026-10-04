@@ -136,3 +136,9 @@
     0 5px 14px rgba(0, 0, 0, 0.38),
     0 0 0 0.5px rgba(255, 255, 255, 0.09);
 }
+
+/* Police de l'interface, au choix de l'utilisateur. Sans choix : la pile d'origine, ci-dessus. */
+:root[data-font="system"] { --font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+:root[data-font="inter"] { --font: "Inter Variable", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+/* « Police perso » : les fichiers déposés par l'utilisateur (voir bridge.ts), ou SF Pro si elle est installée sur l'ordinateur. */
+:root[data-font="custom"] { --font: "Police perso", "SF Pro Display", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }

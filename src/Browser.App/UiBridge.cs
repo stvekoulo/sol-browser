@@ -86,6 +86,11 @@ public sealed class UiBridge(WebView2 view, string page = "index.html", WebView2
         })()
         """;
 
+    // Polices déposées par l'utilisateur, servies aux vues d'interface (et à elles seules) sous leur propre adresse.
+    private const string FontsHost = "fonts.navigateur", FontsOrigin = "https://fonts.navigateur/";
+    public static IReadOnlyList<FontFace> Faces { get; private set; } = FontFiles.In(AppPaths.Fonts);
+    public static void RescanFonts() => Faces = FontFiles.In(AppPaths.Fonts);
+
     private static string? s_lastThemeMsg;
     private static (string Bg, bool Dark, string? Accent)? s_lastProbe;
 
@@ -114,6 +119,7 @@ public sealed class UiBridge(WebView2 view, string page = "index.html", WebView2
         s_lastThemeMsg = JsonSerializer.Serialize(new
         {
             @event = "theme", bg, dark, accent, mode = on?.Theme ?? "page", systemDark = IsSystemDark(), lang = Language.Current,
+            font = on?.Font ?? "default", faces = Faces.Select(f => new { url = FontsOrigin + Uri.EscapeDataString(f.File), weight = f.Weight, italic = f.Italic }),
             tint = new { topbar = on?.TintTopbar ?? true, sidebar = on?.TintSidebar ?? true, menus = on?.TintMenus ?? true, background = on?.TintBackground ?? true },
         });
         view.CoreWebView2?.PostWebMessageAsJson(s_lastThemeMsg);
@@ -146,6 +152,8 @@ public sealed class UiBridge(WebView2 view, string page = "index.html", WebView2
         await target.EnsureCoreWebView2Async(await AdBlock.EnvironmentAsync());
         var core = target.CoreWebView2;
         core.SetVirtualHostNameToFolderMapping("ui.navigateur", uiFolder, CoreWebView2HostResourceAccessKind.Deny);
+        Directory.CreateDirectory(AppPaths.Fonts);
+        core.SetVirtualHostNameToFolderMapping(FontsHost, AppPaths.Fonts, CoreWebView2HostResourceAccessKind.Allow); // une police se charge d'une origine à l'autre
         core.Settings.AreDefaultContextMenusEnabled = false;
         core.Settings.IsStatusBarEnabled = false;
         core.Settings.IsZoomControlEnabled = false;

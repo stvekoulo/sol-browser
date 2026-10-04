@@ -69,6 +69,8 @@ export type HostEvent = {
   dark?: boolean;
   accent?: string | null;
   mode?: 'page' | 'light' | 'dark' | 'system';
+  font?: string; // police de l'interface : default, system, inter, custom
+  faces?: { url: string; weight: number; italic: boolean }[]; // polices déposées par l'utilisateur
   lang?: string; // langue de l'interface, choisie par l'hôte
   systemDark?: boolean; // thème de Windows, lu par l'hôte
   tint?: { topbar: boolean; sidebar: boolean; menus: boolean; background: boolean };
@@ -77,8 +79,21 @@ export type HostEvent = {
 // Fonds neutres des thèmes imposés. En thème par défaut, le fond de l'interface est celui de la page.
 const NEUTRAL = { light: 'rgb(243, 243, 246)', dark: 'rgb(30, 30, 33)' };
 
+// Polices déposées par l'utilisateur : déclarées une fois sous un seul nom de famille, chargées par le moteur à l'usage.
+const declared = new Set<string>();
+
+function declareFonts(faces: NonNullable<HostEvent['faces']>) {
+  for (const face of faces) {
+    if (declared.has(face.url)) continue;
+    declared.add(face.url);
+    document.fonts.add(new FontFace('Police perso', `url("${face.url}")`, { weight: String(face.weight), style: face.italic ? 'italic' : 'normal' }));
+  }
+}
+
 function applyTheme(ev: HostEvent) {
   const root = document.documentElement.style;
+  declareFonts(ev.faces ?? []);
+  document.documentElement.dataset.font = ev.font ?? 'default';
   const mode = ev.mode ?? 'page';
   const dark = mode === 'page' ? !!ev.dark : mode === 'system' ? !!ev.systemDark : mode === 'dark';
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';

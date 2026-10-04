@@ -11,7 +11,7 @@ type Content =
   | { popup: 'library'; bookmarks: Item[]; history: Item[] }
   | { popup: 'menu'; items: string[] }
   | { popup: 'downloads'; items: Download[] }
-  | { popup: 'settings'; zoom: number; theme: number; language: number; home: string; ublock: string | null; engine: number; engines: string[]; sites: { origin: string; host: string; summary: string }[]; permissions: number; tint: Setting[]; items: Setting[] }
+  | { popup: 'settings'; zoom: number; theme: number; language: number; home: string; font: number; customFonts: number; ublock: string | null; engine: number; engines: string[]; sites: { origin: string; host: string; summary: string }[]; permissions: number; tint: Setting[]; items: Setting[] }
   | { popup: 'profiles'; items: Profile[] }
   | { popup: 'group-edit'; create: boolean; id: string; name: string; color: string; icon: string; presets: string[] }
   | { popup: 'shortcut-edit'; id: string; name: string; url: string }
@@ -210,6 +210,28 @@ export default function Popup() {
               </button>
             ))}
           </div>
+        </div>
+        <div className="theme-row">
+          <span className="row-title">{t('Police', 'Font')}</span>
+          <div className="popup-segment" role="radiogroup" aria-label={t('Police', 'Font')}>
+            {[t('Défaut', 'Default'), t('Système', 'System'), 'Inter', t('Perso', 'Custom')].map((label, index) => (
+              <button
+                key={label}
+                role="radio"
+                aria-checked={content.font === index}
+                className={`popup-seg-btn${content.font === index ? ' active' : ''}`}
+                onClick={() => send({ type: 'settings.set', id: 'font', index })}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <span className="row-sub font-note">
+            {content.customFonts > 0
+              ? t(`Perso : ${content.customFonts} fichier${content.customFonts > 1 ? 's' : ''} de police dans votre dossier.`, `Custom: ${content.customFonts} font file${content.customFonts > 1 ? 's' : ''} in your folder.`)
+              : t('Perso : déposez vos fichiers de police (SF Pro, par exemple) dans votre dossier.', 'Custom: drop your font files (SF Pro, for example) into your folder.')}{' '}
+            <button className="link-action" onClick={() => send({ type: 'fonts.open' })}>{t('Ouvrir le dossier', 'Open the folder')}</button>
+          </span>
         </div>
         <div className="theme-row">
           <span className="row-title">{t('Moteur de recherche', 'Search engine')}</span>
@@ -472,7 +494,7 @@ function ProfileList({ rootRef, items }: { rootRef: RefObject<HTMLDivElement | n
         </span>
         <span className="row-title">{t('Nouveau profil', 'New profile')}</span>
       </button>
-      <button className="row" title={t('Ni historique, ni cookies, ni connexions gardés : rien de ce qui est visité n’est écrit sur le disque. Sans les connexions des autres profils.', 'No history, cookies or sign-ins kept: nothing you visit is written to disk. Without the other profiles’ sign-ins.')} onClick={() => send({ type: 'window.private' })}>
+      <button className="row" title={t('Ni historique ni session ; cookies, cache et connexions sont effacés à la fermeture de la fenêtre. Sans les connexions des autres profils.', 'No history or session; cookies, cache and sign-ins are erased when the window closes. Without the other profiles’ sign-ins.')} onClick={() => send({ type: 'window.private' })}>
         <span className="row-badge" aria-hidden>
           <Icon d="M8 1.8L3 3.9v4.2c0 3.2 2.1 5.6 5 6.4 2.9-.8 5-3.2 5-6.4V3.9L8 1.8z" size={13} />
         </span>

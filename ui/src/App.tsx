@@ -155,7 +155,7 @@ export default function App() {
           <Icon d="M3 4h10M3 8h10M3 12h10" />
         </button>
         {state.privateMode && (
-          <span className="private-chip" title={t('Rien de ce que vous visitez ici n’est gardé à la fermeture de la fenêtre.', 'Nothing you visit here is kept once the window is closed.')}>
+          <span className="private-chip" title={t('Rien de ce que vous visitez ici n’est gardé : tout est effacé à la fermeture de la fenêtre.', 'Nothing you visit here is kept: everything is erased when the window closes.')}>
             {t('Privé', 'Private')}
           </span>
         )}
@@ -224,7 +224,7 @@ function AddressPill({ tab, focused, grow, shield }: { tab: Tab | undefined; foc
     <div ref={pillRef} className={`address-pill${focused ? ' focused' : ''}${editing ? ' editing' : ''}`} style={{ flexGrow: grow }}>
       <span
         className={`address-lead${shield ? '' : ' unshielded'}`}
-        title={shield ? t('Publicités et traqueurs bloqués', 'Ads and trackers blocked') : t('Publicités non bloquées (réglage coupé, ou fenêtre privée)', 'Ads are not blocked (setting off, or private window)')}
+        title={shield ? t('Publicités et traqueurs bloqués', 'Ads and trackers blocked') : t('Publicités non bloquées (réglage coupé dans Réglages)', 'Ads are not blocked (turned off in Settings)')}
       >
         {tab?.loading ? <span className="spinner" /> : <ShieldIcon />}
       </span>

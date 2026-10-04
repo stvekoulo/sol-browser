@@ -4,6 +4,7 @@ import Dock from './Dock';
 import Panel from './Panel';
 import Popup from './Popup';
 import Sidebar from './Sidebar';
+import '@fontsource-variable/inter'; // police Inter, livrée avec le navigateur (chargée seulement si elle est choisie)
 import './theme.css';
 import './app.css';
 import './sidebar.css';
