@@ -38,7 +38,7 @@
 
 ## Download
 
-Get the latest archive from the [Releases](../../releases/latest) page:
+Get the latest archive from the [Releases](https://gitlab.com/stevencrdkoulo/sol-browser/-/releases) page:
 
 | Your Windows | File |
 |---|---|
@@ -57,14 +57,11 @@ requirement is the Microsoft Edge **WebView2 Runtime**, which ships with Windows
 The archives are **not code-signed**: a signing certificate costs money this project does not have. Windows
 SmartScreen will therefore warn you the first time; choose *More info* → *Run anyway*.
 
-You do not have to take that on trust. Each release can be checked two ways:
+You do not have to take that on trust. Each release can be checked against its published checksum:
 
 ```powershell
-# 1. The checksum matches the one published with the release (SHA256SUMS.txt)
+# The checksum matches the one published with the release (SHA256SUMS.txt)
 Get-FileHash .\Sol-0.1.0-win-x64.zip -Algorithm SHA256
-
-# 2. The archive was built by this repository's release workflow (GitHub CLI)
-gh attestation verify .\Sol-0.1.0-win-x64.zip --repo stvekoulo/sol-browser
 ```
 
 ## Privacy
@@ -72,7 +69,7 @@ gh attestation verify .\Sol-0.1.0-win-x64.zip --repo stvekoulo/sol-browser
 - No telemetry, no account.
 - What leaves your computer on the browser's own initiative: search suggestions sent to your search engine as you
   type in the address bar (can be turned off), a weekly check for a newer uBlock Origin Lite on GitHub, a check
-  for a newer Sol on GitHub at startup (installed copies only), and the site icons of your shortcuts.
+  for a newer Sol on GitLab at startup (installed copies only), and the site icons of your shortcuts.
 - Web pages have no channel to the browser's own code.
 
 ## Keyboard shortcuts
@@ -117,15 +114,15 @@ Release archives for the three architectures: `pwsh tools/publish.ps1 -Arch x64,
 
 1. Set `<Version>` in `src/Browser.App/Browser.App.csproj`.
 2. Tag and push: `git tag v0.1.0 && git push origin v0.1.0`.
-3. The *Release* workflow builds the three archives, publishes their checksums and provenance attestations, and creates the GitHub release.
+3. The `release` pipeline job builds the installers and archives for the three architectures, publishes their checksums, and creates the GitLab release.
 
 ## Code signing policy
 
 Releases are not signed yet. An application to the [SignPath Foundation](https://signpath.org), which signs open-source
-projects for free, is planned; until it is accepted, use the checksums and the provenance attestation described above.
+projects for free, is planned; until it is accepted, use the checksums described above.
 
-- Committer, reviewer and approver: [Steven KOULO](https://github.com/stvekoulo).
-- Every released file is built by the [release workflow](.github/workflows/release.yml) from a tagged commit of this repository; nothing is built or uploaded by hand.
+- Committer, reviewer and approver: [Steven KOULO](https://gitlab.com/stevencrdkoulo).
+- Every released file is built by the [release pipeline](.gitlab-ci.yml) from a tagged commit of this repository; nothing is built or uploaded by hand.
 - Privacy: Sol sends no information to its author. See [Privacy](#privacy) for the only connections it makes on its own.
 
 ## Licence

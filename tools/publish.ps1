@@ -57,7 +57,7 @@ foreach ($a in $Arch) {
     if (Test-Path $zip) { [IO.File]::Delete($zip) }
     Compress-Archive -Path (Join-Path $app '*') -DestinationPath $zip
     # Installateur (Setup.exe) et paquet de mise à jour, si l'outil Velopack est là : installation par utilisateur,
-    # sans droits d'administrateur, raccourcis, désinstallation, et mises à jour prises dans les publications GitHub.
+    # sans droits d'administrateur, raccourcis, désinstallation, et mises à jour prises dans les publications GitLab.
     $vpk = if (Test-Path 'D:\dev\tools\vpk.exe') { 'D:\dev\tools\vpk.exe' } else { (Get-Command vpk -ErrorAction SilentlyContinue).Source }
     if ($vpk) {
         $env:DOTNET_ROLL_FORWARD = 'Major'

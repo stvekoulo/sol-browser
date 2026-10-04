@@ -22,13 +22,13 @@ public static class Program
         });
     }
 
-    /// <summary>Cherche une version plus récente dans les publications GitHub et la télécharge ; elle s'installe au
+    /// <summary>Cherche une version plus récente dans les publications GitLab (projet stevencrdkoulo/sol-browser) et la télécharge ; elle s'installe au
     /// prochain lancement. Sans effet pour une copie non installée (archive zip, poste de développement).</summary>
     public static async Task UpdateInBackgroundAsync()
     {
         try
         {
-            var manager = new UpdateManager(new GithubSource("https://github.com/stvekoulo/sol-browser", null, false));
+            var manager = new UpdateManager(new GitlabSource("https://gitlab.com/api/v4/projects/87215621", null, false));
             if (!manager.IsInstalled) return;
             if (await manager.CheckForUpdatesAsync() is { } update) await manager.DownloadUpdatesAsync(update);
         }

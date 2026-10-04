@@ -38,7 +38,7 @@
 
 ## Télécharger
 
-Prenez la dernière archive sur la page [Releases](../../releases/latest) :
+Prenez la dernière archive sur la page [Releases](https://gitlab.com/stevencrdkoulo/sol-browser/-/releases) :
 
 | Votre Windows | Fichier |
 |---|---|
@@ -57,14 +57,11 @@ Windows 10 ([à télécharger](https://developer.microsoft.com/microsoft-edge/we
 Les archives ne sont **pas signées** : un certificat de signature coûte de l'argent que ce projet n'a pas. Windows
 SmartScreen vous avertira donc au premier lancement ; choisissez *Informations complémentaires* → *Exécuter quand même*.
 
-Vous n'avez pas à nous croire sur parole. Chaque version se vérifie de deux façons :
+Vous n'avez pas à nous croire sur parole. Chaque version se vérifie avec son empreinte publiée :
 
 ```powershell
-# 1. L'empreinte est celle publiée avec la version (SHA256SUMS.txt)
+# L'empreinte est celle publiée avec la version (SHA256SUMS.txt)
 Get-FileHash .\Sol-0.1.0-win-x64.zip -Algorithm SHA256
-
-# 2. L'archive a bien été construite par ce dépôt (GitHub CLI)
-gh attestation verify .\Sol-0.1.0-win-x64.zip --repo stvekoulo/sol-browser
 ```
 
 ## Vie privée
@@ -72,7 +69,7 @@ gh attestation verify .\Sol-0.1.0-win-x64.zip --repo stvekoulo/sol-browser
 - Aucune télémétrie, aucun compte.
 - Ce qui sort de votre ordinateur à l'initiative du navigateur : les suggestions de recherche envoyées à votre moteur
   pendant la saisie dans la barre d'adresse (désactivable), une vérification hebdomadaire d'une nouvelle version
-  d'uBlock Origin Lite sur GitHub, une vérification d'une nouvelle version de Sol sur GitHub au démarrage (copies
+  d'uBlock Origin Lite sur GitHub, une vérification d'une nouvelle version de Sol sur GitLab au démarrage (copies
   installées seulement), et les icônes des sites de vos raccourcis.
 - Les pages web n'ont aucun canal vers le code du navigateur.
 
@@ -118,16 +115,15 @@ Archives publiables pour les trois architectures : `pwsh tools/publish.ps1 -Arch
 
 1. Régler `<Version>` dans `src/Browser.App/Browser.App.csproj`.
 2. Poser l'étiquette et la pousser : `git tag v0.1.0 && git push origin v0.1.0`.
-3. Le flux *Release* construit les trois archives, publie leurs empreintes et leurs attestations de provenance, et crée la version sur GitHub.
+3. La tâche `release` du pipeline construit les installateurs et les archives des trois architectures, publie leurs empreintes et crée la version sur GitLab.
 
 ## Politique de signature du code
 
 Les versions ne sont pas encore signées. Une demande à la [SignPath Foundation](https://signpath.org), qui signe
-gratuitement les projets open source, est prévue ; en attendant, utilisez les empreintes et l'attestation de provenance
-décrites plus haut.
+gratuitement les projets open source, est prévue ; en attendant, utilisez les empreintes décrites plus haut.
 
-- Auteur des modifications, relecteur et approbateur : [Steven KOULO](https://github.com/stvekoulo).
-- Chaque fichier publié est construit par le [workflow de publication](.github/workflows/release.yml) à partir d'un commit étiqueté de ce dépôt ; rien n'est construit ni déposé à la main.
+- Auteur des modifications, relecteur et approbateur : [Steven KOULO](https://gitlab.com/stevencrdkoulo).
+- Chaque fichier publié est construit par le [pipeline de publication](.gitlab-ci.yml) à partir d'un commit étiqueté de ce dépôt ; rien n'est construit ni déposé à la main.
 - Vie privée : Sol n'envoie aucune information à son auteur. Voir [Vie privée](#vie-privée) pour les seules connexions qu'il établit de lui-même.
 
 ## Licence
