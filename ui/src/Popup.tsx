@@ -213,8 +213,8 @@ export default function Popup() {
         </div>
         <div className="theme-row">
           <span className="row-title">{t('Police', 'Font')}</span>
-          <div className="popup-segment" role="radiogroup" aria-label={t('Police', 'Font')}>
-            {[t('Défaut', 'Default'), t('Système', 'System'), 'Inter', 'SF Pro'].map((label, index) => (
+          <div className="popup-segment grid" role="radiogroup" aria-label={t('Police', 'Font')}>
+            {[t('Défaut', 'Default'), t('Système', 'System'), 'Inter', 'Inter Bold', 'SF Pro', 'SF Pro Bold'].map((label, index) => (
               <button
                 key={label}
                 role="radio"

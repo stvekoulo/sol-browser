@@ -463,7 +463,7 @@ public sealed class BrowserController
             $"Suspends inactive tabs, then unloads them after 30 minutes. In use: {megabytes} MB, {asleep} tab{(asleep == 1 ? "" : "s")} unloaded.");
     }
 
-    private static readonly string[] Fonts = ["default", "system", "inter", "sf"];
+    private static readonly string[] Fonts = ["default", "system", "inter", "inter-bold", "sf", "sf-bold"];
 
     private void SetFont(int index)
     {

@@ -32,7 +32,7 @@ public sealed class Settings
     public string Language { get; set; } = "system";
     /// <summary>
     /// Police de l'interface : "default" (celle d'origine), "system" (celle de Windows), "inter" ou "sf" (SF Pro),
-    /// ces deux dernières livrées avec le navigateur.
+    /// ces deux dernières livrées avec le navigateur, et leurs versions grasses "inter-bold" et "sf-bold".
     /// </summary>
     public string Font { get; set; } = "default";
     /// <summary>Bloque les requêtes vers les domaines connus de publicité et de pistage.</summary>

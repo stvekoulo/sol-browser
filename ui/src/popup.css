@@ -437,3 +437,5 @@
 .popup-list > * { flex-shrink: 0; }
 .popup > * { flex-shrink: 0; }
 .setting-text .row-title { white-space: normal; line-height: 1.3; }
+/* Sélecteur à nombreux choix (polices) : trois par ligne. */
+.popup-segment.grid { display: grid; grid-template-columns: repeat(3, 1fr); border-radius: 16px; }

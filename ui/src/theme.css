@@ -139,9 +139,11 @@
 
 /* Police de l'interface, au choix de l'utilisateur. Sans choix : la pile d'origine, ci-dessus. */
 :root[data-font="system"] { --font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
-:root[data-font="inter"] { --font: "Inter Variable", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+:root[data-font="inter"], :root[data-font="inter-bold"] { --font: "Inter Variable", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
 /* SF Pro Display, livrée avec l'interface en trois graisses ; chargée seulement si elle est choisie. */
 @font-face { font-family: "SF Pro Display"; font-weight: 100 450; font-display: swap; src: url('./fonts/SFProDisplay-Regular.otf') format('opentype'); }
 @font-face { font-family: "SF Pro Display"; font-weight: 451 599; font-display: swap; src: url('./fonts/SFProDisplay-Medium.otf') format('opentype'); }
 @font-face { font-family: "SF Pro Display"; font-weight: 600 900; font-display: swap; src: url('./fonts/SFProDisplay-Bold.otf') format('opentype'); }
-:root[data-font="sf"] { --font: "SF Pro Display", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+:root[data-font="sf"], :root[data-font="sf-bold"] { --font: "SF Pro Display", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+/* Versions grasses (Inter Bold, SF Pro Bold) : toute l'interface est écrite en gras. */
+:root[data-font$="-bold"] body, :root[data-font$="-bold"] body * { font-weight: 700 !important; }
