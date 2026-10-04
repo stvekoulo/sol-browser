@@ -13,6 +13,15 @@ public class PasswordImportTests : IDisposable
         Directory.Delete(_dir, recursive: true);
     }
 
+    // La protection de Windows par compte (DPAPI) n'existe pas pour un compte de service sans profil chargé, comme
+    // celui des machines d'intégration continue : ces tests n'y vérifient rien.
+    private static readonly bool Dpapi = CanProtect();
+    private static bool CanProtect()
+    {
+        try { ProtectedData.Protect([1], null, DataProtectionScope.CurrentUser); return true; }
+        catch (CryptographicException) { return false; }
+    }
+
     // Un dossier de navigateur : sa clé dans « Local State » et une base « Login Data » vide dans le profil « Default ».
     private (string UserData, byte[] Key) Browser(string name, string extraColumns = "")
     {
@@ -57,6 +66,7 @@ public class PasswordImportTests : IDisposable
     [Fact]
     public void Passwords_travel_from_another_browser_to_the_engine_and_are_never_left_readable_on_disk()
     {
+        if (!Dpapi) return;
         var (source, sourceKey) = Browser("source");
         Save(source, "https://exemple.test/", "ada", Seal(sourceKey, "mot de passe é1"));
         Save(source, "https://autre.test/", "bob", Seal(sourceKey, "s3cret"));
@@ -87,6 +97,7 @@ public class PasswordImportTests : IDisposable
     [Fact]
     public void Pending_passwords_wait_until_the_engine_has_its_database()
     {
+        if (!Dpapi) return;
         var (source, key) = Browser("source");
         Save(source, "https://exemple.test/", "ada", Seal(key, "a"));
         var pending = Path.Combine(_dir, "pending.bin");
