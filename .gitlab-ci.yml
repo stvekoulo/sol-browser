@@ -12,7 +12,9 @@ stages: [test, release]
     - $env:DOTNET_ROOT = "$env:CI_PROJECT_DIR\.dotnet"
     - $env:PATH = "$env:DOTNET_ROOT;$env:USERPROFILE\.dotnet\tools;$env:PATH"
     # The runner image ships an old Node.js; the interface build needs the current LTS.
-    - $node = (Invoke-RestMethod https://nodejs.org/dist/index.json | Where-Object { $_.lts } | Select-Object -First 1).version
+    # Parentheses around the request: Windows PowerShell hands the JSON array over as one object otherwise.
+    - $node = ((Invoke-RestMethod https://nodejs.org/dist/index.json) | Where-Object { $_.lts } | Select-Object -First 1).version
+    - if ($node -notmatch '^v\d+\.\d+\.\d+$') { throw "Unexpected Node.js version '$node'" }
     - Invoke-WebRequest "https://nodejs.org/dist/$node/node-$node-win-x64.zip" -OutFile "$env:TEMP\node.zip"
     - Expand-Archive "$env:TEMP\node.zip" "$env:TEMP\node" -Force
     - $env:PATH = "$env:TEMP\node\node-$node-win-x64;$env:PATH"
