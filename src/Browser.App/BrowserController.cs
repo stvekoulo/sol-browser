@@ -212,6 +212,14 @@ public sealed class BrowserController
                     foreach (var shortcut in _settings.Shortcuts.Where(s => s.Icon is null)) _ = FetchShortcutIconAsync(shortcut);
                     // Première ouverture de ce profil : l'accueil (pas dans une fenêtre privée, qui ne garde rien).
                     if (!_settings.Onboarded && !AppPaths.Private) _ = _welcome.ShowAsync();
+                    // Lancé par Windows pour ouvrir un lien ou un fichier (PDF, page) ; puis les demandes des lancements suivants.
+                    foreach (var target in WindowsBrowser.Targets(Environment.GetCommandLineArgs())) Open(target);
+                    WindowsBrowser.Listen(target => _window.DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (target.Length > 0) { Open(target); Refresh(); }
+                        if (Presenter?.State == OverlappedPresenterState.Minimized) Presenter.Restore();
+                        SetForegroundWindow(WinRT.Interop.WindowNative.GetWindowHandle(_window));
+                    }));
                 }
                 foreach (var tabId in _favicons.Keys) PostFavicon(tabId);
                 break;
@@ -1572,5 +1580,6 @@ public sealed class BrowserController
 
     [DllImport("user32.dll")] private static extern bool ReleaseCapture();
     [DllImport("user32.dll")] private static extern bool ShowWindow(nint hwnd, int command);
+    [DllImport("user32.dll")] private static extern bool SetForegroundWindow(nint hwnd);
     [DllImport("user32.dll")] private static extern nint SendMessage(nint hwnd, uint msg, nint wParam, nint lParam);
 }

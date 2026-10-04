@@ -84,8 +84,10 @@ public sealed class TabManager
     }
 
     /// <summary>
-    /// Déplace un onglet. Il reste dans sa zone (épinglés en tête, les autres après). Déposé entre deux onglets
-    /// d'un groupe, il rejoint ce groupe ; sorti de son groupe, il le quitte.
+    /// Déplace un onglet. Il reste dans sa zone (épinglés en tête, les autres après). L'onglet qu'il vient de dépasser
+    /// décide de son groupe : dépasser un onglet d'un groupe l'y fait entrer (par le haut ou par le bas, même si le
+    /// groupe n'a qu'un onglet), dépasser un onglet sans groupe l'en fait sortir. Le seul onglet d'un groupe ne le
+    /// quitte pas ainsi : c'est alors le groupe qui se déplace.
     /// </summary>
     public bool Move(string id, int index)
     {
@@ -97,11 +99,13 @@ public sealed class TabManager
         _tabs.RemoveAt(i);
         _tabs.Insert(index, tab);
 
-        var left = index > 0 ? _tabs[index - 1].GroupId : null;
-        var right = index < _tabs.Count - 1 ? _tabs[index + 1].GroupId : null;
-        if (!tab.Pinned && left is not null && left == right) _tabs[index] = tab with { GroupId = left };
-        else if (tab.GroupId is { } own && left != own && right != own && _tabs.Count(t => t.GroupId == own) > 1)
-            _tabs[index] = tab with { GroupId = null };
+        if (!tab.Pinned && index != i)
+        {
+            var crossed = _tabs[index > i ? index - 1 : index + 1];
+            var alone = tab.GroupId is { } own && _tabs.Count(t => t.GroupId == own) == 1;
+            if (crossed.GroupId is { } joined) _tabs[index] = tab with { GroupId = joined };
+            else if (!crossed.Pinned && !alone) _tabs[index] = tab with { GroupId = null };
+        }
         PruneGroups();
         Changed?.Invoke();
         return true;

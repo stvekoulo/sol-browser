@@ -12,7 +12,7 @@ public static class Program
     {
         // Installation, mise à jour, désinstallation : l'installateur relance Sol avec ses propres arguments, traités
         // ici avant toute fenêtre. Une mise à jour déjà téléchargée est aussi appliquée à ce moment.
-        VelopackApp.Build().Run();
+        VelopackApp.Build().OnBeforeUninstallFastCallback(_ => WindowsBrowser.Unregister()).Run();
 
         WinRT.ComWrappersSupport.InitializeComWrappers();
         Application.Start(p =>
@@ -55,6 +55,8 @@ public static class Program
         {
             var manager = new UpdateManager(new GitlabSource("https://gitlab.com/api/v4/projects/87215621", null, false));
             if (!manager.IsInstalled) return;
+            // Copie installée : Windows la connaît comme navigateur (« Ouvrir avec », applications par défaut).
+            if (Environment.ProcessPath is { } exe) WindowsBrowser.Register(exe);
             if (await manager.CheckForUpdatesAsync() is not { } update) return;
             var version = update.TargetFullRelease.Version.ToString();
             Set(new UpdateState(version, 0, false));

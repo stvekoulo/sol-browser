@@ -40,6 +40,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     public async void Add(Tab tab)
     {
         var view = new WebView2 { Visibility = Visibility.Collapsed };
+        view.SizeChanged += (_, _) => { if (_zoom.ContainsKey(tab.Id)) _ = ApplyZoomAsync(tab.Id); };
         _views[tab.Id] = view;
         container.Children.Add(view);
         await StartEngineAsync(view);
@@ -344,6 +345,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
                 await core.CallDevToolsProtocolMethodAsync("Emulation.setTouchEmulationEnabled", """{"enabled":false,"maxTouchPoints":1}""");
                 await core.CallDevToolsProtocolMethodAsync("Emulation.setEmitTouchEventsForMouse", """{"enabled":false}""");
                 await core.CallDevToolsProtocolMethodAsync("Emulation.clearDeviceMetricsOverride", "{}");
+                await ApplyZoomAsync(id);
                 await ApplySettingsAsync(id, core); // le flou du bas des pages revient
                 core.Reload();
                 return;
@@ -623,29 +625,41 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         Discarded?.Invoke(id);
     }
 
-    // Zoom d'une page. Ce type de vue n'expose pas le zoom du moteur : il est appliqué à la racine du document,
-    // maintenant et à chaque nouvelle page de l'onglet.
-    private readonly Dictionary<string, (double Zoom, string? ScriptId)> _zoom = new();
+    // Zoom d'une page. Ce type de vue n'expose pas le zoom du moteur : la page est donc mise en page dans une fenêtre
+    // plus petite (ou plus grande), puis rendue à l'échelle sur toute la vue, avec la densité de pixels qu'il faut pour
+    // rester nette. Pour la page, c'est un vrai zoom de navigateur : largeur, hauteur et unités « vh » suivent, et un
+    // élément en plein écran couvre tout. Le réglage tient d'une page à l'autre de l'onglet et suit la taille de la vue.
+    private readonly Dictionary<string, double> _zoom = new();
 
-    public double ZoomOf(string id) => _zoom.TryGetValue(id, out var z) ? z.Zoom : 1;
+    public double ZoomOf(string id) => _zoom.GetValueOrDefault(id, 1);
 
-    public async void SetZoom(string id, double zoom)
+    public void SetZoom(string id, double zoom)
     {
-        if (Core(id) is not { } core) return;
-        if (_zoom.TryGetValue(id, out var old) && old.ScriptId is not null) core.RemoveScriptToExecuteOnDocumentCreated(old.ScriptId);
-        var value = zoom == 1 ? "" : zoom.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
-        _zoom[id] = (zoom, null);
+        if (Core(id) is null) return;
+        if (zoom == 1) _zoom.Remove(id); else _zoom[id] = zoom;
         RuntimeChanged?.Invoke();
+        _ = ApplyZoomAsync(id);
+    }
+
+    private async Task ApplyZoomAsync(string id)
+    {
+        // Un écran simulé et le lecteur flottant règlent eux-mêmes ces métriques : le zoom reprend quand ils se terminent.
+        if (!_views.TryGetValue(id, out var view) || view.CoreWebView2 is not { } core || _mode.ContainsKey(id) || _pip == id) return;
+        var zoom = ZoomOf(id);
         try
         {
-            await core.ExecuteScriptAsync($"document.documentElement.style.zoom = '{value}'");
-            if (zoom == 1) return;
-            var script = $"(() => {{ const z = () => document.documentElement.style.zoom = '{value}'; document.documentElement ? z() : document.addEventListener('DOMContentLoaded', z, {{ once: true }}); }})()";
-            var scriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(script);
-            if (_zoom.TryGetValue(id, out var now) && now.Zoom == zoom) _zoom[id] = (zoom, scriptId);
-            else core.RemoveScriptToExecuteOnDocumentCreated(scriptId); // le zoom a encore changé entre-temps
+            if (zoom == 1 || view.ActualWidth < 1 || view.ActualHeight < 1)
+            {
+                await core.CallDevToolsProtocolMethodAsync("Emulation.clearDeviceMetricsOverride", "{}");
+                return;
+            }
+            await core.CallDevToolsProtocolMethodAsync("Emulation.setDeviceMetricsOverride", System.Text.Json.JsonSerializer.Serialize(new
+            {
+                width = (int)Math.Round(view.ActualWidth / zoom), height = (int)Math.Round(view.ActualHeight / zoom),
+                deviceScaleFactor = (view.XamlRoot?.RasterizationScale ?? 1) * zoom, mobile = false, scale = zoom,
+            }));
         }
-        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { /* vue fermée entre-temps */ }
+        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException or ArgumentException) { /* vue fermée entre-temps */ }
     }
 
     public CoreWebView2? CoreOf(string id) => Core(id);

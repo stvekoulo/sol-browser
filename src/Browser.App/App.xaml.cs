@@ -40,7 +40,12 @@ public partial class App : Application
 
         // Une seule fenêtre par profil : deux fenêtres sur les mêmes fichiers se marcheraient dessus.
         s_profileLock = new Mutex(initiallyOwned: true, $"Navigateur.Profil.{AppPaths.Profile}", out var first);
-        if (!first) Environment.Exit(0);
+        // Déjà ouvert : ce que Windows demandait d'ouvrir (un lien, un PDF) est remis à la fenêtre existante.
+        if (!first)
+        {
+            WindowsBrowser.SendToRunning(WindowsBrowser.Targets(Environment.GetCommandLineArgs()));
+            Environment.Exit(0);
+        }
 
         // Données des sites (cookies, cache, mots de passe) : un dossier par profil. Seul le profil par défaut
         // accepte un dossier imposé par l'environnement de développement.

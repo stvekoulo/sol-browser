@@ -192,4 +192,29 @@ public class TabGroupTests
         m.MatchGroup(a.Id, m.Tabs[2].Id); // vers un onglet sans groupe
         Assert.Equal("a bg1 c d", Layout(m));
     }
+
+    [Fact]
+    public void Dragging_a_tab_past_a_grouped_tab_joins_its_group_and_past_a_loose_tab_leaves_it()
+    {
+        var m = new TabManager();
+        var (a, b, c) = (m.Open("https://a.test"), m.Open("https://b.test"), m.Open("https://c.test"));
+        var group = m.CreateGroup(b.Id, "Seul")!.Id; // un groupe d'un seul onglet
+        string? GroupOf(Tab tab) => m.Tabs.First(t => t.Id == tab.Id).GroupId;
+
+        Assert.True(m.Move(a.Id, 1)); // a passe sous b : il entre dans le groupe, par le bas
+        Assert.Equal([b.Id, a.Id, c.Id], m.Tabs.Select(t => t.Id));
+        Assert.Equal(group, GroupOf(a));
+
+        Assert.True(m.Move(a.Id, 2)); // a passe sous c, sans groupe : il sort
+        Assert.Null(GroupOf(a));
+
+        Assert.True(m.Move(c.Id, 0)); // c remonte au-dessus de b : il entre dans le groupe, par le haut
+        Assert.Equal(group, GroupOf(c));
+        Assert.True(m.Move(c.Id, 2)); // puis redescend sous a
+        Assert.Null(GroupOf(c));
+
+        Assert.True(m.Move(b.Id, 1)); // b, seul dans son groupe, dépasse a : le groupe se déplace avec lui
+        Assert.Equal(group, GroupOf(b));
+        Assert.Null(GroupOf(a));
+    }
 }

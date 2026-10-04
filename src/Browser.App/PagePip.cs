@@ -206,7 +206,7 @@ public sealed partial class PageHost
             Grid.SetColumnSpan(view, 1);
             Canvas.SetZIndex(view, 0);
             CornerClip.Set(view, 0);
-            if (view.CoreWebView2 is { } core) _ = RunPipAsync(core, "Emulation.clearDeviceMetricsOverride", "{}");
+            _ = ApplyZoomAsync(id); // rend à la page ses métriques : celles de son zoom, ou celles de la vue
         }
         if (slide) RuntimeChanged?.Invoke(); // la vue redevient celle d'un onglet masqué
     }
