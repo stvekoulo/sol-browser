@@ -18,6 +18,7 @@
 - Une interface qui suit la page : son fond et sa couleur teintent le navigateur, en douceur. Thème clair, sombre, celui de Windows ou celui de la page.
 - En français et en anglais, selon la langue de Windows.
 - Des profils aux données séparées, et des fenêtres privées effacées à leur fermeture.
+- Import des favoris, de l'historique et des mots de passe d'autres navigateurs, et une sauvegarde chiffrée que vous exportez et restaurez avec votre propre clé.
 
 **Tranquille par défaut**
 - Publicités et traqueurs bloqués d'origine par [uBlock Origin Lite](https://github.com/uBlockOrigin/uBOL-home), intégré et tenu à jour.

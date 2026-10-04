@@ -144,6 +144,9 @@ public sealed class UiBridge(WebView2 view, string page = "index.html", WebView2
 
     private async Task InitViewAsync(WebView2 target, string targetPage, string uiFolder, Action<Command> onCommand)
     {
+        // Fond transparent tant que la vue n'a rien dessiné (apparition, changement de taille) : on voit le fond de
+        // la fenêtre, aux couleurs de la page, au lieu d'un rectangle noir ou blanc.
+        target.DefaultBackgroundColor = Microsoft.UI.Colors.Transparent;
         await target.EnsureCoreWebView2Async(await AdBlock.EnvironmentAsync());
         var core = target.CoreWebView2;
         core.SetVirtualHostNameToFolderMapping("ui.navigateur", uiFolder, CoreWebView2HostResourceAccessKind.Deny);

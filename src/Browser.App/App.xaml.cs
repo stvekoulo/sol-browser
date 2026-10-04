@@ -47,6 +47,9 @@ public partial class App : Application
         if (AppPaths.Profile != Profiles.Default || string.IsNullOrEmpty(LaunchEnvironment[WebDataVariable]))
             Environment.SetEnvironmentVariable(WebDataVariable, AppPaths.WebData);
 
+        // Sauvegarde restaurée pendant la session précédente : ses fichiers prennent la place de ceux du profil.
+        if (!AppPaths.Private) Backup.ApplyStaged(AppPaths.DataDir);
+
         // Mots de passe repris d'un autre navigateur pendant la session précédente : écrits avant que le moteur ne s'ouvre.
         if (!AppPaths.Private)
             PasswordImport.ApplyPending(AppPaths.PendingPasswords, Path.Combine(Environment.GetEnvironmentVariable(WebDataVariable)!, "EBWebView"));

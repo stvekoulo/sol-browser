@@ -17,7 +17,8 @@ type Content =
   | { popup: 'shortcut-edit'; id: string; name: string; url: string }
   | { popup: 'compare-pick'; id: string; min: number; max: number; devices: { name: string; label: string; size: string; on: boolean }[] }
   | { popup: 'permission'; site: string; what: string; secure: boolean }
-  | { popup: 'prompt'; title: string; hint: string; placeholder: string; submit: string; value: string; command: string; id: string | null };
+  | { popup: 'prompt'; title: string; hint: string; placeholder: string; submit: string; value: string; command: string; id: string | null; secret?: boolean }
+  | { popup: 'notice'; title: string; hint: string };
 
 type Profile = { id: string; name: string; current: boolean; renamable: boolean; deletable: boolean };
 
@@ -273,9 +274,19 @@ export default function Popup() {
           <div className="setting-row static">
             <span className="setting-text">
               <span className="row-title">{t('Autres navigateurs', 'Other browsers')}</span>
-              <span className="row-sub">{t('Reprendre les favoris et l’historique de Chrome, Edge, Brave, Comet…', 'Bring over bookmarks and history from Chrome, Edge, Brave, Comet…')}</span>
+              <span className="row-sub">{t('Importer les favoris, l’historique et les mots de passe de Chrome, Edge, Brave, Comet…', 'Import bookmarks, history and passwords from Chrome, Edge, Brave, Comet…')}</span>
             </span>
             <button className="pill-action" onClick={() => send({ type: 'welcome.open' })}>{t('Importer', 'Import')}</button>
+          </div>
+          <div className="setting-row static">
+            <span className="setting-text">
+              <span className="row-title">{t('Sauvegarde', 'Backup')}</span>
+              <span className="row-sub">{t('Réglages, onglets, favoris, historique et mots de passe dans un fichier chiffré par une clé que vous choisissez.', 'Settings, tabs, bookmarks, history and passwords in a file encrypted with a key you choose.')}</span>
+            </span>
+            <span className="row-actions">
+              <button className="pill-action" onClick={() => send({ type: 'backup.export' })}>{t('Exporter', 'Export')}</button>
+              <button className="pill-action" onClick={() => send({ type: 'backup.import' })}>{t('Restaurer', 'Restore')}</button>
+            </span>
           </div>
           <div className="setting-row static">
             <span className="setting-text">
@@ -340,6 +351,19 @@ export default function Popup() {
 
   if (content.popup === 'prompt')
     return <NameForm key={opening} rootRef={root} ask={content} />;
+
+  if (content.popup === 'notice')
+    return (
+      <div ref={root} className="popup arriving">
+        <div className="name-form">
+          <span className="name-form-title">{content.title}</span>
+          <p className="row-sub">{content.hint}</p>
+          <div className="name-form-actions">
+            <button autoFocus className="pill-action primary" onClick={() => send({ type: 'popup.close' })}>OK</button>
+          </div>
+        </div>
+      </div>
+    );
 
   const open = (item: Item) => send({ type: 'tab.open', url: item.url });
   const items = libTab === 'bookmarks' ? content.bookmarks : content.history;
@@ -515,12 +539,12 @@ function NameForm({ rootRef, ask }: { rootRef: RefObject<HTMLDivElement | null>;
         className="name-form"
         onSubmit={e => {
           e.preventDefault();
-          if (name.trim()) send({ type: ask.command, id: ask.id ?? undefined, title: name.trim() });
+          if (name.trim()) send({ type: ask.command, id: ask.id ?? undefined, title: ask.secret ? name : name.trim() });
         }}
       >
         <label htmlFor="name-input" className="name-form-title">{ask.title}</label>
         {ask.hint && <p className="row-sub">{ask.hint}</p>}
-        <input id="name-input" autoFocus maxLength={40} placeholder={ask.placeholder} spellCheck={false} value={name} onChange={e => setName(e.target.value)} onFocus={e => e.target.select()} />
+        <input id="name-input" type={ask.secret ? 'password' : 'text'} autoFocus maxLength={ask.secret ? 128 : 40} placeholder={ask.placeholder} spellCheck={false} value={name} onChange={e => setName(e.target.value)} onFocus={e => e.target.select()} />
         <div className="name-form-actions">
           <button type="button" className="pill-action" onClick={() => send({ type: 'popup.close' })}>{t('Annuler', 'Cancel')}</button>
           <button type="submit" className="pill-action primary" disabled={!name.trim()}>{ask.submit}</button>

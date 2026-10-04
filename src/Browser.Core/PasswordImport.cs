@@ -60,6 +60,62 @@ public static class PasswordImport
         return (list, unreadable);
     }
 
+    /// <summary>
+    /// Les mots de passe d'un fichier CSV exporté par un navigateur ou un gestionnaire de mots de passe : une ligne
+    /// d'en-tête avec au moins une colonne d'adresse, d'identifiant et de mot de passe.
+    /// </summary>
+    public static IReadOnlyList<ImportedLogin> ReadCsv(string text)
+    {
+        var rows = Rows(text);
+        if (rows.Count < 2) return [];
+        var head = rows[0].Select(h => h.Trim().ToLowerInvariant()).ToList();
+        int url = head.FindIndex(h => h is "url" or "login_uri" or "origin" or "website"),
+            user = head.FindIndex(h => h is "username" or "login_username" or "login"),
+            pass = head.FindIndex(h => h is "password" or "login_password");
+        if (url < 0 || user < 0 || pass < 0) return [];
+        var list = new List<ImportedLogin>();
+        foreach (var row in rows.Skip(1))
+        {
+            if (row.Count <= Math.Max(url, Math.Max(user, pass)) || row[pass].Length == 0) continue;
+            if (!Uri.TryCreate(row[url].Trim(), UriKind.Absolute, out var site) || site.Scheme is not ("https" or "http")) continue;
+            // Sans nom de champ : le moteur propose alors l'identifiant sur tout formulaire de connexion du site.
+            list.Add(new ImportedLogin(site.AbsoluteUri, "", "", row[user], "", row[pass], site.GetLeftPart(UriPartial.Authority) + "/"));
+        }
+        return list;
+    }
+
+    // Lignes d'un CSV : champs séparés par des virgules, guillemets doublés dans un champ entre guillemets.
+    private static List<List<string>> Rows(string text)
+    {
+        var rows = new List<List<string>>();
+        var row = new List<string>();
+        var field = new StringBuilder();
+        var quoted = false;
+        for (var i = 0; i < text.Length; i++)
+        {
+            var c = text[i];
+            if (quoted)
+            {
+                if (c != '"') field.Append(c);
+                else if (i + 1 < text.Length && text[i + 1] == '"') { field.Append('"'); i++; }
+                else quoted = false;
+            }
+            else if (c == '"') quoted = true;
+            else if (c == ',') { row.Add(field.ToString()); field.Clear(); }
+            else if (c is '\n' or '\r')
+            {
+                if (c == '\r' && i + 1 < text.Length && text[i + 1] == '\n') i++;
+                row.Add(field.ToString()); field.Clear();
+                if (row.Count > 1 || row[0].Length > 0) rows.Add(row);
+                row = [];
+            }
+            else field.Append(c);
+        }
+        row.Add(field.ToString());
+        if (row.Count > 1 || row[0].Length > 0) rows.Add(row);
+        return rows;
+    }
+
     /// <summary>Met des mots de passe en attente (ajoutés à ceux qui attendent déjà), dans un fichier protégé par Windows.</summary>
     public static void Queue(string pendingFile, IReadOnlyList<ImportedLogin> logins)
     {

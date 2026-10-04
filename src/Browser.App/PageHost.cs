@@ -22,6 +22,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     public event Action<CoreWebView2PermissionRequestedEventArgs>? PermissionRequested;
     public event Action<string, string>? StatusChanged;         // id, adresse du lien survolé (vide = aucun)
     public event Action<string, string?>? FaviconChanged;        // id, icône en data: (ou null)
+    public event Action<bool>? FullScreenChanged;                // une page (vidéo…) entre en plein écran ou en sort
 
     public bool IsLoading(string id) => _loading.Contains(id);
     public bool CanGoBack(string id) => Core(id)?.CanGoBack ?? false;
@@ -197,6 +198,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         {
             if (Uri.TryCreate(e.RequestUri, UriKind.Absolute, out var uri) && uri.IsLoopback) e.Action = CoreWebView2ServerCertificateErrorAction.AlwaysAllow;
         };
+        core.ContainsFullScreenElementChanged += (_, _) => FullScreenChanged?.Invoke(core.ContainsFullScreenElement);
         // Accès sensibles (micro, caméra, position, notifications…) : jamais accordés d'office, le navigateur
         // demande à l'utilisateur. Sans personne pour répondre, la demande est refusée.
         core.PermissionRequested += (_, e) =>

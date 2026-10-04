@@ -81,6 +81,9 @@ public sealed class BrowserDb : IDisposable
         return list;
     }
 
+    /// <summary>Copie cohérente de la base dans un nouveau fichier, pendant qu'elle sert.</summary>
+    public void BackupTo(string file) => Exec("VACUUM INTO $file", ("$file", file));
+
     public void Dispose() => _db.Dispose();
 
     private IReadOnlyList<Visit> Visits(string sql, params (string, object)[] args)

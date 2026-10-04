@@ -18,6 +18,7 @@
 - An interface that follows the page: its background and accent colour tint the browser, softly. Light, dark, system or page-driven theme.
 - French and English, following the Windows language.
 - Profiles with separate data, and private windows erased when closed.
+- Import of bookmarks, history and passwords from other browsers, and an encrypted backup file you export and restore with your own key.
 
 **Calm by default**
 - Ads and trackers blocked out of the box with [uBlock Origin Lite](https://github.com/uBlockOrigin/uBOL-home), built in and kept up to date.

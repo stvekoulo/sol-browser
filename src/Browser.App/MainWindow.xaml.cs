@@ -69,13 +69,34 @@ public sealed partial class MainWindow : Window
             if (n[2] is >= 400 and <= 10000 && n[3] is >= 300 and <= 10000 && Math.Abs(n[0]) < 20000 && Math.Abs(n[1]) < 20000)
                 AppWindow.MoveAndResize(new Windows.Graphics.RectInt32(n[0], n[1], n[2], n[3]));
         }
-        if (args.Contains("--maximized") && AppWindow.Presenter is OverlappedPresenter presenter) presenter.Maximize();
-        // Première ouverture : la configuration s'affiche dans une grande fenêtre centrée (88 % de l'écran).
-        else if (parts is null && !AppPaths.Private && !JsonFileStore.Load<Settings>(AppPaths.Settings).Onboarded)
+        // Sol s'ouvre en plein écran (sans la barre des tâches) ; seule une fenêtre qui en remplace une autre reprend
+        // sa place. Le bouton d'agrandissement de l'interface repasse en fenêtre, et inversement.
+        if (parts is null || args.Contains("--fullscreen")) AppWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
+        else if (args.Contains("--maximized") && AppWindow.Presenter is OverlappedPresenter presenter) presenter.Maximize();
+    }
+
+    // Plein écran demandé par une page (une vidéo) : la fenêtre couvre l'écran et tout le reste de l'interface
+    // s'efface. Échap, ou le bouton du lecteur, ramène l'interface telle qu'elle était.
+    // ponytail: en vue scindée, les deux pages restent côte à côte ; donner tout l'écran à une seule si le besoin se présente.
+    private (GridLength Top, GridLength Side, GridLength Panel, Visibility Sidebar, AppWindowPresenterKind Window)? _beforeFullScreen;
+
+    private void SetFullScreen(bool on)
+    {
+        if (on == _beforeFullScreen.HasValue) return;
+        var none = new GridLength(0);
+        if (on)
         {
-            var area = Microsoft.UI.Windowing.DisplayArea.GetFromWindowId(AppWindow.Id, Microsoft.UI.Windowing.DisplayAreaFallback.Nearest).WorkArea;
-            int w = area.Width * 88 / 100, h = area.Height * 88 / 100;
-            AppWindow.MoveAndResize(new Windows.Graphics.RectInt32(area.X + (area.Width - w) / 2, area.Y + (area.Height - h) / 2, w, h));
+            _beforeFullScreen = (Root.RowDefinitions[0].Height, SidebarColumn.Width, PanelRow.Height, Sidebar.Visibility, AppWindow.Presenter.Kind);
+            (Root.RowDefinitions[0].Height, SidebarColumn.Width, PanelRow.Height) = (none, none, none);
+            (Ui.Visibility, Sidebar.Visibility, PopupFrame.Visibility) = (Visibility.Collapsed, Visibility.Collapsed, Visibility.Collapsed);
+            if (AppWindow.Presenter.Kind != AppWindowPresenterKind.FullScreen) AppWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
+        }
+        else if (_beforeFullScreen is { } before)
+        {
+            _beforeFullScreen = null;
+            if (before.Window != AppWindowPresenterKind.FullScreen) AppWindow.SetPresenter(before.Window); // déjà en plein écran avant la vidéo : on y reste
+            (Root.RowDefinitions[0].Height, SidebarColumn.Width, PanelRow.Height) = (before.Top, before.Side, before.Panel);
+            (Ui.Visibility, Sidebar.Visibility) = (Visibility.Visible, before.Sidebar);
         }
     }
 
@@ -88,6 +109,7 @@ public sealed partial class MainWindow : Window
 
         UiBridge.Settings = settings;
         var pages = new PageHost(Pages, PrimaryColumn, DividerColumn, SecondaryColumn, blur, settings);
+        pages.FullScreenChanged += SetFullScreen;
         var bridge = new UiBridge(Ui, "index.html", Sidebar, SidebarColumn, pages);
         _bridge = bridge;
         UiBridge.SystemColorsChanged += () => DispatcherQueue.TryEnqueue(bridge.BroadcastTheme);
@@ -201,7 +223,7 @@ public sealed partial class MainWindow : Window
         Root.AddHandler(UIElement.PointerMovedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler((_, e) =>
         {
             var p = e.GetCurrentPoint(Root).Position;
-            _sidebar?.PointerAt(p.X, p.Y, menuOpen: PopupFrame.Visibility == Visibility.Visible);
+            if (!_beforeFullScreen.HasValue) _sidebar?.PointerAt(p.X, p.Y, menuOpen: PopupFrame.Visibility == Visibility.Visible);
         }), true);
 
         Root.AddHandler(UIElement.PointerWheelChangedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler((_, e) =>

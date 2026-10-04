@@ -31,11 +31,13 @@ export default function Welcome() {
   const [step, setStep] = useState(0);
   const [imported, setImported] = useState<Imported>({});
   const [name, setName] = useState('');
+  const [csv, setCsv] = useState<number | null>(null);
 
   useEffect(() => {
     const off = onMessage(data => {
       const message = data as { welcome?: string; id?: string; folder?: string; bookmarks?: number; history?: number; passwords?: number; locked?: number };
       if (message.welcome === 'reset') send({ type: 'welcome.ready' });
+      if (message.welcome === 'csv') setCsv(message.passwords ?? 0);
       if (message.welcome === 'state') {
         const next = data as unknown as Setup;
         setSetup(next);
@@ -110,6 +112,14 @@ export default function Welcome() {
           }),
         )}
       </div>
+      <p className="welcome-csv">
+        {csv === null
+          ? t('Mots de passe protégés par votre navigateur ? Exportez-les depuis ses réglages, puis', 'Passwords protected by your browser? Export them from its settings, then')
+          : csv > 0
+            ? t(`${csv} mot${csv > 1 ? 's' : ''} de passe importé${csv > 1 ? 's' : ''} du fichier.`, `${csv} password${csv === 1 ? '' : 's'} imported from the file.`)
+            : t('Aucun mot de passe trouvé dans ce fichier.', 'No password found in this file.')}{' '}
+        <button onClick={() => send({ type: 'import.csv' })}>{csv === null ? t('importez le fichier CSV', 'import the CSV file') : t('Importer un autre fichier', 'Import another file')}</button>
+      </p>
     </>,
 
     <>
