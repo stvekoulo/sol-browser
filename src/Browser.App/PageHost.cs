@@ -32,6 +32,8 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     private readonly Dictionary<string, Tab> _asleep = new();
 
     public void AddAsleep(Tab tab) => _asleep[tab.Id] = tab;
+    /// <summary>L'onglet est déchargé : il se rechargera quand on y reviendra.</summary>
+    public bool IsAsleep(string id) => _asleep.ContainsKey(id);
 
     // Toutes les vues partagent le même moteur. Une fenêtre privée aussi : elle a son propre dossier de données, effacé
     // à sa fermeture, ce qui laisse le bloqueur de publicités y fonctionner (le mode privé du moteur l'en empêcherait).
@@ -183,6 +185,42 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         }
     }
 
+    // Balayage horizontal : la page note le moment où elle s'en est servie elle-même — un carrousel ou une zone qui
+    // défile de côté, ou un geste que son script a pris en charge. Le navigateur consulte cette note avant de traiter
+    // le balayage comme « page précédente / suivante » (voir MainWindow). La page n'a aucun canal vers l'hôte : c'est
+    // l'hôte qui vient lire.
+    private const string SidewaysScript = """
+        (() => {
+          if (window.__solSideways) return;
+          const state = window.__solSideways = { at: -1e9 };
+          addEventListener('wheel', (e) => {
+            if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+            let used = false;
+            for (let el = e.target; el && el.nodeType === 1 && !used; el = el.parentElement) {
+              const room = el.scrollWidth - el.clientWidth;
+              if (room <= 1) continue;
+              const flow = getComputedStyle(el).overflowX;
+              if (flow !== 'auto' && flow !== 'scroll' && el !== document.scrollingElement) continue;
+              used = e.deltaX < 0 ? el.scrollLeft > 0 : el.scrollLeft < room - 1;
+            }
+            if (used) state.at = performance.now();
+            else setTimeout(() => { if (e.defaultPrevented) state.at = performance.now(); }, 0); // geste pris par le script de la page
+          }, { passive: true, capture: true });
+        })();
+        """;
+
+    /// <summary>La page a-t-elle utilisé elle-même un balayage horizontal dans les dernières millisecondes données ?</summary>
+    public async Task<bool> UsedSidewaysAsync(string id, double withinMs)
+    {
+        if (Core(id) is not { } core) return false;
+        try
+        {
+            var raw = await core.ExecuteScriptAsync("window.__solSideways ? performance.now() - window.__solSideways.at : 1e9");
+            return double.TryParse(raw, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var ago) && ago < withinMs;
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { return false; }
+    }
+
     // Une page web est du contenu non fiable : aucun pont vers l'hôte, aucune permission accordée d'office.
     private void Harden(CoreWebView2 core)
     {
@@ -194,6 +232,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         s.IsSwipeNavigationEnabled = true;
         s.IsZoomControlEnabled = false; // le zoom est géré par le navigateur (Ctrl +, Ctrl -, Ctrl molette), pas par le moteur // balayage horizontal : page précédente ou suivante
         s.IsGeneralAutofillEnabled = false;
+        _ = core.AddScriptToExecuteOnDocumentCreatedAsync(SidewaysScript);
         s.IsReputationCheckingRequired = true; // SmartScreen
         // Serveur de développement en https avec un certificat fait maison : accepté pour cet ordinateur seulement
         // (localhost, 127.0.0.1, ::1). Partout ailleurs, une erreur de certificat bloque la page.

@@ -159,6 +159,22 @@ public sealed partial class MainWindow : Window
 
     // Pastille à flèche qui sort du bord pendant le balayage : elle avance avec le geste, et la page change
     // quand elle est entièrement sortie. Un simple élément XAML posé sur la page, sans effet sur la souris.
+    private DateTime _swipeStart;
+    private bool _swipeProbed;
+    private int _swipeId;
+
+    // Demande à la page si elle a utilisé ce balayage. Si oui, le geste est abandonné ; sinon, s'il est allé au bout,
+    // la navigation a lieu.
+    private async Task SettleSwipeAsync(int gesture, double sinceMs, string? navigate)
+    {
+        var used = _controller is not null && await _controller.PageUsedSidewaysAsync(sinceMs);
+        if (gesture != _swipeId) return; // un autre geste a commencé entre-temps
+        if (used) { _swipeDone = true; HideSwipeHint(committed: false); return; }
+        if (navigate is null) return;
+        _controller?.Shortcut(navigate);
+        HideSwipeHint(committed: true);
+    }
+
     private void ShowSwipeHint(bool back, double progress)
     {
         SwipeHint.HorizontalAlignment = back ? HorizontalAlignment.Left : HorizontalAlignment.Right;
@@ -237,18 +253,25 @@ public sealed partial class MainWindow : Window
             }
             if (!p.IsHorizontalMouseWheel) return;
             var now = DateTime.UtcNow;
-            if ((now - _swipeAt).TotalMilliseconds > 350) { _swipe = 0; _swipeDone = false; } // nouveau geste
+            if ((now - _swipeAt).TotalMilliseconds > 350) { _swipe = 0; _swipeDone = false; _swipeProbed = false; _swipeStart = now; _swipeId++; } // nouveau geste
             _swipeAt = now;
             _swipe += p.MouseWheelDelta;
             if (_swipeDone) return;
-            // ponytail: seuil fixe, et une page qui défile elle-même horizontalement déclenche aussi le geste ;
-            // à affiner en ne réagissant qu'en bout de défilement.
+            // Un balayage dont la page se sert elle-même (carrousel, zone qui défile de côté) n'est pas un retour en
+            // arrière : la page est consultée une première fois dès que le geste se dessine, puis avant de naviguer.
+            // Tout le geste est alors écarté, même si le carrousel arrive en bout de course en chemin.
+            // ponytail: seuil fixe ; un carrousel placé dans un cadre d'un autre site n'est pas vu.
             var progress = Math.Min(1, Math.Abs(_swipe) / SwipeThreshold);
+            var since = (now - _swipeStart).TotalMilliseconds + 600;
+            if (progress >= 0.2 && !_swipeProbed)
+            {
+                _swipeProbed = true;
+                _ = SettleSwipeAsync(_swipeId, since, navigate: null);
+            }
             ShowSwipeHint(back: _swipe < 0, progress);
             if (progress < 1) return;
             _swipeDone = true;
-            _controller?.Shortcut(_swipe < 0 ? "nav.back" : "nav.forward");
-            HideSwipeHint(committed: true);
+            _ = SettleSwipeAsync(_swipeId, since, navigate: _swipe < 0 ? "nav.back" : "nav.forward");
         }), true);
     }
 

@@ -234,7 +234,7 @@ function PinnedStrip({ shortcuts, tabs, icons, activeId }: { shortcuts: State['s
             return (
               <button
                 key={tab.id}
-                className={`pinned-pill ${wide ? 'wide' : 'circle'}${tab.id === activeId ? ' active' : ''}`}
+                className={`pinned-pill ${wide ? 'wide' : 'circle'}${tab.id === activeId ? ' active' : ''}${tab.asleep ? ' asleep' : ''}`}
                 title={tab.title || tab.url}
                 onContextMenu={e => {
                   e.preventDefault();
@@ -333,7 +333,7 @@ function SidebarTabRow({ tab, index, icon, active, grouped = false }: { tab: Tab
     <div
       role="tab"
       aria-selected={active}
-      className={`sidebar-tab${active ? ' active' : ''}`}
+      className={`sidebar-tab${active ? ' active' : ''}${tab.asleep ? ' asleep' : ''}`}
       title={label}
       {...slot}
       onContextMenu={e => {

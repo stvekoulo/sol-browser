@@ -240,3 +240,7 @@
   padding-left: 7px;
   border-left: 2px solid color-mix(in srgb, var(--group) 70%, transparent);
 }
+
+/* Onglet déchargé : il garde sa place, atténué, et se recharge au clic. */
+.sidebar-tab.asleep, .pinned-pill.asleep { opacity: 0.55; }
+.sidebar-tab.asleep:hover, .pinned-pill.asleep:hover { opacity: 0.85; }

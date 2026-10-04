@@ -36,7 +36,7 @@ public static class CommandParser
         ["network.toggle"] = [], ["network.ready"] = [], ["network.clear"] = [], ["network.detail"] = ["id"],
         ["blocker.options"] = [],
         ["welcome.ready"] = [], ["welcome.open"] = [], ["welcome.done"] = [], ["welcome.name"] = ["title"],
-        ["import.run"] = ["id", "query"], ["import.csv"] = [], ["update.restart"] = [], ["update.later"] = [],
+        ["import.run"] = ["id", "query"], ["import.csv"] = [], ["update.restart"] = [], ["update.later"] = [], ["update.check"] = [],
         ["backup.export"] = [], ["backup.export.key"] = ["title"], ["backup.import"] = [], ["backup.restore"] = ["title"],
         ["ui.ready"] = [],
     };

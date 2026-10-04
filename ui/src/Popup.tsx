@@ -11,7 +11,7 @@ type Content =
   | { popup: 'library'; bookmarks: Item[]; history: Item[] }
   | { popup: 'menu'; items: string[] }
   | { popup: 'downloads'; items: Download[] }
-  | { popup: 'settings'; version: string; update: { version: string; percent: number; ready: boolean } | null; zoom: number; theme: number; language: number; home: string; font: number; ublock: string | null; engine: number; engines: string[]; sites: { origin: string; host: string; summary: string }[]; permissions: number; tint: Setting[]; items: Setting[] }
+  | { popup: 'settings'; version: string; update: { version: string; percent: number; ready: boolean } | null; check: 'idle' | 'checking' | 'current' | 'failed' | 'portable'; zoom: number; theme: number; language: number; home: string; font: number; ublock: string | null; engine: number; engines: string[]; sites: { origin: string; host: string; summary: string }[]; permissions: number; tint: Setting[]; items: Setting[] }
   | { popup: 'profiles'; items: Profile[] }
   | { popup: 'group-edit'; create: boolean; id: string; name: string; color: string; icon: string; presets: string[] }
   | { popup: 'shortcut-edit'; id: string; name: string; url: string }
@@ -286,13 +286,20 @@ export default function Popup() {
               <span className="row-title">Sol {content.version}</span>
               <span className="row-sub">
                 {!content.update
-                  ? t('Les mises à jour se téléchargent automatiquement.', 'Updates are downloaded automatically.')
+                  ? content.check === 'checking' ? t('Recherche d’une mise à jour…', 'Checking for updates…')
+                    : content.check === 'current' ? t('Sol est à jour.', 'Sol is up to date.')
+                    : content.check === 'failed' ? t('La vérification a échoué. Vérifiez votre connexion et réessayez.', 'The check failed. Check your connection and try again.')
+                    : content.check === 'portable' ? t('Cette copie n’est pas installée : elle ne se met pas à jour toute seule.', 'This copy is not installed: it does not update itself.')
+                    : t('Les mises à jour se téléchargent automatiquement.', 'Updates are downloaded automatically.')
                   : content.update.ready
                     ? t(`La version ${content.update.version} est prête. Redémarrez Sol pour l’installer.`, `Version ${content.update.version} is ready. Restart Sol to install it.`)
                     : t(`Téléchargement de la version ${content.update.version} : ${content.update.percent} %`, `Downloading version ${content.update.version}: ${content.update.percent}%`)}
               </span>
             </span>
             {content.update?.ready && <button className="pill-action primary" onClick={() => send({ type: 'update.restart' })}>{t('Redémarrer', 'Restart')}</button>}
+            {!content.update && content.check !== 'portable' && (
+              <button className="pill-action" disabled={content.check === 'checking'} onClick={() => send({ type: 'update.check' })}>{t('Vérifier', 'Check')}</button>
+            )}
           </div>
           <div className="setting-row static">
             <span className="setting-text">

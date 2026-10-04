@@ -7,6 +7,7 @@ export type Tab = {
   title: string;
   pinned: boolean;
   groupId: string | null;
+  asleep?: boolean; // déchargé (fermé dans un groupe, épinglé fermé, ou pas encore rouvert)
   device: string | null; // simulateur : nom de l'appareil affiché
   zoom: number; // en pour cent
   loading: boolean;

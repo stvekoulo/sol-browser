@@ -163,6 +163,7 @@ public sealed class BrowserController
             case "import.run": _ = ImportAsync(id, c.Query!); return;
             case "import.csv": _ = ImportCsvAsync(fromSettings: c.Id == "settings"); return;
             case "update.later": _updateDismissed = true; UpdateDock(); return;
+            case "update.check": _updateDismissed = false; _ = Program.CheckForUpdateAsync(); return;
             case "update.restart":
                 if (Program.Update is not { Ready: true }) return;
                 SaveSession();
@@ -418,6 +419,7 @@ public sealed class BrowserController
         popup = "settings",
         version = typeof(App).Assembly.GetName().Version?.ToString(3) ?? "",
         update = Program.Update is { } update ? new { version = update.Version, percent = update.Percent, ready = update.Ready } : null,
+        check = Program.Check,
         zoom = _tabs.ActiveId is { } activeId ? (int)Math.Round(_pages.ZoomOf(activeId) * 100) : 100,
         theme = Math.Max(0, Array.IndexOf(Themes, _settings.Theme)),
         language = Math.Max(0, Array.IndexOf(Languages, _settings.Language)),
@@ -668,6 +670,10 @@ public sealed class BrowserController
     }
 
     /// <summary>Raccourci clavier : agit sur l'onglet actif.</summary>
+    /// <summary>La page active s'est-elle servie d'un balayage horizontal (carrousel, zone qui défile) tout récemment ?</summary>
+    public Task<bool> PageUsedSidewaysAsync(double withinMs) =>
+        _tabs.ActiveId is { } id ? _pages.UsedSidewaysAsync(id, withinMs) : Task.FromResult(false);
+
     public void Shortcut(string action)
     {
         var active = _tabs.ActiveId;
@@ -717,17 +723,20 @@ public sealed class BrowserController
 
     private void Close(string id)
     {
-        // Fermer un onglet épinglé ferme sa page, pas son emplacement : il reste à sa place parmi les épinglés, déchargé,
-        // et se recharge quand on y revient. « Détacher l'onglet » puis fermer le retire pour de bon.
-        if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { Pinned: true } pinned && !_shortcutTabs.ContainsValue(id))
+        // Fermer un onglet épinglé, ou rangé dans un groupe, ferme sa page, pas son emplacement : il reste à sa place,
+        // déchargé, et se recharge quand on y revient. Pour le retirer pour de bon : le fermer une seconde fois quand il
+        // est dans un groupe (il est alors déjà déchargé), ou « Détacher l'onglet » puis fermer quand il est épinglé.
+        if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { } kept && !_shortcutTabs.ContainsValue(id)
+            && (kept.Pinned || (kept.GroupId is not null && !_pages.IsAsleep(id))))
         {
             if (_tabs.ActiveId == id)
             {
-                if (_tabs.Tabs.FirstOrDefault(t => !t.Pinned) is { } next) Activate(next.Id);
+                var others = _tabs.Tabs.Where(t => !t.Pinned && t.Id != id).ToList();
+                if ((others.FirstOrDefault(t => !_pages.IsAsleep(t.Id)) ?? others.FirstOrDefault()) is { } next) Activate(next.Id);
                 else Open(_settings.HomePage);
             }
             _pages.Remove(id);
-            _pages.AddAsleep(pinned);
+            _pages.AddAsleep(kept);
             _restored.Add(id); // son rechargement ne sera pas une nouvelle visite
             _split.OnTabClosed(id);
             _network.Forget(id);
@@ -1546,6 +1555,7 @@ public sealed class BrowserController
             {
                 id = t.Id, url = t.Url, title = t.Title, pinned = t.Pinned,
                 groupId = t.GroupId,
+                asleep = _pages.IsAsleep(t.Id), // déchargé : affiché atténué, il se recharge quand on y revient
                 device = _pages.DeviceOf(t.Id) is { } simulated ? DeviceLabel(simulated) : null, // simulateur : appareil affiché
                 zoom = (int)Math.Round(_pages.ZoomOf(t.Id) * 100),
                 loading = _pages.IsLoading(t.Id),
