@@ -36,6 +36,8 @@
       </Grid>
       </Grid>
     </Grid>
+    <!-- Accueil de première ouverture : toute la fenêtre, créé seulement quand il sert. -->
+    <WebView2 x:Name="Welcome" Grid.RowSpan="2" Visibility="Collapsed" Canvas.ZIndex="40" />
     <!-- Pastille du balayage à deux doigts (page précédente ou suivante) : sort du bord pendant le geste. -->
     <Border x:Name="SwipeHint" Grid.Row="1" Width="48" Height="48" CornerRadius="24" Margin="14,0,14,0"
             Background="#E61C1C1E" BorderBrush="#33FFFFFF" BorderThickness="1"

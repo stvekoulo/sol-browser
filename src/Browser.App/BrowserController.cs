@@ -30,8 +30,11 @@ public sealed class BrowserController
     private readonly PanelHost _tools; // panneau du bas : outils de développement
     private readonly NetworkInspector _network;
 
-    public BrowserController(Window window, PageHost pages, UiBridge bridge, PopupHost popup, DockHost dock, PanelHost panel, Settings settings)
+    private readonly WelcomeHost _welcome;
+
+    public BrowserController(Window window, PageHost pages, UiBridge bridge, PopupHost popup, DockHost dock, PanelHost panel, WelcomeHost welcome, Settings settings)
     {
+        _welcome = welcome;
         (_window, _pages, _bridge, _popup, _dock, _tools, _settings) = (window, pages, bridge, popup, dock, panel, settings);
         _network = new NetworkInspector(panel.Post);
         Directory.CreateDirectory(AppPaths.DataDir);
@@ -73,7 +76,8 @@ public sealed class BrowserController
     }
 
     private static string T(string fr, string en) => Language.T(fr, en);
-    private static string ProfileName(string id) => id == Profiles.Default ? T("Défaut", "Default") : Profiles.NameOf(AppPaths.BaseDir, id);
+    private string ProfileName(string id) =>
+        id != Profiles.Default ? Profiles.NameOf(AppPaths.BaseDir, id) : _settings.ProfileName.Length > 0 ? _settings.ProfileName : T("Défaut", "Default");
 
     public void Execute(Command c)
     {
@@ -137,6 +141,20 @@ public sealed class BrowserController
                 return;
             // Réglages d'uBlock Origin Lite (listes de filtres, sites sans filtrage) : sa propre page, dans un onglet.
             case "blocker.options": if (AdBlock.ExtensionId is { } extension) Open($"chrome-extension://{extension}/dashboard.html"); break;
+            case "welcome.open": HidePopup(); _ = _welcome.ShowAsync(); return;
+            case "welcome.ready": PostWelcome(); return;
+            case "welcome.name":
+                _settings.ProfileName = new string(c.Title!.Where(ch => !char.IsControl(ch)).ToArray()).Trim() is { Length: <= 40 } name ? name : "";
+                JsonFileStore.Save(AppPaths.Settings, _settings);
+                Refresh();
+                return;
+            case "welcome.done":
+                _settings.Onboarded = true;
+                JsonFileStore.Save(AppPaths.Settings, _settings);
+                _welcome.Hide();
+                Refresh();
+                return;
+            case "import.run": _ = ImportAsync(id, c.Query!); return;
             case "device.compare": SetComparison(id, c.Query!); return;
             case "device.rotate": _pages.RotateDevice(id); return;
             case "device.set": _pages.SetDevice(id, c.Query!.Length == 0 ? null : c.Query); HidePopup(); return;
@@ -174,6 +192,8 @@ public sealed class BrowserController
                 {
                     RestoreSession();
                     foreach (var shortcut in _settings.Shortcuts.Where(s => s.Icon is null)) _ = FetchShortcutIconAsync(shortcut);
+                    // Première ouverture de ce profil : l'accueil (pas dans une fenêtre privée, qui ne garde rien).
+                    if (!_settings.Onboarded && !AppPaths.Private) _ = _welcome.ShowAsync();
                 }
                 foreach (var tabId in _favicons.Keys) PostFavicon(tabId);
                 break;
@@ -461,6 +481,44 @@ public sealed class BrowserController
         var asleep = _pages.AsleepCount;
         return T($"Met en veille les onglets inactifs, puis les décharge après 30 minutes. Utilisé : {megabytes} Mo, {asleep} onglet{(asleep > 1 ? "s" : "")} déchargé{(asleep > 1 ? "s" : "")}.",
             $"Suspends inactive tabs, then unloads them after 30 minutes. In use: {megabytes} MB, {asleep} tab{(asleep == 1 ? "" : "s")} unloaded.");
+    }
+
+    // Accueil : ce qu'il affiche au départ (réglages en cours, navigateurs trouvés sur l'ordinateur).
+    private IReadOnlyList<ImportSource> _importSources = [];
+    private const int ImportedHistory = 5000; // pages d'historique reprises, les plus récentes
+
+    private void PostWelcome()
+    {
+        _importSources = BrowserImport.Detect(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData));
+        _bridge.BroadcastTheme();
+        _welcome.Post(JsonSerializer.Serialize(new
+        {
+            welcome = "state",
+            first = !_settings.Onboarded,
+            name = _settings.ProfileName,
+            theme = Math.Max(0, Array.IndexOf(Themes, _settings.Theme)),
+            font = Math.Max(0, Array.IndexOf(Fonts, _settings.Font)),
+            language = Math.Max(0, Array.IndexOf(Languages, _settings.Language)),
+            engine = Math.Max(0, Array.FindIndex(Engines, e => e.Search == _settings.SearchUrlTemplate)),
+            engines = Engines.Select(e => e.Name),
+            blocker = _settings.BlockAds,
+            pip = _settings.AutoPip,
+            browsers = _importSources.Select(s => new { id = s.Id, name = s.Name, profiles = s.Profiles.Select(p => new { folder = p.Folder, name = p.Name }) }),
+        }));
+    }
+
+    // Reprend les favoris et l'historique d'un profil d'un autre navigateur. La lecture des fichiers se fait hors du fil
+    // de l'interface ; seul un profil détecté par le navigateur lui-même est accepté.
+    private async Task ImportAsync(string browser, string folder)
+    {
+        if (BrowserImport.ProfileDir(_importSources, browser, folder) is not { } dir) return;
+        var temp = Path.Combine(AppPaths.DataDir, "import");
+        var (bookmarks, visits) = await Task.Run(() => (BrowserImport.ReadBookmarks(dir), BrowserImport.ReadHistory(dir, ImportedHistory, temp)));
+        try { _db.Import(bookmarks, visits); }
+        catch (Microsoft.Data.Sqlite.SqliteException) { (bookmarks, visits) = ([], []); }
+        _welcome.Post(JsonSerializer.Serialize(new { welcome = "imported", id = browser, folder, bookmarks = bookmarks.Count, history = visits.Count }));
+        Refresh();
     }
 
     private static readonly string[] Fonts = ["default", "system", "inter", "inter-bold", "sf", "sf-bold"];

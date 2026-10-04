@@ -44,6 +44,26 @@ public sealed class BrowserDb : IDisposable
         ON CONFLICT(url) DO UPDATE SET title = $title
         """, ("$url", url), ("$title", title), ("$added", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
 
+    /// <summary>
+    /// Reprend les favoris et l'historique d'un autre navigateur, en une seule opération. Un favori déjà là garde son
+    /// titre ; une page déjà visitée additionne ses visites et garde le titre et la date de la visite la plus récente.
+    /// </summary>
+    public void Import(IEnumerable<Bookmark> bookmarks, IEnumerable<ImportedVisit> visits)
+    {
+        using var transaction = _db.BeginTransaction();
+        var added = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        foreach (var b in bookmarks)
+            Exec("INSERT INTO bookmarks (url, title, added) VALUES ($url, $title, $added) ON CONFLICT(url) DO NOTHING",
+                ("$url", b.Url), ("$title", b.Title.Length > 0 ? b.Title : b.Url), ("$added", added++));
+        foreach (var v in visits)
+            Exec("""
+                INSERT INTO visits (url, title, count, last) VALUES ($url, $title, $count, $last)
+                ON CONFLICT(url) DO UPDATE SET count = count + $count,
+                    title = CASE WHEN $last > last THEN $title ELSE title END, last = MAX(last, $last)
+                """, ("$url", v.Url), ("$title", v.Title), ("$count", v.Count), ("$last", v.Last.ToUnixTimeMilliseconds()));
+        transaction.Commit();
+    }
+
     public void RemoveBookmark(string url) => Exec("DELETE FROM bookmarks WHERE url = $url", ("$url", url));
 
     public bool IsBookmarked(string url)

@@ -30,6 +30,10 @@ public sealed class Settings
     public string HomePage { get; set; } = DefaultHomePage;
     /// <summary>Langue de l'interface : "system" (celle de Windows), "fr" ou "en".</summary>
     public string Language { get; set; } = "system";
+    /// <summary>L'accueil de première ouverture (nom, import, apparence) a été vu.</summary>
+    public bool Onboarded { get; set; }
+    /// <summary>Nom que l'utilisateur donne au profil par défaut ; vide : « Défaut ».</summary>
+    public string ProfileName { get; set; } = "";
     /// <summary>
     /// Police de l'interface : "default" (celle d'origine), "system" (celle de Windows), "inter" ou "sf" (SF Pro),
     /// ces deux dernières livrées avec le navigateur, et leurs versions grasses "inter-bold" et "sf-bold".

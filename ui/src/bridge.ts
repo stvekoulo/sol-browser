@@ -81,7 +81,10 @@ const NEUTRAL = { light: 'rgb(243, 243, 246)', dark: 'rgb(30, 30, 33)' };
 function applyTheme(ev: HostEvent) {
   const root = document.documentElement.style;
   document.documentElement.dataset.font = ev.font ?? 'default';
-  const mode = ev.mode ?? 'page';
+  // L'accueil est clair par défaut : il ne suit pas la page ouverte derrière lui, seulement un thème choisi exprès.
+  const welcome = location.hash === '#welcome';
+  const mode = welcome && (ev.mode ?? 'page') === 'page' ? 'light' : ev.mode ?? 'page';
+  if (welcome) ev = { ...ev, accent: null };
   const dark = mode === 'page' ? !!ev.dark : mode === 'system' ? !!ev.systemDark : mode === 'dark';
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
   root.setProperty('--page-bg', mode === 'page' ? ev.bg! : dark ? NEUTRAL.dark : NEUTRAL.light);

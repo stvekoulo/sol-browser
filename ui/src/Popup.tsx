@@ -272,6 +272,13 @@ export default function Popup() {
           )}
           <div className="setting-row static">
             <span className="setting-text">
+              <span className="row-title">{t('Autres navigateurs', 'Other browsers')}</span>
+              <span className="row-sub">{t('Reprendre les favoris et l’historique de Chrome, Edge, Brave, Comet…', 'Bring over bookmarks and history from Chrome, Edge, Brave, Comet…')}</span>
+            </span>
+            <button className="pill-action" onClick={() => send({ type: 'welcome.open' })}>{t('Importer', 'Import')}</button>
+          </div>
+          <div className="setting-row static">
+            <span className="setting-text">
               <span className="row-title">{t('Accès accordés aux sites', 'Site permissions')}</span>
               <span className="row-sub">
                 {content.permissions === 0

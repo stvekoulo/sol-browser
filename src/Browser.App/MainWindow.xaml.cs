@@ -41,6 +41,8 @@ public sealed partial class MainWindow : Window
         Title = AppPaths.Profile == Profiles.Default ? "Sol" : $"Sol — {Profiles.NameOf(AppPaths.BaseDir, AppPaths.Profile)}";
         // Pas de barre de titre système : l'interface dessine la sienne. La bordure reste, pour le redimensionnement.
         if (AppWindow.Presenter is OverlappedPresenter presenter) presenter.SetBorderAndTitleBar(true, false);
+        var icon = Path.Combine(AppContext.BaseDirectory, "Assets", "Sol.ico");
+        if (File.Exists(icon)) AppWindow.SetIcon(icon);
         PlaceLikePreviousWindow();
 
         // Les touches tapées dans une page partent dans le processus du moteur et n'atteignent pas la fenêtre.
@@ -101,7 +103,10 @@ public sealed partial class MainWindow : Window
         bridge.AttachPopup(panelBridge);
         var panel = new PanelHost(PanelRow, panelBridge, () => panelBridge.InitAsync(uiFolder, c => _controller!.Execute(c)), settings);
         WirePanelGrip(panel, settings);
-        _controller = new BrowserController(this, pages, bridge, popup, dock, panel, settings);
+        var welcomeBridge = new UiBridge(Welcome, "index.html#welcome");
+        bridge.AttachPopup(welcomeBridge);
+        var welcome = new WelcomeHost(Welcome, welcomeBridge, () => welcomeBridge.InitAsync(uiFolder, c => _controller!.Execute(c)));
+        _controller = new BrowserController(this, pages, bridge, popup, dock, panel, welcome, settings);
         WireDivider();
         _sidebar.Resize(settings.SidebarWidth);
         WireSidebarGrip(settings);

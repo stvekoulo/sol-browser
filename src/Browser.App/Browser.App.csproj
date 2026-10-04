@@ -7,6 +7,7 @@
     <AssemblyName>Sol</AssemblyName>
     <Product>Sol</Product>
     <AssemblyTitle>Sol browser</AssemblyTitle>
+    <ApplicationIcon>Assets\Sol.ico</ApplicationIcon>
     <Platforms>x64;x86;ARM64</Platforms>
     <!-- 64 bits par défaut ; tools/publish.ps1 produit aussi ARM64 et 32 bits. -->
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
@@ -27,6 +28,7 @@
   <ItemGroup>
     <!-- Interface React compilée (npm run build dans ui/) -->
     <Content Include="inject\**" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Sol.ico" CopyToOutputDirectory="PreserveNewest" />
     <!-- uBlock Origin Lite, récupéré par tools/get-ublock.ps1 (absent : le navigateur garde son blocage par domaines) -->
     <Content Include="extensions\**" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\ui\dist\**" Link="ui\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />

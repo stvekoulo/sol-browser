@@ -204,3 +204,26 @@ public sealed class PanelHost(Microsoft.UI.Xaml.Controls.RowDefinition row, UiBr
 
     public void Post(string json) => bridge.Post(json);
 }
+
+/// <summary>
+/// Accueil : une vue d'interface qui couvre toute la fenêtre, à la première ouverture ou quand l'utilisateur demande à
+/// reprendre les données d'un autre navigateur. Créée seulement quand elle sert.
+/// </summary>
+public sealed class WelcomeHost(Microsoft.UI.Xaml.Controls.WebView2 view, UiBridge bridge, Func<Task> init)
+{
+    private bool _ready;
+
+    public bool IsOpen => view.Visibility == Microsoft.UI.Xaml.Visibility.Visible;
+
+    public async Task ShowAsync()
+    {
+        view.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+        if (_ready) { bridge.Post("""{"welcome":"reset"}"""); return; }
+        _ready = true;
+        await init();
+    }
+
+    public void Hide() => view.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+
+    public void Post(string json) => bridge.Post(json);
+}

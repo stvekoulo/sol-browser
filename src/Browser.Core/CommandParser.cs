@@ -35,6 +35,8 @@ public static class CommandParser
         ["device.set"] = ["id", "query"], ["device.rotate"] = ["id"], ["device.compare"] = ["id", "query"],
         ["network.toggle"] = [], ["network.ready"] = [], ["network.clear"] = [], ["network.detail"] = ["id"],
         ["blocker.options"] = [],
+        ["welcome.ready"] = [], ["welcome.open"] = [], ["welcome.done"] = [], ["welcome.name"] = ["title"],
+        ["import.run"] = ["id", "query"],
         ["ui.ready"] = [],
     };
 
