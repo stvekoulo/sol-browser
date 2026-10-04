@@ -99,7 +99,8 @@ public sealed partial class MainWindow : Window
         var dock = new DockHost(DockFrame, Dock, dockBridge, () => dockBridge.InitAsync(uiFolder, c => _controller!.Execute(c)));
         var panelBridge = new UiBridge(Panel, "index.html#panel");
         bridge.AttachPopup(panelBridge);
-        var panel = new PanelHost(PanelRow, panelBridge, () => panelBridge.InitAsync(uiFolder, c => _controller!.Execute(c)));
+        var panel = new PanelHost(PanelRow, panelBridge, () => panelBridge.InitAsync(uiFolder, c => _controller!.Execute(c)), settings);
+        WirePanelGrip(panel, settings);
         _controller = new BrowserController(this, pages, bridge, popup, dock, panel, settings);
         WireDivider();
         _sidebar.Resize(settings.SidebarWidth);
@@ -268,6 +269,31 @@ public sealed partial class MainWindow : Window
     }
 
     [DllImport("user32.dll")] private static extern uint GetDoubleClickTime();
+
+    // Bord haut du panneau du bas : même scrutation de la souris ; la hauteur choisie est enregistrée au relâchement.
+    private void WirePanelGrip(PanelHost panel, Settings settings)
+    {
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+        timer.Tick += (_, _) =>
+        {
+            var button = GetSystemMetrics(23 /* SM_SWAPBUTTON */) != 0 ? 0x02 : 0x01;
+            if ((GetAsyncKeyState(button) & 0x8000) == 0)
+            {
+                timer.Stop();
+                JsonFileStore.Save(AppPaths.Settings, settings);
+                return;
+            }
+            if (!GetCursorPos(out var point) || !ScreenToClient(_hwnd, ref point) || !GetClientRect(_hwnd, out var rect)) return;
+            // Le curseur est en pixels de l'écran, le panneau en unités d'affichage ; les pages gardent au moins 160 de haut.
+            var scale = Root.XamlRoot.RasterizationScale;
+            panel.Resize(Math.Min((rect.Bottom - point.Y) / scale + 4, rect.Bottom / scale - 52 - 160));
+        };
+        PanelGrip.PointerPressed += (_, e) =>
+        {
+            e.Handled = true;
+            timer.Start();
+        };
+    }
 
     private DispatcherTimer CreateDividerTimer()
     {

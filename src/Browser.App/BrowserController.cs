@@ -1218,6 +1218,9 @@ public sealed class BrowserController
         for (var i = 0; i < tabs.Count && i < session.ShortcutOf.Count; i++)
             if (tabs[i].Pinned && session.ShortcutOf[i] is { } rank && rank >= 0 && rank < _settings.Shortcuts.Count)
                 _shortcutTabs.TryAdd(_settings.Shortcuts[rank], tabs[i].Id);
+        // Icônes des sites : affichées tout de suite, sans attendre que chaque onglet soit rechargé.
+        for (var i = 0; i < tabs.Count && i < session.Icons.Count; i++)
+            if (session.Icons[i].StartsWith("data:image/", StringComparison.Ordinal)) _favicons[tabs[i].Id] = session.Icons[i];
         // Appareil simulé : repris quand l'onglet se réveille.
         for (var i = 0; i < tabs.Count && i < session.Devices.Count; i++)
             if (session.Devices[i].Split('|') is [{ Length: > 0 } device, .. var rest]) _pages.WantDevice(tabs[i].Id, device, rest.Contains("L"));
@@ -1241,6 +1244,8 @@ public sealed class BrowserController
             _split.Resize(session.Ratio);
     }
 
+    private const int MaxSessionIcon = 48_000; // caractères : une icône plus lourde n'est pas gardée dans la session
+
     private void SaveSession()
     {
         if (AppPaths.Private) return; // navigation privée : la fenêtre ne laisse pas d'onglets derrière elle
@@ -1251,6 +1256,7 @@ public sealed class BrowserController
             Urls = tabs.Select(t => t.Url).ToList(),
             Titles = tabs.Select(t => t.Title).ToList(),
             PinnedCount = _tabs.PinnedCount,
+            Icons = tabs.Select(t => _favicons.GetValueOrDefault(t.Id) is { Length: <= MaxSessionIcon } icon ? icon : "").ToList(),
             Devices = tabs.Select(t => _pages.DeviceState(t.Id) is var (device, landscape) ? device + (landscape ? "|L" : "") : "").ToList(),
             ShortcutOf = tabs.Select(t => _settings.Shortcuts.FindIndex(s => _shortcutTabs.GetValueOrDefault(s) == t.Id) is >= 0 and var rank ? rank : (int?)null).ToList(),
             Groups = _tabs.Groups.Select(g => new SessionGroup { Name = g.Name, Color = g.Color, Icon = g.Icon, Collapsed = g.Collapsed }).ToList(),

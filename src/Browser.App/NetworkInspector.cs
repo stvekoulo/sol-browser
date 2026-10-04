@@ -177,19 +177,27 @@ public sealed class NetworkInspector(Action<string> post)
 /// Panneau du bas (outils de développement) : une vue d'interface dans sa propre rangée, sous les pages. Elle n'est
 /// créée qu'à la première ouverture : un navigateur qui ne s'en sert pas ne la paie pas.
 /// </summary>
-public sealed class PanelHost(Microsoft.UI.Xaml.Controls.RowDefinition row, UiBridge bridge, Func<Task> init)
+public sealed class PanelHost(Microsoft.UI.Xaml.Controls.RowDefinition row, UiBridge bridge, Func<Task> init, Browser.Core.Settings settings)
 {
-    private const double Height = 300;
+    public const double MinHeight = 140, MaxHeight = 900;
     private bool _ready;
 
     public bool IsOpen => row.Height.Value > 0;
 
     public async Task ShowAsync()
     {
-        row.Height = new Microsoft.UI.Xaml.GridLength(Height);
+        row.Height = new Microsoft.UI.Xaml.GridLength(Math.Clamp(settings.PanelHeight, MinHeight, MaxHeight));
         if (_ready) return;
         _ready = true;
         await init();
+    }
+
+    /// <summary>Change la hauteur du panneau ouvert (son bord haut est tiré à la souris).</summary>
+    public void Resize(double height)
+    {
+        if (!IsOpen) return;
+        settings.PanelHeight = Math.Clamp(Math.Round(height), MinHeight, MaxHeight);
+        row.Height = new Microsoft.UI.Xaml.GridLength(settings.PanelHeight);
     }
 
     public void Hide() => row.Height = new Microsoft.UI.Xaml.GridLength(0);

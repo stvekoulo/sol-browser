@@ -48,6 +48,8 @@ public sealed class Settings
     public double PipBottom { get; set; } = 18;
     /// <summary>Largeur de la carte latérale, réglée en tirant son bord droit.</summary>
     public double SidebarWidth { get; set; } = 296;
+    /// <summary>Hauteur du panneau des outils de développement, réglée en tirant son bord haut.</summary>
+    public double PanelHeight { get; set; } = 300;
     /// <summary>Écrans affichés côte à côte par la comparaison d'écrans ; vide : le choix par défaut.</summary>
     public List<string> CompareDevices { get; set; } = new();
     /// <summary>Raccourcis de la carte latérale. Ceux-ci sont proposés au départ ; l'utilisateur les modifie ou les retire.</summary>
@@ -107,6 +109,8 @@ public sealed class Session
     public List<int?> ShortcutOf { get; set; } = new();
     /// <summary>Pour chaque adresse, l'appareil simulé (vide : aucun) ; suivi de « |L » s'il est tourné.</summary>
     public List<string> Devices { get; set; } = new();
+    /// <summary>Pour chaque adresse, l'icône du site (en data:, ou vide) : un onglet rouvert l'affiche avant d'être rechargé.</summary>
+    public List<string> Icons { get; set; } = new();
 }
 
 public sealed class SessionGroup

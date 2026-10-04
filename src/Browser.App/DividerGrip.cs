@@ -8,3 +8,9 @@ public sealed class DividerGrip : Grid
 {
     public DividerGrip() => ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.SizeWestEast);
 }
+
+/// <summary>Poignée horizontale (bord haut du panneau du bas) : curseur de redimensionnement vertical.</summary>
+public sealed class RowGrip : Grid
+{
+    public RowGrip() => ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.SizeNorthSouth);
+}
