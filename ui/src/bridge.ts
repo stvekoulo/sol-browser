@@ -77,7 +77,8 @@ export type HostEvent = {
 };
 
 // Fonds neutres des thèmes imposés. En thème par défaut, le fond de l'interface est celui de la page.
-const NEUTRAL = { light: 'rgb(243, 243, 246)', dark: 'rgb(30, 30, 33)' };
+// Le sombre est proche du noir des sites sombres : « Sombre » et « Système » rendent comme « Par défaut » sur un tel site.
+const NEUTRAL = { light: 'rgb(243, 243, 246)', dark: 'rgb(16, 16, 18)' };
 
 function applyTheme(ev: HostEvent) {
   const root = document.documentElement.style;
