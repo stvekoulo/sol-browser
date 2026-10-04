@@ -25,6 +25,13 @@ dotnet publish $project -c Release -r win-x64 --self-contained true -p:PublishRe
 if ($LASTEXITCODE -ne 0) { throw 'Publication en échec' }
 Copy-Item (Join-Path $root 'THIRD-PARTY-NOTICES.md') $app
 
+# Bibliothèques d'intelligence artificielle de Windows, livrées d'office avec le kit d'interface et dont le navigateur
+# ne se sert pas : 38 Mo de moins. (Vérifié : le navigateur démarre et fonctionne sans elles.)
+foreach ($unused in 'onnxruntime.dll', 'DirectML.dll') {
+    $file = Join-Path $app $unused
+    if (Test-Path $file) { [IO.File]::Delete($file) }
+}
+
 $zip = Join-Path $out "Navigateur-$version-win-x64.zip"
 if (Test-Path $zip) { [IO.File]::Delete($zip) }
 Compress-Archive -Path (Join-Path $app '*') -DestinationPath $zip

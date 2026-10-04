@@ -25,6 +25,9 @@ public sealed class NetworkInspector(Action<string> post)
     private const int MaxEntries = 400, MaxBody = 60_000, MaxPostData = 20_000;
     private readonly Dictionary<string, List<Entry>> _log = new();
     private readonly HashSet<string> _listening = new();
+    // Les récepteurs d'évènements du moteur sont gardés ici : sans référence, le ramasse-miettes les libère, les
+    // requêtes n'arrivent plus et le moteur finit par appeler un objet disparu (plantage constaté en version publiée).
+    private readonly Dictionary<string, List<CoreWebView2DevToolsProtocolEventReceiver>> _receivers = new();
     private bool _postPending;
 
     /// <summary>Onglet affiché par le panneau ; null : panneau fermé.</summary>
@@ -74,8 +77,12 @@ public sealed class NetworkInspector(Action<string> post)
         try { await core.CallDevToolsProtocolMethodAsync("Network.enable", "{}"); }
         catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { _listening.Remove(tabId); }
 
-        void On(CoreWebView2 target, string name, Action<JsonElement> handle) =>
-            target.GetDevToolsProtocolEventReceiver(name).DevToolsProtocolEventReceived += (_, e) =>
+        void On(CoreWebView2 target, string name, Action<JsonElement> handle)
+        {
+            var receiver = target.GetDevToolsProtocolEventReceiver(name);
+            if (!_receivers.TryGetValue(tabId, out var kept)) _receivers[tabId] = kept = new List<CoreWebView2DevToolsProtocolEventReceiver>();
+            kept.Add(receiver);
+            receiver.DevToolsProtocolEventReceived += (_, e) =>
             {
                 try
                 {
@@ -85,6 +92,7 @@ public sealed class NetworkInspector(Action<string> post)
                 catch (JsonException) { return; }
                 if (Shown == tabId) PostSoon();
             };
+        }
     }
 
     public void Clear(string tabId)
@@ -98,6 +106,7 @@ public sealed class NetworkInspector(Action<string> post)
     {
         _log.Remove(tabId);
         _listening.Remove(tabId);
+        _receivers.Remove(tabId);
     }
 
     // Les requêtes arrivent par rafales : le panneau est mis à jour quatre fois par seconde au plus.
