@@ -67,7 +67,9 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         {
             _loading.Remove(tab.Id);
             RuntimeChanged?.Invoke();
-            if (e.IsSuccess) { if (!_errorUrl.ContainsKey(tab.Id)) Loaded?.Invoke(tab.Id); }
+            // Une réponse d'erreur du serveur (403, 404, 500…) est quand même sa page à lui : on la laisse affichée. Les
+            // vérifications anti-robots, par exemple, répondent 403 puis rechargent la vraie page.
+            if (e.IsSuccess || e.HttpStatusCode >= 400) { if (!_errorUrl.ContainsKey(tab.Id)) Loaded?.Invoke(tab.Id); }
             // Ni une navigation annulée (arrêt, remplacement), ni un lien devenu téléchargement ne sont des erreurs.
             else if (e.WebErrorStatus != CoreWebView2WebErrorStatus.OperationCanceled && !_downloading.Remove(tab.Id))
                 ShowError(tab.Id, core, _target.GetValueOrDefault(tab.Id, core.Source), ErrorKind(e.WebErrorStatus));

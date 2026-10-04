@@ -140,7 +140,7 @@ public sealed class BrowserController
                 if (_network.Shown is { } inspected && _pages.CoreOf(inspected) is { } inspectedCore) _ = _network.PostDetailAsync(inspected, inspectedCore, id);
                 return;
             // Réglages d'uBlock Origin Lite (listes de filtres, sites sans filtrage) : sa propre page, dans un onglet.
-            case "blocker.options": if (AdBlock.ExtensionId is { } extension) Open($"chrome-extension://{extension}/dashboard.html"); break;
+            case "blocker.options": if (_settings.BlockAds && AdBlock.ExtensionId is { } extension) Open($"chrome-extension://{extension}/dashboard.html"); break;
             case "welcome.open": HidePopup(); _ = _welcome.ShowAsync(); return;
             case "welcome.ready": PostWelcome(); return;
             case "welcome.name":
@@ -392,7 +392,8 @@ public sealed class BrowserController
         language = Math.Max(0, Array.IndexOf(Languages, _settings.Language)),
         home = _settings.HomePage,
         font = Math.Max(0, Array.IndexOf(Fonts, _settings.Font)),
-        ublock = AdBlock.ExtensionId is null ? null : AdBlock.ExtensionVersion, // version installée ; null : extension absente
+        // Version installée ; null : extension absente, ou coupée (ses pages de réglages ne s'ouvrent pas tant qu'elle l'est).
+        ublock = AdBlock.ExtensionId is null || !_settings.BlockAds ? null : AdBlock.ExtensionVersion,
         engine = Math.Max(0, Array.FindIndex(Engines, e => e.Search == _settings.SearchUrlTemplate)),
         engines = Engines.Select(e => e.Name),
         // Réponses retenues, site par site : chacune peut être oubliée séparément.
