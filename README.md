@@ -8,6 +8,8 @@
 
 ![The browser showing a page, with the tab sidebar on the left](docs/images/browser.png)
 
+![The same browser in its dark theme](docs/images/browser-dark.png)
+
 > A personal project, shared as is. Version 0.1.0 is an early release.
 
 ## What it does

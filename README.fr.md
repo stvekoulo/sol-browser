@@ -8,6 +8,8 @@
 
 ![Le navigateur affichant une page, la carte des onglets à gauche](docs/images/browser.png)
 
+![Le même navigateur en thème sombre](docs/images/browser-dark.png)
+
 > Un projet personnel, partagé tel quel. La version 0.1.0 est une première version.
 
 ## Ce qu'il fait
