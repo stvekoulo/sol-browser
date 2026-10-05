@@ -12,7 +12,7 @@ public static class ExtensionPackage
     {
         if (!Uri.TryCreate(input.Trim(), UriKind.Absolute, out var url) || url.Scheme != "https"
             || url.Host != "chromewebstore.google.com" || !url.AbsolutePath.StartsWith("/detail/", StringComparison.Ordinal))
-            throw new ArgumentException("Collez le lien d’une extension du Chrome Web Store.");
+            throw new ArgumentException("Ouvrez la fiche d’une extension sur le Chrome Web Store.");
         var id = url.AbsolutePath.TrimEnd('/').Split('/').Last();
         return ExtensionCatalog.IsId(id) ? id : throw new ArgumentException("Identifiant d’extension invalide.");
     }

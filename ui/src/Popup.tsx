@@ -10,6 +10,7 @@ type Content =
   | { popup: 'suggestions'; items: Item[] }
   | { popup: 'library'; tab?: 'history' | 'bookmarks' | null; bookmarks: Item[]; history: Item[] }
   | { popup: 'menu'; items: string[] }
+  | { popup: 'split-layout'; ratio: number }
   | { popup: 'downloads'; items: Download[] }
   | { popup: 'settings'; version: string; update: { version: string; percent: number; ready: boolean } | null; check: 'idle' | 'checking' | 'current' | 'failed' | 'portable'; zoom: number; uiScale: number; theme: number; language: number; home: string; font: number; ublock: string | null; engine: number; engines: string[]; sites: { origin: string; host: string; summary: string }[]; permissions: number; siteData: 'idle' | 'clearing' | 'done' | 'failed'; tint: Setting[]; items: Setting[] }
   | { popup: 'profiles'; items: Profile[] }
@@ -34,6 +35,7 @@ function menuIconPath(label: string): string {
   if (isClosing(label)) return 'M4.5 4.5l7 7M11.5 4.5l-7 7';
   if (has('pivoter', 'rotate')) return 'M12.8 8a4.8 4.8 0 1 1-1.4-3.4M12.8 3.2v3h-3';
   if (has('comparer', 'compare', 'écrans', 'screens')) return 'M1.5 4.5h3.5v7H1.5zM6.5 3.5h3v9h-3zM11 5.5h3.5v5H11z';
+  if (has('macbook', 'imac')) return 'M3.5 3.5h9v6.5h-9zM1.5 12.5h13';
   if (has('mobile', 'iphone', 'ipad', 'appareil', 'device')) return 'M5 2.5h6v11H5zM7.3 11.5h1.4';
   if (has('ordinateur', 'desktop')) return 'M2.5 3.5h11v7h-11zM6 13h4M8 10.5V13';
   if (has('zone', 'area')) return 'M2.5 5.5v-3h3M10.5 2.5h3v3M13.5 10.5v3h-3M5.5 13.5h-3v-3';
@@ -124,6 +126,19 @@ export default function Popup() {
         ))}
       </div>
     );
+
+  if (content.popup === 'split-layout')
+    return <div key={opening} ref={root} className="popup arriving split-layout-popup" role="menu" aria-label={t('Disposition des pages', 'Page layout')}>
+      <div className="split-layout-heading">{t('Disposition des pages', 'Page layout')}</div>
+      {[{ratio:1/3,label:t('Plus de place à droite','More room on the right')},{ratio:0.5,label:t('Deux pages égales','Equal pages')},{ratio:2/3,label:t('Plus de place à gauche','More room on the left')}].map(p =>
+        <button key={p.ratio} className="row split-layout-choice" role="menuitemradio" aria-checked={Math.abs(content.ratio-p.ratio)<0.01}
+          onClick={() => send({type:'split.resize',ratio:p.ratio})}>
+          <span className="split-layout-preview" aria-hidden><span style={{flex:p.ratio}}/><span style={{flex:1-p.ratio}}/></span>
+          <span className="row-title">{p.label}</span>
+          {Math.abs(content.ratio-p.ratio)<0.01 && <Icon d="M3 8l3 3 7-7" size={13}/>}
+        </button>)}
+      <div className="split-layout-hint">{t('Glissez le séparateur pour ajuster librement.', 'Drag the divider to adjust freely.')}</div>
+    </div>;
 
   if (content.popup === 'menu')
     return (

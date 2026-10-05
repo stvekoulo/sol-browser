@@ -53,6 +53,7 @@ public sealed class BrowserController
         _pages.RuntimeChanged += Refresh;
         _pages.NewTabRequested += url => { Open(url); Refresh(); };
         _pages.Loaded += RecordVisit;
+        _pages.StoreInstallRequested += url => _ = InstallStoreExtensionAsync(url);
         _pages.StartRequested += (id, command) =>
         {
             if (_closingWindow) return;
@@ -218,7 +219,11 @@ public sealed class BrowserController
             case "extension.add": _ = AddExtensionAsync(id); return;
             case "extension.folder": _ = AddExtensionFolderAsync(); return;
             case "extension.store":
-                AskName(T("Chrome Web Store", "Chrome Web Store"), T("Collez le lien d’une extension. Elle pourra accéder aux sites selon les permissions de son manifeste. Certaines fonctions Chrome restent incompatibles avec WebView2.", "Paste an extension link. It can access sites according to its manifest permissions. Some Chrome features remain incompatible with WebView2."), "https://chromewebstore.google.com/detail/…", T("Installer", "Install"), "", "extension.install"); return;
+                HidePopup(); Open("https://chromewebstore.google.com/"); break;
+            case "extension.current":
+                if (_tabs.ActiveId is { } storeTab && _pages.CoreOf(storeTab) is { } storeCore)
+                    _ = InstallStoreExtensionAsync(storeCore.Source);
+                return;
             case "extension.install": _ = InstallStoreExtensionAsync(c.Title!); return;
             case "extension.confirm": _ = ConfirmStoreExtensionAsync(id); return;
             case "extension.pin": _ = PinExtensionAsync(id); return;
@@ -342,7 +347,11 @@ public sealed class BrowserController
             case "nav.stop": _pages.Stop(id); break;
             case "split.open": Split(c.Id); break;
             case "split.close": CloseSplit(); break;
-            case "split.resize": _split.Resize(c.Ratio!.Value); break;
+            case "split.resize": _split.Resize(c.Ratio!.Value); HidePopup(); break;
+            case "split.menu":
+                if (_split.Contains(_tabs.ActiveId))
+                    _popup.Show(c.X!.Value - 260, c.Y!.Value, 260, JsonSerializer.Serialize(new { popup = "split-layout", ratio = _split.Ratio }), focus: true);
+                return;
             case "bookmark.add": if (IsWeb(c.Url!)) _db.AddBookmark(c.Url!, c.Title!); break;
             case "bookmark.remove": _db.RemoveBookmark(c.Url!); break;
             case "zoom.in" or "zoom.out" or "zoom.reset": Zoom(c.Id ?? _tabs.ActiveId, c.Type); return;
@@ -1832,7 +1841,7 @@ public sealed class BrowserController
             (simulated ? T("Changer d'appareil…", "Change device…") : T("Voir en mobile…", "View as mobile…"), () => _afterMenu = () =>
                 ShowMenu(x, y,
                 [
-                    .. Device.All.Where(d => !d.Desktop).Select(d => (DeviceLabel(d.Name), (Action?)(() => _afterMenu = () => _pages.SetDevice(tabId, d.Name)))),
+                    .. Device.All.Where(d => d.Kind != "desktop").Select(d => (DeviceLabel(d.Name), (Action?)(() => _afterMenu = () => _pages.SetDevice(tabId, d.Name)))),
                     ("", null),
                     (T("Comparer plusieurs écrans", "Compare several screens"), () => _afterMenu = () => _pages.SetDevice(tabId, PageHost.Comparison)),
                     (T("Choisir les écrans à comparer…", "Choose the screens to compare…"), () => _afterMenu = () => AskComparison(tabId)),
@@ -2118,6 +2127,7 @@ public sealed class BrowserController
                 canGoForward = _pages.CanGoForward(t.Id),
                 // Seules les pages affichées ont une étoile : inutile d'interroger la base pour les autres.
                 bookmarked = (t.Id == _tabs.ActiveId || (showSplit && _split.Contains(t.Id))) && _db.IsBookmarked(t.Url),
+                storeDetail = _pages.CoreOf(t.Id) is { } storePage && PageHost.IsStoreDetail(storePage.Source),
             }),
             groups = _tabs.Groups.Select(g => new { id = g.Id, name = g.Name, color = g.Color, icon = g.Icon, collapsed = g.Collapsed }),
             activeId = _tabs.ActiveId,

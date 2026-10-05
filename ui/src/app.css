@@ -235,7 +235,9 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .address-form input, .address-pill.editing .address-form input { min-width:0; padding:0 8px 0 34px; text-overflow:ellipsis; }
 .address-trail { position:static; flex:none; margin-right:6px; opacity:1; }
 .address-trail .zoom-chip { max-width:100px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.split-addresses .address-pill.focused { box-shadow:var(--shadow-glass-pill), inset 0 0 0 1.5px var(--border-active-tab); }
+.split-addresses .address-pill.focused { box-shadow:var(--shadow-glass-pill), inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent); }
+.store-install { color:var(--text); background:var(--bg-pill-solid); border:0; border-radius:999px; padding:6px 8px; font:inherit; font-size:12px; flex-shrink:0; }
+.store-install { color:var(--accent); font-weight:600; }
 .split-addresses:has(.editing) .address-pill.editing { flex-grow:3 !important; }
 .split-addresses .address-pill { min-width:64px; }
 @container address (max-width:300px) { .address-trail .zoom-chip, .address-trail button[aria-label*="Pivoter"], .address-trail button[aria-label*="Rotate"] { display:none; } }

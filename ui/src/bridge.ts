@@ -14,6 +14,7 @@ export type Tab = {
   canGoBack: boolean;
   canGoForward: boolean;
   bookmarked: boolean;
+  storeDetail?: boolean;
 };
 
 export type TabGroup = { id: string; name: string; color: string; icon: string; collapsed: boolean };

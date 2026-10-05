@@ -24,6 +24,12 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     public event Action<string>? Loaded;                         // id, page chargée avec succès
     public event Action<string>? PageFocused;
     public event Action<string, Command>? StartRequested;
+    public event Action<string>? StoreInstallRequested;
+    public static bool IsStoreDetail(string url)
+    {
+        try { ExtensionPackage.StoreId(url); return true; }
+        catch (ArgumentException) { return false; }
+    }
     public void PostStart(string id, string json)
     {
         if (Core(id) is { } core && core.Source == Settings.DefaultHomePage) core.PostWebMessageAsJson(json);
@@ -89,7 +95,10 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
             container.SizeChanged += (_, _) => ApplyLayout(_layout.Primary, _layout.Secondary, _layout.Ratio);
         }
         var view = new WebView2 { Visibility = Visibility.Collapsed, Opacity = 0, DefaultBackgroundColor = UiBridge.InitialBackground };
-        view.SizeChanged += (_, _) => _ = ApplyZoomAsync(tab.Id);
+        view.SizeChanged += (_, _) =>
+        {
+            _ = ApplyZoomAsync(tab.Id);
+        };
         _views[tab.Id] = view;
         view.GotFocus += (_, _) => { if (_visible.Contains(tab.Id) && _views.GetValueOrDefault(tab.Id) == view) PageFocused?.Invoke(tab.Id); };
         container.Children.Add(view);
@@ -109,6 +118,8 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         core.SetVirtualHostNameToFolderMapping("start.sol", Path.Combine(AppContext.BaseDirectory, "ui"), CoreWebView2HostResourceAccessKind.Deny);
         core.WebMessageReceived += (_, e) =>
         {
+            if (e.Source == core.Source && IsStoreDetail(core.Source) && e.WebMessageAsJson == "\"sol.store.install\"")
+            { StoreInstallRequested?.Invoke(core.Source); return; }
             if (e.Source != Settings.DefaultHomePage || core.Source != Settings.DefaultHomePage) return;
             if (CommandParser.Parse(e.TryGetWebMessageAsString()) is { } command && command.Type is "start.ready" or "start.navigate" or "start.group")
                 StartRequested?.Invoke(tab.Id, command);
@@ -130,7 +141,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
             _pdf.Remove(tab.Id);
             if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var document) && document.AbsolutePath.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)) _pdf.Add(tab.Id);
             core.Settings.IsZoomControlEnabled = IsPdf(tab.Id);
-            core.Settings.IsWebMessageEnabled = e.Uri == Settings.DefaultHomePage;
+            core.Settings.IsWebMessageEnabled = e.Uri == Settings.DefaultHomePage || IsStoreDetail(e.Uri);
             Navigating?.Invoke(core);
             DebugLog.Write($"navigation.start {tab.Id} #{e.NavigationId} redirect={e.IsRedirected}");
             if (_navigation.GetValueOrDefault(tab.Id) != e.NavigationId) _downloading.Remove(tab.Id);
@@ -140,6 +151,29 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
             _target[tab.Id] = _errorUrl.GetValueOrDefault(tab.Id, e.Uri);
             _loading.Add(tab.Id);
             RuntimeChanged?.Invoke();
+        };
+        core.DOMContentLoaded += async (_, _) =>
+        {
+            if (!IsStoreDetail(core.Source)) return;
+            try { await core.ExecuteScriptAsync("""
+                (() => {
+                  if (window.__solStore) return; window.__solStore = true;
+                  const matches = b => /^(Add to Chrome|Ajouter à Chrome|Ajouter à Sol|Add to Sol)$/i.test((b.textContent || '').trim());
+                  const update = () => document.querySelectorAll('button').forEach(b => {
+                    if (!matches(b)) return;
+                    if (b.disabled) b.disabled = false;
+                    b.removeAttribute('aria-disabled');
+                    const label = document.documentElement.lang.startsWith('fr') ? 'Ajouter à Sol' : 'Add to Sol';
+                    if (b.textContent.trim() !== label) b.textContent = label;
+                  });
+                  document.addEventListener('click', e => {
+                    const b = e.target.closest?.('button'); if (!b || !matches(b)) return;
+                    e.preventDefault(); e.stopImmediatePropagation(); window.chrome.webview.postMessage('sol.store.install');
+                  }, true);
+                  new MutationObserver(update).observe(document.body, {childList:true, subtree:true, attributes:true, attributeFilter:['disabled','aria-disabled']}); update();
+                })()
+                """); }
+            catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { }
         };
         core.WebResourceResponseReceived += (sender, e) =>
         {
@@ -585,7 +619,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
                 };
             }
             _mode[id] = name!;
-            var sims = _sims[id] = [new Sim(view, devices[0]) { Landscape = landscape && !devices[0].Desktop }];
+            var sims = _sims[id] = [new Sim(view, devices[0]) { Landscape = landscape && !devices[0].Computer }];
             LayoutSims(id);
             RuntimeChanged?.Invoke();
             await ApplySettingsAsync(id, core); // retire le flou du bas des pages
@@ -602,7 +636,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
                     mirror.Close();
                     return;
                 }
-                sims.Add(new Sim(mirror, device) { Landscape = landscape && !device.Desktop });
+                sims.Add(new Sim(mirror, device) { Landscape = landscape && !device.Computer });
                 LayoutSims(id);
                 foreach (var each in sims) await EmulateAsync(id, each); // l'échelle a changé pour tous
                 Follow(mirror, core.Source);
@@ -615,7 +649,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     public async void RotateDevice(string id)
     {
         if (!_sims.TryGetValue(id, out var sims)) return;
-        foreach (var sim in sims.Where(s => !s.Device.Desktop)) sim.Landscape = !sim.Landscape;
+        foreach (var sim in sims.Where(s => !s.Device.Computer)) sim.Landscape = !sim.Landscape;
         LayoutSims(id);
         foreach (var sim in sims.ToList()) await EmulateAsync(id, sim);
     }
@@ -727,10 +761,12 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
             (sim.Below, sim.Above) = DeviceFrame.Build(sim.Device, scale, sim.Landscape, _pageColor);
             var screenLeft = x + (sim.Shell.Width - sim.Screen.Width) / 2 * scale;
             (sim.View.Width, sim.View.Height) = (Math.Round(sim.Viewport.Width * scale), Math.Round(sim.Viewport.Height * scale));
-            // La page s'affiche sous la barre d'état : décalée vers le bas de sa hauteur.
-            foreach (var (part, left, top) in new[] { (sim.Below, x, 0.0), (sim.View, screenLeft, sim.Inset * scale), (sim.Above, screenLeft, 0.0) })
+            // La page s'affiche sous la barre d'état : décalée vers le bas de sa hauteur. Sous l'écran, la coque d'un
+            // ordinateur continue (base, pied) : la marge du bas garde la page à la hauteur de l'écran.
+            var foot = sim.Device.Foot * scale;
+            foreach (var (part, left, top, bottom) in new[] { (sim.Below, x, 0.0, 0.0), (sim.View, screenLeft, sim.Inset * scale, foot), (sim.Above, screenLeft, 0.0, foot) })
             {
-                (part.HorizontalAlignment, part.VerticalAlignment, part.Margin) = (HorizontalAlignment.Left, VerticalAlignment.Center, new Thickness(left, top, 0, 0));
+                (part.HorizontalAlignment, part.VerticalAlignment, part.Margin) = (HorizontalAlignment.Left, VerticalAlignment.Center, new Thickness(left, top, 0, bottom));
                 Grid.SetColumn(part, Grid.GetColumn(main));
                 part.Visibility = main.Visibility;
             }
@@ -748,7 +784,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         foreach (var (id, sims) in _sims)
             if (sims.FirstOrDefault(s => s.View == view) is { } sim)
             {
-                CornerClip.Set(view, (float)(sim.Device.Radius * _fit.GetValueOrDefault(id, (0, 0, 1)).Scale), squareTop: sim.Inset > 0);
+                CornerClip.Set(view, (float)(sim.Device.PageRadius * _fit.GetValueOrDefault(id, (0, 0, 1)).Scale), squareTop: sim.Inset > 0);
                 return;
             }
         CornerClip.Set(view, 0);
@@ -760,8 +796,8 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         try
         {
             var device = sim.Device;
-            core.Settings.UserAgent = device.UserAgent ?? _desktopUserAgent;
-            var touch = !device.Desktop;
+            core.Settings.UserAgent = device.Agent(_desktopUserAgent);
+            var touch = !device.Computer;
             await core.CallDevToolsProtocolMethodAsync("Emulation.setTouchEmulationEnabled", System.Text.Json.JsonSerializer.Serialize(new { enabled = touch, maxTouchPoints = touch ? 5 : 1 }));
             await core.CallDevToolsProtocolMethodAsync("Emulation.setEmitTouchEventsForMouse", System.Text.Json.JsonSerializer.Serialize(new { enabled = touch, configuration = "mobile" }));
             var wide = sim.Screen.Width > sim.Screen.Height;

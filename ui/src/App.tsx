@@ -116,6 +116,8 @@ export default function App() {
       </div>
 
       <div className="topbar-right pill-surface" onMouseDown={dragWindow}>
+        {activeTab?.storeDetail && !state.privateMode &&
+          <button className="store-install" onClick={() => send({ type:'extension.current' })}>{t('Ajouter à Sol', 'Add to Sol')}</button>}
         {state.extensions?.map(extension => <button key={extension.id} className="pill-icon-btn pinned-extension" aria-label={extension.name} title={extension.name}
           onClick={e => { const box = e.currentTarget.getBoundingClientRect(); send({type:'extension.show', id:extension.id, x:box.right, y:box.bottom+6}); }}>
           {extension.icon ? <img src={extension.icon} alt="" /> : <span>{extension.name.slice(0,1)}</span>}
@@ -138,6 +140,10 @@ export default function App() {
           <Icon d="M2 3h12v10H2zM8 3v10" />
         </button>
 
+        {split.visible && <button className="pill-icon-btn split-proportions" aria-label={t('Disposition des pages', 'Page layout')} title={t('Disposition des pages', 'Page layout')}
+          onClick={e => { const box=e.currentTarget.getBoundingClientRect(); send({type:'split.menu',x:box.right,y:box.bottom+6}); }}>
+          <Icon d="M2 3h12v10H2zM6 3v10M4 6v4M10 6v4" />
+        </button>}
         {state.privateMode && (
           <span className="private-chip" title={t('Rien de ce que vous visitez ici n’est gardé : tout est effacé à la fermeture de la fenêtre.', 'Nothing you visit here is kept: everything is erased when the window closes.')}>
             {t('Privé', 'Private')}

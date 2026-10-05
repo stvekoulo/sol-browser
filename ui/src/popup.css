@@ -28,6 +28,13 @@
   scrollbar-width: none;
 }
 .settings-popup { padding:14px; gap:10px; }
+.split-layout-heading { padding:7px 10px 5px; font-size:12px; font-weight:600; }
+.split-layout-choice { gap:10px; }
+.split-layout-choice[aria-checked="true"] { background:var(--bg-tab-hover); }
+.split-layout-preview { width:34px; height:23px; padding:3px; display:flex; gap:3px; border:1px solid var(--border-card); border-radius:6px; flex-shrink:0; }
+.split-layout-preview span { background:color-mix(in srgb, var(--text) 18%, transparent); border-radius:2px; }
+.split-layout-choice[aria-checked="true"] .split-layout-preview span { background:color-mix(in srgb, var(--accent) 38%, transparent); }
+.split-layout-hint { padding:7px 10px 6px; font-size:11px; line-height:1.5; color:var(--text-dim); }
 .settings-popup [hidden] { display:none !important; }
 .settings-popup .popup-list { max-height:none; overflow:visible; }
 .settings-popup .popup-header { display:flex; align-items:center; justify-content:space-between; padding:0 5px; }
