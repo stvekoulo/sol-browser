@@ -21,7 +21,8 @@ export default function Capture() {
       const message=data as {event?:string;kind?:string;mode?:string;data?:string};
       if(message.event==='capture-open'){
         setPhase('ready');setMode(message.mode!);setError('');
-        requestAnimationFrame(()=>{if(root.current)send({type:'capture.size',height:root.current.getBoundingClientRect().height});});
+        // Pas requestAnimationFrame : la vue est encore masquée à la réouverture, et une vue masquée n'en reçoit pas.
+        setTimeout(()=>{if(root.current)send({type:'capture.size',height:root.current.getBoundingClientRect().height});},0);
       }
       if(message.event==='capture-preview'){setPreview(message.data!);setArea(null);setPhase('selecting');send({type:'capture.selection',index:1});}
       if(message.event==='capture-state'){

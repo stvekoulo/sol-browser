@@ -197,7 +197,8 @@ export default function Sidebar() {
           { type: 'downloads.open', label: t('Téléchargements', 'Downloads'), path: 'M8 2.5v8M4.5 7.5L8 11l3.5-3.5M3 13.5h10' },
         ].map(action => <button key={action.type} className={`sidebar-quick-btn${action.type === 'window.private' ? ' private-action' : ''}`} aria-label={action.label} title={action.label} onClick={e => {
           const box = e.currentTarget.getBoundingClientRect();
-          send({ type: action.type, x: box.right + OFFSET_X, y: box.bottom + OFFSET_Y() + 6 });
+          // Le panneau s'ouvre au-dessus du bouton : dessous, il n'y a plus de place et il recouvrirait cette rangée.
+          send({ type: action.type, x: box.right + OFFSET_X, y: box.top + OFFSET_Y() - 6 });
         }}><Icon d={action.path} size={16} /></button>)}
       </div>
 
@@ -311,7 +312,7 @@ function ShortcutPill({ shortcut, index, wide, active }: { shortcut: State['shor
 // - sa couleur : la moyenne de ses pixels colorés (aucune pour une icône grise, noire ou blanche) ;
 // - son ton : une icône toute sombre est illisible sur le thème sombre, une toute claire sur le thème clair ;
 //   la feuille de style l'inverse dans le thème où elle disparaîtrait.
-function useIconLook(src: string | null) {
+export function useIconLook(src: string | null) {
   const [look, setLook] = useState<{ tone: string; color: string | null }>({ tone: '', color: null });
   useEffect(() => {
     setLook({ tone: '', color: null });

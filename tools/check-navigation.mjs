@@ -189,7 +189,7 @@ try {
     await command({type:'nav.go',id:storeTab,input:'https://chromewebstore.google.com/detail/icloud-passwords/pejdijmoenmkgeppbflobdenhhabjlaj'});
     await waitFor(()=>ui.evaluate('!!document.querySelector(".store-install")'),'native Add to Sol action');
     await ui.evaluate('document.querySelector(".store-install").click()');
-    await waitFor(()=>popup.evaluate('window.__extensions?.popup === "extension-confirm" && window.__extensions.permissions.includes("nativeMessaging")'), 'extension permissions review',90000);
+    await waitFor(()=>popup.evaluate('window.__extensions?.popup === "extension-confirm" && window.__extensions.access.some(a => /applications|apps/.test(a))'), 'extension permissions review',90000);
     await command({type:'extension.confirm',id:'pejdijmoenmkgeppbflobdenhhabjlaj'});
     await waitFor(()=>popup.evaluate('window.__extensions?.installed?.some(e=>e.id === "pejdijmoenmkgeppbflobdenhhabjlaj" && e.enabled)'), 'signed iCloud extension installation',90000);
     console.log('PASS signed Chrome Web Store package installs with original iCloud identity');
@@ -238,7 +238,7 @@ try {
   const sidebar = await connect(sidebarTarget);
   for (const index of [1,2,0]) {
     await command({type:'settings.set',id:'uiScale',index});
-    await waitFor(()=>sidebar.evaluate(`document.body.style.zoom === '${[1,.9,.8][index]}'`), 'sidebar interface scale');
+    await waitFor(()=>sidebar.evaluate(`document.body.style.zoom === '${[.95,.85,.75][index]}'`), 'sidebar interface scale');
     await delay(150);
     assert.ok(await sidebar.evaluate('Array.from(document.querySelectorAll(".sidebar-quick-actions button")).every(b => b.getBoundingClientRect().top >= 0 && b.getBoundingClientRect().bottom <= innerHeight)'), 'bottom shortcuts remain visible at every interface scale');
   }
@@ -473,12 +473,12 @@ try {
   const startState = await state();
   assert.equal(startState.tabs.find(t=>t.id===startState.activeId)?.zoom,100);
   await command({type:'settings.set',id:'uiScale',index:2});
-  await waitFor(()=>ui.evaluate('document.body.style.zoom === "0.8"'),'80% interface scale');
-  assert.ok(await designSidebar.evaluate('document.body.style.zoom === "0.8"'));
+  await waitFor(()=>ui.evaluate('document.body.style.zoom === "0.75"'),'80% interface scale');
+  assert.ok(await designSidebar.evaluate('document.body.style.zoom === "0.75"'));
   assert.ok(await startPage.evaluate('!document.body.style.zoom || document.body.style.zoom === "1"'), 'start remains at 100%');
   assert.equal(JSON.parse(await readFile(resolve(profile,'settings.json'),'utf8')).UiScale,0.8);
   await command({type:'settings.set',id:'uiScale',index:0});
-  await waitFor(()=>ui.evaluate('document.body.style.zoom === "1"'),'restore interface scale');
+  await waitFor(()=>ui.evaluate('document.body.style.zoom === "0.95"'),'restore interface scale');
   const tabCount = (await state()).tabs.length;
   await command({type:'split.open'});
   await waitFor(async()=> (await state()).tabs.length === tabCount + 1,'new split start tab');

@@ -8,6 +8,12 @@ namespace Browser.Core;
 /// <summary>Paquets signés du Chrome Web Store. Aucune URL de téléchargement arbitraire.</summary>
 public static class ExtensionPackage
 {
+    /// <summary>Service de paquets et de mises à jour du Chrome Web Store, le seul que Sol interroge.</summary>
+    public const string StoreUpdates = "https://clients2.google.com/service/update2/crx";
+
+    /// <summary>Un manifeste d'extension peut porter des commentaires et des virgules finales : les navigateurs les acceptent.</summary>
+    public static readonly System.Text.Json.JsonDocumentOptions Lenient = new() { CommentHandling = System.Text.Json.JsonCommentHandling.Skip, AllowTrailingCommas = true };
+
     public static string StoreId(string input)
     {
         if (!Uri.TryCreate(input.Trim(), UriKind.Absolute, out var url) || url.Scheme != "https"
@@ -20,8 +26,32 @@ public static class ExtensionPackage
     public static Uri DownloadUri(string id, string version)
     {
         if (!ExtensionCatalog.IsId(id) || !Version.TryParse(version, out _)) throw new ArgumentException("Extension ou moteur invalide.");
-        return new Uri($"https://clients2.google.com/service/update2/crx?response=redirect&prodversion={version}&acceptformat=crx3&x="
+        return new Uri($"{StoreUpdates}?response=redirect&prodversion={version}&acceptformat=crx3&x="
             + Uri.EscapeDataString($"id={id}&installsource=ondemand&uc"));
+    }
+
+    /// <summary>Demande au store la dernière version de chaque extension donnée.</summary>
+    public static Uri UpdateCheckUri(IEnumerable<string> ids, string version)
+    {
+        var asked = ids.Distinct().ToList();
+        if (asked.Count == 0 || !asked.All(ExtensionCatalog.IsId) || !Version.TryParse(version, out _)) throw new ArgumentException("Extension ou moteur invalide.");
+        return new Uri($"{StoreUpdates}?response=updatecheck&prodversion={version}&acceptformat=crx3"
+            + string.Concat(asked.Select(id => "&x=" + Uri.EscapeDataString($"id={id}&v=0&uc"))));
+    }
+
+    /// <summary>Lit la réponse du store : identifiant → dernière version publiée. Les extensions retirées du store n'y sont pas.</summary>
+    public static Dictionary<string, Version> ParseUpdates(string xml)
+    {
+        var latest = new Dictionary<string, Version>();
+        try
+        {
+            foreach (var app in System.Xml.Linq.XDocument.Parse(xml).Descendants().Where(e => e.Name.LocalName == "app"))
+                if ((string?)app.Attribute("appid") is { } id && ExtensionCatalog.IsId(id)
+                    && app.Elements().FirstOrDefault(e => e.Name.LocalName == "updatecheck") is { } check
+                    && Version.TryParse((string?)check.Attribute("version"), out var version)) latest[id] = version;
+        }
+        catch (System.Xml.XmlException) { }
+        return latest;
     }
 
     public static void Extract(byte[] package, string id, string destination)
@@ -80,7 +110,9 @@ public static class ExtensionPackage
             entry.ExtractToFile(target);
         }
         var manifestPath = Path.Combine(destination, "manifest.json");
-        var manifest = JsonNode.Parse(File.ReadAllText(manifestPath))?.AsObject() ?? throw new InvalidDataException("Manifeste absent.");
+        if (!File.Exists(manifestPath)) throw new InvalidDataException("Manifeste absent.");
+        var manifest = JsonNode.Parse(File.ReadAllText(manifestPath), null, Lenient)?.AsObject() ?? throw new InvalidDataException("Manifeste absent.");
+        if (manifest["theme"] is not null) throw new InvalidDataException("C’est un thème pour Chrome : Sol n’installe que les extensions.");
         manifest["key"] = Convert.ToBase64String(key); // identité stable et autorisation native messaging d’origine
         File.WriteAllText(manifestPath, manifest.ToJsonString());
         if (ExtensionCatalog.Read(destination, id) is null) throw new InvalidDataException("Manifeste d’extension invalide.");

@@ -15,6 +15,7 @@ export type Tab = {
   canGoForward: boolean;
   bookmarked: boolean;
   storeDetail?: boolean;
+  storeInstalled?: boolean; // fiche du store d'une extension déjà installée
 };
 
 export type TabGroup = { id: string; name: string; color: string; icon: string; collapsed: boolean };
@@ -84,12 +85,13 @@ export type HostEvent = {
 // Fonds neutres des thèmes imposés. En thème par défaut, le fond de l'interface est celui de la page.
 // Le sombre est proche du noir des sites sombres : « Sombre » et « Système » rendent comme « Par défaut » sur un tel site.
 const NEUTRAL = { light: 'rgb(243, 243, 246)', dark: 'rgb(9, 9, 11)' };
-export const interfaceScale = () => Number(document.documentElement.style.getPropertyValue('--ui-scale')) || 1;
+export const interfaceScale = () => Number(document.documentElement.style.getPropertyValue('--ui-scale')) || 0.95;
 
 function applyTheme(ev: HostEvent) {
   const root = document.documentElement.style;
   if (location.hostname === 'ui.navigateur') {
-    const scale = ev.uiScale === 0.8 || ev.uiScale === 0.9 ? ev.uiScale : 1;
+    // Facteur appliqué, un peu sous la taille affichée dans les réglages (100 % : 0,95).
+    const scale = ev.uiScale === 0.75 || ev.uiScale === 0.85 ? ev.uiScale : 0.95;
     const changed = interfaceScale() !== scale;
     root.setProperty('--ui-scale', String(scale));
     document.body.style.zoom = String(scale);

@@ -41,7 +41,7 @@ public static class CommandParser
         ["extensions.open"] = [], ["extensions.menu"] = ["x", "y"], ["extension.add"] = ["id"], ["extension.folder"] = [], ["extension.toggle"] = ["id"], ["extension.remove"] = ["id"], ["extension.show"] = ["id"],
         ["extension.store"] = [], ["extension.install"] = ["title"], ["extension.options"] = ["id"], ["extension.reload"] = ["id"],
         ["extension.confirm"] = ["id"], ["extension.current"] = [],
-        ["extension.pin"] = ["id"],
+        ["extension.pin"] = ["id"], ["extensions.update"] = [], ["extension.update"] = ["id"],
         ["capture.size"] = ["height"], ["capture.close"] = [], ["capture.visibility"] = ["index"],
         ["capture.run"] = ["query"], ["capture.region"] = ["x", "y", "width", "height"],
         ["capture.selection"] = ["index"],

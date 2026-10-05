@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useIconLook } from './Sidebar';
 import { formatDomain, onMessage, send } from './bridge';
 import { setLang, t, useLang } from './i18n';
 
@@ -52,6 +53,7 @@ function SiteTile({ site }: { site: Site }) {
   const name = site.title || domain || site.url;
   const letter = (domain || name).slice(0, 1).toUpperCase();
   const hasIcon = !!site.icon;
+  const look = useIconLook(site.icon ?? null); // icône d'une seule teinte : inversée dans le thème où elle disparaîtrait
 
   return (
     <button className="start-site" title={site.url} onClick={() => open(site.url)}>
@@ -60,7 +62,7 @@ function SiteTile({ site }: { site: Site }) {
         style={hasIcon ? undefined : { background: tileBackground(domain || name) }}
         aria-hidden
       >
-        {hasIcon ? <img src={site.icon} alt="" draggable={false} /> : letter}
+        {hasIcon ? <img className={look.tone.trim() || undefined} src={site.icon} alt="" draggable={false} /> : letter}
       </span>
       <span className="start-site-label">{name}</span>
     </button>

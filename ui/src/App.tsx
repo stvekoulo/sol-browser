@@ -117,7 +117,7 @@ export default function App() {
 
       <div className="topbar-right pill-surface" onMouseDown={dragWindow}>
         {activeTab?.storeDetail && !state.privateMode &&
-          <button className="store-install" onClick={() => send({ type:'extension.current' })}>{t('Ajouter à Sol', 'Add to Sol')}</button>}
+          <button className="store-install" onClick={() => send({ type:'extension.current' })}>{activeTab.storeInstalled ? t('Installée', 'Installed') : t('Ajouter à Sol', 'Add to Sol')}</button>}
         {state.extensions?.map(extension => <button key={extension.id} className="pill-icon-btn pinned-extension" aria-label={extension.name} title={extension.name}
           onClick={e => { const box = e.currentTarget.getBoundingClientRect(); send({type:'extension.show', id:extension.id, x:box.right, y:box.bottom+6}); }}>
           {extension.icon ? <img src={extension.icon} alt="" /> : <span>{extension.name.slice(0,1)}</span>}

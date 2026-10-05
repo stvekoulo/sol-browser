@@ -5,7 +5,14 @@ namespace Browser.Core;
 public sealed class Settings
 {
     private double _uiScale = 1;
+    /// <summary>Taille de l'interface choisie dans les réglages : 100, 90 ou 80 %.</summary>
     public double UiScale { get => _uiScale; set => _uiScale = value is 1 or 0.9 or 0.8 ? value : 1; }
+    /// <summary>
+    /// Facteur réellement appliqué à l'interface. Elle est dessinée un peu trop grande pour un écran d'ordinateur :
+    /// « 100 % » l'affiche à 0,95, « 90 % » à 0,85, « 80 % » à 0,75.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public double UiFactor => Math.Round(_uiScale - 0.05, 2);
     private double _pageZoom = 1;
     /// <summary>Zoom commun aux pages du profil, conservé au redémarrage (50 à 200 %).</summary>
     public double PageZoom
@@ -77,6 +84,8 @@ public sealed class Settings
     public List<string> CompareDevices { get; set; } = new();
     private List<string> _pinnedExtensions = new();
     public List<string> PinnedExtensions { get => _pinnedExtensions; set => _pinnedExtensions = value?.Where(ExtensionCatalog.IsId).Distinct().ToList() ?? []; }
+    /// <summary>Dernière recherche de mises à jour des extensions du store (UTC) : une par demi-journée suffit.</summary>
+    public DateTime ExtensionsChecked { get; set; }
     /// <summary>Raccourcis de la carte latérale. Ceux-ci sont proposés au départ ; l'utilisateur les modifie ou les retire.</summary>
     public List<SiteShortcut> Shortcuts { get; set; } =
     [

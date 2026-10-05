@@ -8,7 +8,9 @@ namespace Browser.Core;
 /// <param name="Popup">Page ouverte par son bouton, s'il y en a une.</param>
 /// <param name="Options">Page de ses réglages, s'il y en a une.</param>
 /// <param name="From">Navigateur où elle a été trouvée ; vide pour une extension déjà dans Sol.</param>
-public sealed record ExtensionInfo(string Id, string Name, string Version, string Folder, string? Popup, string? Options, string From = "", string[]? Permissions = null);
+/// <param name="Permissions">Permissions, accès aux sites et adresses où elle injecte ses scripts.</param>
+/// <param name="Store">Publiée sur le Chrome Web Store : Sol peut y chercher ses mises à jour.</param>
+public sealed record ExtensionInfo(string Id, string Name, string Version, string Folder, string? Popup, string? Options, string From = "", string[]? Permissions = null, bool Store = false);
 
 /// <summary>
 /// Extensions pour navigateurs Chromium. Le moteur de Sol les charge depuis un dossier ; il n'a ni boutique ni mise à
@@ -30,11 +32,17 @@ public static class ExtensionCatalog
             var options = Text(root, "options_page") ?? (root.TryGetProperty("options_ui", out var ui) ? Text(ui, "page") : null);
             return new ExtensionInfo(id, Localized(folder, root, name), Text(root, "version") ?? "", folder,
                 action.ValueKind == JsonValueKind.Object ? Text(action, "default_popup") : null, options, from,
-                new[] { "permissions", "host_permissions" }.SelectMany(field => root.TryGetProperty(field, out var list) && list.ValueKind == JsonValueKind.Array
-                    ? list.EnumerateArray().Where(v => v.ValueKind == JsonValueKind.String).Select(v => v.GetString()!).ToArray() : []).Distinct().ToArray());
+                new[] { "permissions", "host_permissions" }.SelectMany(field => Strings(root, field))
+                    .Concat(root.TryGetProperty("content_scripts", out var scripts) && scripts.ValueKind == JsonValueKind.Array
+                        ? scripts.EnumerateArray().SelectMany(script => Strings(script, "matches")) : []).Distinct().ToArray(),
+                Text(root, "update_url") is { } update && update.StartsWith(ExtensionPackage.StoreUpdates, StringComparison.OrdinalIgnoreCase));
         }
         catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException) { return null; }
     }
+
+    private static IEnumerable<string> Strings(JsonElement e, string name) =>
+        e.ValueKind == JsonValueKind.Object && e.TryGetProperty(name, out var list) && list.ValueKind == JsonValueKind.Array
+            ? list.EnumerateArray().Where(v => v.ValueKind == JsonValueKind.String).Select(v => v.GetString()!).ToArray() : [];
 
     private static string? Text(JsonElement e, string name) =>
         e.ValueKind == JsonValueKind.Object && e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
@@ -123,7 +131,7 @@ public static class ExtensionCatalog
     public static void EnsureKey(string folder)
     {
         var file = Path.Combine(folder, "manifest.json");
-        var manifest = JsonNode.Parse(File.ReadAllText(file))!.AsObject();
+        var manifest = JsonNode.Parse(File.ReadAllText(file), null, ExtensionPackage.Lenient)!.AsObject();
         if (manifest["key"] is not null) return;
         using var rsa = RSA.Create(2048);
         manifest["key"] = Convert.ToBase64String(rsa.ExportSubjectPublicKeyInfo());

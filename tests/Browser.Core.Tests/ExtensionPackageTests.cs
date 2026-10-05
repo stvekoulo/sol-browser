@@ -6,6 +6,55 @@ using Browser.Core;
 public class ExtensionPackageTests
 {
     [Fact]
+    public void Store_update_answer_gives_the_latest_version_of_each_published_extension()
+    {
+        const string dark = "eimadpbcbfnmbkopoojfekhnkhdbieeh", gone = "pejdijmoenmkgeppbflobdenhhabjlaj";
+        var latest = ExtensionPackage.ParseUpdates($"""
+            <?xml version="1.0" encoding="UTF-8"?><gupdate xmlns="http://www.google.com/update2/response" protocol="2.0">
+            <app appid="{dark}" status="ok"><updatecheck codebase="https://example.test/a.crx" status="ok" version="4.9.133"/></app>
+            <app appid="{gone}" status="ok"><updatecheck status="noupdate"/></app><app appid="not-an-id"><updatecheck version="9.9"/></app></gupdate>
+            """);
+        Assert.Equal(new Version(4, 9, 133), Assert.Single(latest).Value);
+        Assert.Empty(ExtensionPackage.ParseUpdates("<html>erreur"));
+        var asked = ExtensionPackage.UpdateCheckUri([dark, gone], "140.0.1.2").AbsoluteUri;
+        Assert.StartsWith(ExtensionPackage.StoreUpdates + "?response=updatecheck", asked);
+        Assert.Contains(Uri.EscapeDataString($"id={gone}&v=0&uc"), asked);
+        Assert.Throws<ArgumentException>(() => ExtensionPackage.UpdateCheckUri(["https://evil.test"], "140.0.1.2"));
+    }
+
+    [Fact]
+    public void Requested_access_is_described_in_plain_words()
+    {
+        Assert.Equal(["Lire et modifier toutes vos données sur tous les sites web"],
+            ExtensionPermissions.Describe(["alarms", "storage", "scripting", "*://*/*", "https://exemple.fr/*"], french: true));
+        Assert.Equal(["Read and change your data on exemple.fr, github.com", "Read your browsing history", "futurePermission"],
+            ExtensionPermissions.Describe(["tabs", "https://*.exemple.fr/*", "https://github.com/*", "webNavigation", "futurePermission"], french: false));
+        Assert.Empty(ExtensionPermissions.Describe(["storage", "activeTab"], french: true));
+    }
+
+    [Fact]
+    public void Manifest_with_comments_is_read_with_its_site_access_and_store_origin()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "sol-manifest-" + Guid.NewGuid());
+        Directory.CreateDirectory(folder);
+        try
+        {
+            File.WriteAllText(Path.Combine(folder, "manifest.json"), """
+                // en-tête
+                { "manifest_version": 3, "name": "Test", "version": "1.2", "permissions": ["storage"],
+                  "content_scripts": [{ "matches": ["<all_urls>"], "js": ["a.js"] }],
+                  "update_url": "https://clients2.google.com/service/update2/crx", }
+                """);
+            var info = ExtensionCatalog.Read(folder, "eimadpbcbfnmbkopoojfekhnkhdbieeh")!;
+            Assert.True(info.Store);
+            Assert.Equal(["storage", "<all_urls>"], info.Permissions!);
+            ExtensionCatalog.EnsureKey(folder);
+            Assert.Contains("\"key\"", File.ReadAllText(Path.Combine(folder, "manifest.json")));
+        }
+        finally { Directory.Delete(folder, true); }
+    }
+
+    [Fact]
     public void Signed_store_package_preserves_identity_and_rejects_tampering_and_unsafe_paths()
     {
         using var key = RSA.Create(2048);

@@ -20,8 +20,8 @@ type Content =
   | { popup: 'permission'; site: string; what: string; secure: boolean }
   | { popup: 'prompt'; title: string; hint: string; placeholder: string; submit: string; value: string; command: string; id: string | null; secret?: boolean }
   | { popup: 'notice'; title: string; hint: string }
-  | { popup: 'extension-confirm'; id: string; name: string; version: string; permissions: string[] }
-  | { popup: 'extensions'; installed: { id: string; name: string; version: string; enabled: boolean; page: boolean; options: boolean; pinned: boolean; icon: string | null }[]; available: { id: string; name: string; version: string; from: string }[] };
+  | { popup: 'extension-confirm'; id: string; name: string; version: string; icon: string | null; update: boolean; access: string[] }
+  | { popup: 'extensions'; updates: '' | 'checking' | 'current' | 'updated' | 'failed'; installed: { id: string; name: string; version: string; enabled: boolean; page: boolean; options: boolean; pinned: boolean; icon: string | null; store: boolean; update: string | null }[]; available: { id: string; name: string; version: string; from: string }[] };
 
 type Profile = { id: string; name: string; current: boolean; renamable: boolean; deletable: boolean };
 
@@ -387,12 +387,12 @@ export default function Popup() {
 
   if (content.popup === 'extension-confirm')
     return <div ref={root} className="popup arriving">
-      <div className="popup-header"><span className="popup-header-title">{content.name}</span></div>
-      <p className="row-sub extension-note">{t('Paquet signé du Chrome Web Store. Vérifiez les accès demandés avant de l’installer :', 'Signed Chrome Web Store package. Review the requested access before installing:')}</p>
-      <div className="popup-list">{content.permissions.map(permission => <div key={permission} className="row"><span className="row-title">{permission}</span></div>)}</div>
-      <div className="setting-row static">
+      <div className="popup-header"><span className="popup-header-title extension-title">{content.icon && <img src={content.icon} alt="" />}{content.update ? t(`Mettre à jour « ${content.name} » ?`, `Update “${content.name}”?`) : t(`Ajouter « ${content.name} » ?`, `Add “${content.name}”?`)}</span></div>
+      <p className="row-sub extension-note">{t(`Version ${content.version}, paquet signé du Chrome Web Store.`, `Version ${content.version}, signed Chrome Web Store package.`)} {content.access.length > 0 ? t('Elle pourra :', 'It can:') : t('Elle ne demande aucun accès particulier.', 'It asks for no special access.')}</p>
+      {content.access.length > 0 && <ul className="extension-access">{content.access.map(line => <li key={line}>{line}</li>)}</ul>}
+      <div className="extension-confirm-actions">
         <button className="pill-action" onClick={() => send({type:'popup.close'})}>{t('Annuler', 'Cancel')}</button>
-        <button className="pill-action" onClick={() => send({type:'extension.confirm', id:content.id})}>{t('Installer', 'Install')} · {content.version}</button>
+        <button className="pill-action primary" onClick={() => send({type:'extension.confirm', id:content.id})}>{content.update ? t('Mettre à jour', 'Update') : t('Ajouter l’extension', 'Add extension')}</button>
       </div>
     </div>;
 
@@ -409,9 +409,10 @@ export default function Popup() {
             <div key={e.id} className="setting-row static extension-row">
               <span className="setting-text">
                 <span className="row-title extension-title">{e.icon && <img src={e.icon} alt="" />}{e.name}</span>
-                <span className="row-sub">{e.enabled ? t(`Version ${e.version}`, `Version ${e.version}`) : t('Désactivée', 'Disabled')}</span>
+                <span className="row-sub">{e.enabled ? t(`Version ${e.version}`, `Version ${e.version}`) : t('Désactivée', 'Disabled')}{e.update && t(` · version ${e.update} disponible, avec de nouveaux accès`, ` · version ${e.update} available, with new access`)}</span>
               </span>
               <span className="row-actions">
+                {e.update && <button className="pill-action primary" onClick={() => send({ type: 'extension.update', id: e.id })}>{t('Mettre à jour', 'Update')}</button>}
                 <button className={`pill-action${e.pinned ? ' on' : ''}`} aria-pressed={e.pinned} onClick={() => send({ type: 'extension.pin', id: e.id })}>{e.pinned ? t('Désépingler', 'Unpin') : t('Épingler', 'Pin')}</button>
                 {e.page && e.enabled && <button className="pill-action" onClick={() => send({ type: 'extension.show', id: e.id })}>{t('Ouvrir', 'Open')}</button>}
                 {e.options && e.enabled && <button className="pill-action" onClick={() => send({ type: 'extension.options', id: e.id })}>{t('Réglages', 'Settings')}</button>}
@@ -436,6 +437,14 @@ export default function Popup() {
         <button className="row" onClick={() => send({ type: 'extension.store' })}>
           <span className="row-title">{t('Installer depuis le Chrome Web Store…', 'Install from the Chrome Web Store…')}</span>
         </button>
+        {content.installed.some(e => e.store) &&
+          <button className="row" disabled={content.updates === 'checking'} onClick={() => send({ type: 'extensions.update' })}>
+            <span className="row-title">{content.updates === 'checking' ? t('Recherche de mises à jour…', 'Checking for updates…')
+              : content.updates === 'current' ? t('Extensions à jour · Rechercher à nouveau', 'Extensions up to date · Check again')
+              : content.updates === 'updated' ? t('Extensions mises à jour · Rechercher à nouveau', 'Extensions updated · Check again')
+              : content.updates === 'failed' ? t('Recherche impossible · Réessayer', 'Check failed · Try again')
+              : t('Rechercher des mises à jour', 'Check for updates')}</span>
+          </button>}
         <button className="row" onClick={() => send({ type: 'extension.folder' })}>
           <span className="row-title">{t('Ajouter depuis un dossier…', 'Add from a folder…')}</span>
         </button>
@@ -552,7 +561,7 @@ function HomeField({ home }: { home: string }) {
     >
       <label htmlFor="home-input" className="setting-text">
         <span className="row-title">{t("Page d'accueil", 'Home page')}</span>
-        <span className="row-sub">{t('Ouverte dans chaque nouvel onglet. Vide : Google.', 'Opened in every new tab. Empty: Google.')}</span>
+        <span className="row-sub">{t('Ouverte dans chaque nouvel onglet. Vide : la page d’accueil de Sol.', 'Opened in every new tab. Empty: the Sol start page.')}</span>
       </label>
       <input id="home-input" type="text" inputMode="url" spellCheck={false} placeholder={t('Page d’accueil Sol', 'Sol start page')} value={text} onChange={e => setText(e.target.value)} onBlur={save} />
     </form>

@@ -90,6 +90,10 @@
   transition: transform var(--fast) var(--ease-out), box-shadow var(--fast) var(--ease-out), background var(--fast) var(--ease-out);
 }
 
+/* Icône d'une seule teinte, qui se perdrait dans le thème (même règle que la carte latérale). */
+[data-theme='dark'] .start-monogram img.tone-dark,
+[data-theme='light'] .start-monogram img.tone-light { filter: invert(1) hue-rotate(180deg); }
+
 .start-monogram.has-icon {
   background: var(--bg-pill-solid-hover);
   border: 1px solid var(--border-card);

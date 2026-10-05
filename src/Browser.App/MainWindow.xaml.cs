@@ -140,13 +140,13 @@ public sealed partial class MainWindow : Window
         var welcomeBridge = new UiBridge(Welcome, "index.html#welcome");
         bridge.AttachPopup(welcomeBridge);
         var welcome = new WelcomeHost(Welcome, welcomeBridge, () => welcomeBridge.InitAsync(uiFolder, c => _controller!.Execute(c)));
-        _controller = new BrowserController(this, pages, bridge, popup, dock, panel, welcome, settings) { ExtensionPopup = new ExtensionPopupHost(ExtensionFrame, Extension), CapturePanel = capture };
+        _controller = new BrowserController(this, pages, bridge, popup, dock, panel, welcome, settings) { ExtensionPopup = new ExtensionPopupHost(this), CapturePanel = capture };
         _controller.NativeZoomChanged += () => SetShortcuts(_shortcutsActive);
         WireDivider();
         void ApplyInterfaceScale()
         {
-            if (_beforeFullScreen is null) Root.RowDefinitions[0].Height = new GridLength(52 * settings.UiScale);
-            _sidebar.Resize(settings.SidebarWidth * settings.UiScale);
+            if (_beforeFullScreen is null) Root.RowDefinitions[0].Height = new GridLength(52 * settings.UiFactor);
+            _sidebar.Resize(settings.SidebarWidth * settings.UiFactor);
         }
         _controller.InterfaceScaleChanged += ApplyInterfaceScale;
         ApplyInterfaceScale();
@@ -312,7 +312,7 @@ public sealed partial class MainWindow : Window
             if ((GetAsyncKeyState(button) & 0x8000) == 0)
             {
                 timer.Stop();
-                settings.SidebarWidth = _sidebar!.Width / settings.UiScale;
+                settings.SidebarWidth = _sidebar!.Width / settings.UiFactor;
                 JsonFileStore.Save(AppPaths.Settings, settings);
                 return;
             }
@@ -331,8 +331,8 @@ public sealed partial class MainWindow : Window
             lastPress = doubleClick ? 0 : now;
             if (!doubleClick) { timer.Start(); return; }
             timer.Stop();
-            _sidebar!.Resize(SidebarHost.DefaultWidth * settings.UiScale);
-            settings.SidebarWidth = _sidebar.Width / settings.UiScale;
+            _sidebar!.Resize(SidebarHost.DefaultWidth * settings.UiFactor);
+            settings.SidebarWidth = _sidebar.Width / settings.UiFactor;
             JsonFileStore.Save(AppPaths.Settings, settings);
         };
     }

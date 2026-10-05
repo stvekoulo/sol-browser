@@ -25,10 +25,63 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     public event Action<string>? PageFocused;
     public event Action<string, Command>? StartRequested;
     public event Action<string>? StoreInstallRequested;
+    public event Action? StoreManageRequested; // bouton d'une extension déjà installée : ouvrir leur gestion
+    /// <summary>Identifiants des extensions installées : les fiches du store affichent leur état.</summary>
+    public Func<IEnumerable<string>> InstalledExtensions { get; set; } = () => [];
+
     public static bool IsStoreDetail(string url)
     {
         try { ExtensionPackage.StoreId(url); return true; }
         catch (ArgumentException) { return false; }
+    }
+
+    private static bool IsStore(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var parsed) && parsed.Scheme == "https" && parsed.Host == "chromewebstore.google.com";
+
+    // Le store est une application à page unique : le script est posé sur toutes ses pages et suit lui-même l'adresse.
+    // Sur une fiche, le bouton d'installation (repéré au mot « Chrome », quelle que soit la langue) devient celui de Sol.
+    private const string StoreScript = """
+        (() => {
+          if (window.__solStore) return; window.__solStore = true;
+          let installed = [];
+          const id = () => (location.pathname.match(/^\/detail\/(?:[^/]+\/)?([a-p]{32})\/?$/) || [])[1];
+          const french = () => (document.documentElement.lang || navigator.language).startsWith('fr');
+          const label = () => installed.includes(id())
+            ? (french() ? 'Installée dans Sol' : 'Installed in Sol') : (french() ? 'Ajouter à Sol' : 'Add to Sol');
+          const ours = b => b.dataset.sol === '1' || (/chrome/i.test(b.textContent || '') && b.textContent.trim().length < 48);
+          const update = () => {
+            if (!id()) return;
+            document.querySelectorAll('button').forEach(b => {
+              if (!ours(b)) return;
+              b.dataset.sol = '1';
+              if (b.disabled) b.disabled = false;
+              b.removeAttribute('aria-disabled');
+              if (b.textContent.trim() !== label()) b.textContent = label();
+            });
+          };
+          window.__solStoreInstalled = ids => { installed = ids; update(); };
+          document.addEventListener('click', e => {
+            const b = e.target.closest?.('button'); if (!b || !id() || !ours(b)) return;
+            e.preventDefault(); e.stopImmediatePropagation();
+            window.chrome.webview.postMessage(installed.includes(id()) ? 'sol.store.manage' : 'sol.store.install');
+          }, true);
+          new MutationObserver(update).observe(document.documentElement, {childList:true, subtree:true, characterData:true, attributes:true, attributeFilter:['disabled','aria-disabled']});
+          update();
+        })()
+        """;
+
+    private async Task PrepareStoreAsync(CoreWebView2 core)
+    {
+        if (!IsStore(core.Source)) return;
+        try { await core.ExecuteScriptAsync(StoreScript + $";window.__solStoreInstalled({System.Text.Json.JsonSerializer.Serialize(InstalledExtensions())})"); }
+        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { }
+    }
+
+    /// <summary>Une extension vient d'être installée ou retirée : les fiches du store ouvertes le montrent.</summary>
+    public void RefreshStore()
+    {
+        foreach (var view in _views.Values)
+            if (view.CoreWebView2 is { } core) _ = PrepareStoreAsync(core);
     }
     public void PostStart(string id, string json)
     {
@@ -118,8 +171,12 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         core.SetVirtualHostNameToFolderMapping("start.sol", Path.Combine(AppContext.BaseDirectory, "ui"), CoreWebView2HostResourceAccessKind.Deny);
         core.WebMessageReceived += (_, e) =>
         {
-            if (e.Source == core.Source && IsStoreDetail(core.Source) && e.WebMessageAsJson == "\"sol.store.install\"")
-            { StoreInstallRequested?.Invoke(core.Source); return; }
+            if (IsStore(e.Source) && IsStoreDetail(core.Source))
+            {
+                if (e.WebMessageAsJson == "\"sol.store.install\"") StoreInstallRequested?.Invoke(core.Source);
+                else if (e.WebMessageAsJson == "\"sol.store.manage\"") StoreManageRequested?.Invoke();
+                return;
+            }
             if (e.Source != Settings.DefaultHomePage || core.Source != Settings.DefaultHomePage) return;
             if (CommandParser.Parse(e.TryGetWebMessageAsString()) is { } command && command.Type is "start.ready" or "start.navigate" or "start.group")
                 StartRequested?.Invoke(tab.Id, command);
@@ -141,7 +198,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
             _pdf.Remove(tab.Id);
             if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var document) && document.AbsolutePath.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)) _pdf.Add(tab.Id);
             core.Settings.IsZoomControlEnabled = IsPdf(tab.Id);
-            core.Settings.IsWebMessageEnabled = e.Uri == Settings.DefaultHomePage || IsStoreDetail(e.Uri);
+            core.Settings.IsWebMessageEnabled = e.Uri == Settings.DefaultHomePage || IsStore(e.Uri);
             Navigating?.Invoke(core);
             DebugLog.Write($"navigation.start {tab.Id} #{e.NavigationId} redirect={e.IsRedirected}");
             if (_navigation.GetValueOrDefault(tab.Id) != e.NavigationId) _downloading.Remove(tab.Id);
@@ -152,29 +209,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
             _loading.Add(tab.Id);
             RuntimeChanged?.Invoke();
         };
-        core.DOMContentLoaded += async (_, _) =>
-        {
-            if (!IsStoreDetail(core.Source)) return;
-            try { await core.ExecuteScriptAsync("""
-                (() => {
-                  if (window.__solStore) return; window.__solStore = true;
-                  const matches = b => /^(Add to Chrome|Ajouter à Chrome|Ajouter à Sol|Add to Sol)$/i.test((b.textContent || '').trim());
-                  const update = () => document.querySelectorAll('button').forEach(b => {
-                    if (!matches(b)) return;
-                    if (b.disabled) b.disabled = false;
-                    b.removeAttribute('aria-disabled');
-                    const label = document.documentElement.lang.startsWith('fr') ? 'Ajouter à Sol' : 'Add to Sol';
-                    if (b.textContent.trim() !== label) b.textContent = label;
-                  });
-                  document.addEventListener('click', e => {
-                    const b = e.target.closest?.('button'); if (!b || !matches(b)) return;
-                    e.preventDefault(); e.stopImmediatePropagation(); window.chrome.webview.postMessage('sol.store.install');
-                  }, true);
-                  new MutationObserver(update).observe(document.body, {childList:true, subtree:true, attributes:true, attributeFilter:['disabled','aria-disabled']}); update();
-                })()
-                """); }
-            catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { }
-        };
+        core.DOMContentLoaded += (_, _) => _ = PrepareStoreAsync(core);
         core.WebResourceResponseReceived += (sender, e) =>
         {
             if (e.Request.Uri != _target.GetValueOrDefault(tab.Id)) return;

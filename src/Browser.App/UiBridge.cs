@@ -133,7 +133,7 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
             @event = "theme", bg, dark, accent, mode = on?.Theme ?? "page", systemDark = IsSystemDark(), lang = Language.Current,
             privateMode = AppPaths.Private,
             font = on?.Font ?? "default",
-            uiScale = on?.UiScale ?? 1,
+            uiScale = on?.UiFactor ?? 0.95,
             tint = new { topbar = on?.TintTopbar ?? true, sidebar = on?.TintSidebar ?? true, menus = on?.TintMenus ?? true, background = on?.TintBackground ?? true },
         });
         view.CoreWebView2?.PostWebMessageAsJson(s_lastThemeMsg);
