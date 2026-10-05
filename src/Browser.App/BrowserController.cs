@@ -16,7 +16,11 @@ public sealed class BrowserController
     private readonly Settings _settings;
     private readonly BrowserDb _db;
     private readonly CaptureService _capture;
+    public PopupHost? CapturePanel { get; init; }
     private readonly TabManager _tabs = new();
+    public bool UseNativeZoom => _tabs.ActiveId is { } id && _pages.IsPdf(id);
+    public event Action? NativeZoomChanged;
+    private bool _nativeZoom;
     private readonly SplitLayout _split = new();
     private readonly HashSet<string> _restored = new(); // onglets dont le premier chargement vient de la session
     private readonly List<string> _recentTabs = new();
@@ -43,7 +47,7 @@ public sealed class BrowserController
         _sessionSave.Tick += (_, _) => { _sessionSave.Stop(); SaveSession(); };
         Directory.CreateDirectory(AppPaths.DataDir);
         _db = new BrowserDb(AppPaths.Database);
-        _capture = new CaptureService(window);
+        _capture = new CaptureService(window, json => CapturePanel?.Post(json));
 
         _pages.PageChanged += (id, url, title) => { _tabs.Update(id, url, title); Refresh(); };
         _pages.RuntimeChanged += Refresh;
@@ -70,6 +74,7 @@ public sealed class BrowserController
         _pages.PipReturnRequested += id => { Activate(id); Refresh(); };
         _pages.Loaded += id =>
         {
+            if (!_pinsInitialized) _ = RefreshPinnedExtensionsAsync();
             _ = LearnShortcutNameAsync(id);
             if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { } tab && IsWeb(tab.Url) && tab.Url != Settings.DefaultHomePage) FetchStartIcon(tab.Url);
         };
@@ -99,6 +104,7 @@ public sealed class BrowserController
         _window.Closed += (_, _) =>
         {
             _closingWindow = true;
+            _capture.CancelSelection();
             _startPreviewCancel.Cancel();
             _sessionSave.Stop();
             HidePopup(); // terminer les demandes de permission encore en attente
@@ -211,14 +217,23 @@ public sealed class BrowserController
             case "extensions.open": _ = OpenExtensionsAsync(); return;
             case "extension.add": _ = AddExtensionAsync(id); return;
             case "extension.folder": _ = AddExtensionFolderAsync(); return;
+            case "extension.store":
+                AskName(T("Chrome Web Store", "Chrome Web Store"), T("Collez le lien d’une extension. Elle pourra accéder aux sites selon les permissions de son manifeste. Certaines fonctions Chrome restent incompatibles avec WebView2.", "Paste an extension link. It can access sites according to its manifest permissions. Some Chrome features remain incompatible with WebView2."), "https://chromewebstore.google.com/detail/…", T("Installer", "Install"), "", "extension.install"); return;
+            case "extension.install": _ = InstallStoreExtensionAsync(c.Title!); return;
+            case "extension.confirm": _ = ConfirmStoreExtensionAsync(id); return;
+            case "extension.pin": _ = PinExtensionAsync(id); return;
+            case "extension.reload": _ = ReloadExtensionAsync(id); return;
+            case "extension.options":
+                if (ExtensionCatalog.IsId(id) && ExtensionCatalog.Read(ExtensionFolder(id), id)?.Options is { } options)
+                { HidePopup(); Open($"chrome-extension://{id}/{options.TrimStart('/')}"); } break;
             case "extension.toggle": _ = ChangeExtensionAsync(id, remove: false); return;
             case "extension.remove": _ = ChangeExtensionAsync(id, remove: true); return;
             case "extensions.menu": _ = OpenExtensionsMenuAsync(c.X!.Value, c.Y!.Value); return;
             case "extension.show":
-                if (ExtensionCatalog.IsId(id) && ExtensionCatalog.Read(Path.Combine(ExtensionsDir, id), id) is { } shownExtension)
+                if (ExtensionCatalog.IsId(id) && ExtensionCatalog.Read(ExtensionFolder(id), id) is { } shownExtension)
                 {
                     HidePopup();
-                    ShowExtension(shownExtension, _window.Content is FrameworkElement root ? root.ActualWidth - 14 : 1200, 58);
+                    ShowExtension(shownExtension, c.X ?? (_window.Content is FrameworkElement root ? root.ActualWidth - 14 : 1200), c.Y ?? 58);
                     break;
                 }
                 return;
@@ -259,7 +274,19 @@ public sealed class BrowserController
                 return;
             case "profile.switch": SwitchProfile(id); return;
             case "profile.delete": DeleteProfile(id); return;
-            case "capture.menu": OpenCaptureMenu(c.X!.Value, c.Y!.Value); return;
+            case "capture.menu": OpenCaptureMenu(); return;
+            case "capture.size": CapturePanel?.SetHeight(c.Height!.Value); return;
+            case "capture.visibility": CapturePanel?.SetVisible(c.Index == 1); return;
+            case "capture.selection": CapturePanel?.SetSelection(c.Index == 1); return;
+            case "capture.close": _capture.CancelSelection(); CapturePanel?.Hide(); return;
+            case "capture.region": _capture.Select(new Windows.Graphics.Imaging.BitmapBounds { X = (uint)Math.Max(0,c.X!.Value), Y = (uint)Math.Max(0,c.Y!.Value), Width = (uint)Math.Max(0,c.Width!.Value), Height = (uint)Math.Max(0,c.Height!.Value) }); return;
+            case "capture.run":
+                if (c.Query is "region" or "visible" or "full")
+                {
+                    CapturePanel?.Hide();
+                    if (c.Index == 1) _ = _capture.RunWindowAsync((FrameworkElement)_window.Content, c.Query);
+                    else Capture(c.Query);
+                } return;
             case "window.close": _window.Close(); return;
             case "window.drag": BeginDrag(); return;
 
@@ -737,6 +764,12 @@ public sealed class BrowserController
 
     private void HidePopup()
     {
+        if (_pendingExtension is { } staged)
+        {
+            _pendingExtension = null;
+            try { if (Directory.Exists(staged.Folder)) Directory.Delete(staged.Folder, true); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { DebugLog.Write("extension annulée : " + e.Message); }
+        }
         if (_panel is not null) _panelLast = _panel;
         _panel = null;
         _suggesting = false;
@@ -785,6 +818,7 @@ public sealed class BrowserController
     {
         if (id is null) return;
         if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is not { } tab || tab.Url == Settings.DefaultHomePage) return;
+        if (_pages.IsPdf(id)) return; // le lecteur PDF possède son zoom ; il ne change pas celui des sites
         var current = _settings.PageZoom;
         var zoom = action switch
         {
@@ -1383,10 +1417,16 @@ public sealed class BrowserController
     }
 
     // La fenêtre de l'extension s'ouvre dans l'encart, sous la barre ; une extension qui n'a que des réglages les ouvre en onglet.
-    private void ShowExtension(ExtensionInfo extension, double right, double top)
+    private async void ShowExtension(ExtensionInfo extension, double right, double top)
     {
-        if (extension.Popup is { } popup && ExtensionPopup is { } host) _ = host.ShowAsync($"chrome-extension://{extension.Id}/{popup.TrimStart('/')}", right, top);
-        else if ((extension.Popup ?? extension.Options) is { } page) { Open($"chrome-extension://{extension.Id}/{page.TrimStart('/')}"); Refresh(); }
+        try
+        {
+            if (AppPaths.Private || EngineProfile is not { } profile || !(await profile.GetBrowserExtensionsAsync()).Any(e => e.Id == extension.Id && e.IsEnabled)) return;
+            if (extension.Popup is { } popup && ExtensionPopup is { } host) await host.ShowAsync($"chrome-extension://{extension.Id}/{popup.TrimStart('/')}", right, top);
+            else if ((extension.Popup ?? extension.Options) is { } page) { Open($"chrome-extension://{extension.Id}/{page.TrimStart('/')}"); Refresh(); }
+        }
+        catch (Exception e) when (e is InvalidOperationException or COMException or ArgumentException)
+        { Notice(T("Extension indisponible", "Extension unavailable"), e.Message); }
     }
 
     // Bouton de la barre : les extensions actives qui ont une fenêtre, puis l'accès à leur gestion.
@@ -1397,7 +1437,7 @@ public sealed class BrowserController
         var entries = new List<(string Label, Action? Run)>();
         if (EngineProfile is { } profile)
             foreach (var installed in await profile.GetBrowserExtensionsAsync())
-                if (installed.IsEnabled && installed.Id != AdBlock.ExtensionId && ExtensionCatalog.Read(Path.Combine(ExtensionsDir, installed.Id), installed.Id) is { } info && (info.Popup ?? info.Options) is not null)
+                if (installed.IsEnabled && installed.Id != AdBlock.ExtensionId && ExtensionCatalog.Read(ExtensionFolder(installed.Id), installed.Id) is { } info && (info.Popup ?? info.Options) is not null)
                     entries.Add((info.Name, () => _afterMenu = () => ShowExtension(info, x, y)));
         if (entries.Count == 0) { await OpenExtensionsAsync(); return; }
         entries.Add(("", null));
@@ -1405,7 +1445,14 @@ public sealed class BrowserController
         ShowMenu(x - 260, y, entries);
     }
     private Dictionary<string, ExtensionInfo> _extensionOffers = new();
-    private static string ExtensionsDir => Path.Combine(AppPaths.BaseDir, "extensions");
+    private List<object> _pinnedExtensions = [];
+    private bool _pinsInitialized;
+    private static string ExtensionsDir => Path.Combine(AppPaths.DataDir, "extensions");
+    private static string ExtensionFolder(string id)
+    {
+        var folder = Path.Combine(ExtensionsDir, id);
+        return Directory.Exists(folder) ? folder : Path.Combine(AppPaths.BaseDir, "extensions", id); // anciennes installations partagées
+    }
     private Microsoft.Web.WebView2.Core.CoreWebView2Profile? EngineProfile => _tabs.ActiveId is { } active ? _pages.CoreOf(active)?.Profile : null;
 
     private async Task<string> ExtensionsJsonAsync()
@@ -1416,9 +1463,10 @@ public sealed class BrowserController
             foreach (var extension in await profile.GetBrowserExtensionsAsync())
             {
                 // Le bloqueur intégré a son propre réglage ; seules les extensions rangées dans le dossier de Sol sont listées.
-                if (ExtensionCatalog.Read(Path.Combine(ExtensionsDir, extension.Id), extension.Id) is not { } info || extension.Id == AdBlock.ExtensionId) continue;
+                if (ExtensionCatalog.Read(ExtensionFolder(extension.Id), extension.Id) is not { } info || extension.Id == AdBlock.ExtensionId) continue;
                 have.Add(extension.Id);
-                installed.Add(new { id = extension.Id, name = info.Name, version = info.Version, enabled = extension.IsEnabled, page = (info.Popup ?? info.Options) is not null });
+                installed.Add(new { id = extension.Id, name = info.Name, version = info.Version, enabled = extension.IsEnabled, page = (info.Popup ?? info.Options) is not null, options = info.Options is not null,
+                    pinned = _settings.PinnedExtensions.Contains(extension.Id), icon = ExtensionCatalog.Icon(info.Folder) });
             }
         _extensionOffers = BrowserImport.Detect(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData))
             .SelectMany(source => ExtensionCatalog.Scan(source.UserData, source.Name))
@@ -1439,18 +1487,115 @@ public sealed class BrowserController
         HidePopup();
         var json = await ExtensionsJsonAsync();
         _extensionsOpen = true;
-        _popup.ShowCentered(420, json, top: 80);
+        _popup.ShowCentered(560, json, top: 80);
     }
 
     private async Task RefreshExtensionsAsync()
     {
+        await RefreshPinnedExtensionsAsync();
         if (_extensionsOpen) _popup.Post(await ExtensionsJsonAsync());
     }
 
-    // Copie le dossier dans celui de Sol, sous l'identifiant de l'extension, puis l'installe dans le profil.
-    private async Task InstallExtensionAsync(string source, string? knownId)
+    private async Task RefreshPinnedExtensionsAsync()
     {
-        if (EngineProfile is not { } profile) return;
+        if (AppPaths.Private || EngineProfile is not { } profile) return;
+        _pinsInitialized = true;
+        var extensions = await profile.GetBrowserExtensionsAsync();
+        _pinnedExtensions = _settings.PinnedExtensions.Distinct().Where(ExtensionCatalog.IsId)
+            .Select(id => extensions.FirstOrDefault(e => e.Id == id && e.IsEnabled))
+            .Where(e => e is not null).Select(e => ExtensionCatalog.Read(ExtensionFolder(e!.Id), e.Id))
+            .Where(info => info is not null).Select(info => (object)new { id = info!.Id, name = info.Name, icon = ExtensionCatalog.Icon(info.Folder) }).ToList();
+        Refresh();
+    }
+
+    private async Task PinExtensionAsync(string id)
+    {
+        if (AppPaths.Private || !ExtensionCatalog.IsId(id) || EngineProfile is not { } profile
+            || !(await profile.GetBrowserExtensionsAsync()).Any(e => e.Id == id)) return;
+        if (!_settings.PinnedExtensions.Remove(id)) _settings.PinnedExtensions.Add(id);
+        JsonFileStore.Save(AppPaths.Settings, _settings);
+        await RefreshExtensionsAsync();
+    }
+
+    private bool _installingExtension;
+    private ExtensionInfo? _pendingExtension;
+    private readonly SemaphoreSlim _extensionChanges = new(1, 1);
+    private async Task InstallStoreExtensionAsync(string input)
+    {
+        if (_installingExtension || AppPaths.Private) return;
+        _installingExtension = true;
+        var staging = Path.Combine(ExtensionsDir, "store-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var id = ExtensionPackage.StoreId(input);
+            var version = (await AdBlock.EnvironmentAsync()).BrowserVersionString.Split(' ')[0];
+            Notice(T("Téléchargement de l’extension", "Downloading extension"), T("Le paquet signé est récupéré depuis le Chrome Web Store…", "Fetching the signed package from the Chrome Web Store…"));
+            using var client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(60) };
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+            using var response = await client.GetAsync(ExtensionPackage.DownloadUri(id, version), System.Net.Http.HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+            response.EnsureSuccessStatusCode();
+            using var stream = await response.Content.ReadAsStreamAsync();
+            using var package = new MemoryStream();
+            var buffer = new byte[65536]; int count;
+            while ((count = await stream.ReadAsync(buffer, timeout.Token)) != 0)
+            {
+                if (package.Length + count > 32 * 1024 * 1024) throw new InvalidDataException("Extension trop volumineuse (maximum 32 Mo).");
+                package.Write(buffer, 0, count);
+            }
+            ExtensionPackage.Extract(package.ToArray(), id, staging);
+            HidePopup();
+            _pendingExtension = ExtensionCatalog.Read(staging, id)!;
+            _popup.ShowCentered(480, JsonSerializer.Serialize(new { popup = "extension-confirm", id, name = _pendingExtension.Name, version = _pendingExtension.Version, permissions = _pendingExtension.Permissions }));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or System.Net.Http.HttpRequestException or TaskCanceledException
+            or System.Security.Cryptography.CryptographicException or JsonException or InvalidOperationException or OverflowException or OperationCanceledException)
+        { Notice(T("Installation impossible", "Installation failed"), e.Message); }
+        finally
+        {
+            _installingExtension = false;
+            try { if (_pendingExtension?.Folder != staging && Directory.Exists(staging)) Directory.Delete(staging, true); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { DebugLog.Write("extension temporaire : " + e.Message); }
+        }
+    }
+
+    private async Task ConfirmStoreExtensionAsync(string id)
+    {
+        if (_pendingExtension is not { } pending || pending.Id != id) return;
+        _pendingExtension = null;
+        try { if (await InstallExtensionAsync(pending.Folder, id)) await OpenExtensionsAsync(); }
+        finally
+        {
+            try { if (Directory.Exists(pending.Folder)) Directory.Delete(pending.Folder, true); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { DebugLog.Write("extension temporaire : " + e.Message); }
+        }
+    }
+
+    private async Task ReloadExtensionAsync(string id)
+    {
+        if (AppPaths.Private || EngineProfile is not { } profile || !ExtensionCatalog.IsId(id) || id == AdBlock.ExtensionId) return;
+        await _extensionChanges.WaitAsync();
+        try
+        {
+            var extension = (await profile.GetBrowserExtensionsAsync()).FirstOrDefault(e => e.Id == id);
+            if (extension is null) return;
+            var enabled = extension.IsEnabled;
+            ExtensionPopup?.Hide();
+            var loaded = await profile.AddBrowserExtensionAsync(ExtensionFolder(id));
+            await loaded.EnableAsync(enabled);
+            await RefreshExtensionsAsync();
+        }
+        catch (Exception e) when (e is InvalidOperationException or ArgumentException or COMException)
+        { Notice(T("Extension indisponible", "Extension unavailable"), e.Message); }
+        finally { _extensionChanges.Release(); }
+    }
+
+    // Copie le dossier dans celui de Sol, sous l'identifiant de l'extension, puis l'installe dans le profil.
+    private async Task<bool> InstallExtensionAsync(string source, string? knownId)
+    {
+        if (AppPaths.Private || EngineProfile is not { } profile) return false;
+        await _extensionChanges.WaitAsync();
+        string? backup = null, destination = null;
+        var wasEnabled = true;
         try
         {
             var id = knownId;
@@ -1458,19 +1603,52 @@ public sealed class BrowserController
             {
                 // Dossier désigné à la main : l'identifiant n'est connu qu'une fois l'extension chargée.
                 var trial = ExtensionCatalog.CopyTo(source, Path.Combine(ExtensionsDir, "ajout"));
+                ExtensionCatalog.EnsureKey(trial); // l’identité ne dépend plus du déplacement du dossier
                 var loaded = await profile.AddBrowserExtensionAsync(trial);
                 id = loaded.Id;
                 await loaded.RemoveAsync();
                 source = trial;
             }
             var folder = Path.Combine(ExtensionsDir, id);
+            destination = folder;
+            wasEnabled = (await profile.GetBrowserExtensionsAsync()).FirstOrDefault(e => e.Id == id)?.IsEnabled ?? true;
+            if (Directory.Exists(folder) && !string.Equals(Path.GetFullPath(source), Path.GetFullPath(folder), StringComparison.OrdinalIgnoreCase))
+            {
+                backup = folder + "-previous-" + Guid.NewGuid().ToString("N");
+                ExtensionCatalog.CopyTo(folder, backup);
+            }
             if (!string.Equals(Path.GetFullPath(source), Path.GetFullPath(folder), StringComparison.OrdinalIgnoreCase)) ExtensionCatalog.CopyTo(source, folder);
-            await profile.AddBrowserExtensionAsync(folder);
+            var installed = await profile.AddBrowserExtensionAsync(folder);
+            if (installed.Id != id)
+            {
+                await installed.RemoveAsync();
+                throw new InvalidOperationException("L’identité de l’extension a changé. Installez sa version signée depuis le store pour préserver son accès natif.");
+            }
+            await installed.EnableAsync(wasEnabled);
+            _pages.ApplySettings();
             await RefreshExtensionsAsync();
+            return true;
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.Runtime.InteropServices.COMException)
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or JsonException or System.Runtime.InteropServices.COMException)
         {
+            if (backup is not null && destination is not null)
+            {
+                try
+                {
+                    ExtensionCatalog.CopyTo(backup, destination);
+                    await (await profile.AddBrowserExtensionAsync(destination)).EnableAsync(wasEnabled);
+                }
+                catch (Exception restore) when (restore is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or COMException)
+                { DebugLog.Write("extension : restauration incomplète, copie conservée : " + restore.Message); backup = null; }
+            }
             Notice(T("Extension refusée", "Extension rejected"), T($"Le moteur n'a pas pu charger cette extension : {e.Message}", $"The engine could not load this extension: {e.Message}"));
+            return false;
+        }
+        finally
+        {
+            try { if (backup is not null && Directory.Exists(backup)) Directory.Delete(backup, true); }
+            catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException) { DebugLog.Write("extension ancienne copie : " + cleanup.Message); }
+            _extensionChanges.Release();
         }
     }
 
@@ -1493,20 +1671,27 @@ public sealed class BrowserController
 
     private async Task ChangeExtensionAsync(string id, bool remove)
     {
-        if (EngineProfile is not { } profile || !ExtensionCatalog.IsId(id) || id == AdBlock.ExtensionId) return;
+        if (AppPaths.Private || EngineProfile is not { } profile || !ExtensionCatalog.IsId(id) || id == AdBlock.ExtensionId) return;
+        await _extensionChanges.WaitAsync();
         try
         {
             if ((await profile.GetBrowserExtensionsAsync()).FirstOrDefault(e => e.Id == id) is not { } extension) return;
             if (remove)
             {
                 await extension.RemoveAsync();
-                try { Directory.Delete(Path.Combine(ExtensionsDir, id), recursive: true); }
+                _settings.PinnedExtensions.Remove(id);
+                JsonFileStore.Save(AppPaths.Settings, _settings);
+                try { if (Directory.Exists(Path.Combine(ExtensionsDir, id))) Directory.Delete(Path.Combine(ExtensionsDir, id), recursive: true); }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException) { /* utilisée par un autre profil ouvert : le dossier reste */ }
             }
             else await extension.EnableAsync(!extension.IsEnabled);
+            ExtensionPopup?.Hide();
+            _pages.ApplySettings();
             await RefreshExtensionsAsync();
         }
-        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException or ArgumentException) { }
+        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException or ArgumentException)
+        { Notice(T("Extension indisponible", "Extension unavailable"), e.Message); }
+        finally { _extensionChanges.Release(); }
     }
 
     // Profils : chacun a ses données. Le panneau en change, en crée ou en supprime.
@@ -1578,15 +1763,12 @@ public sealed class BrowserController
     }
 
     // Bouton de capture d'écran de la barre d'outils.
-    private void OpenCaptureMenu(double x, double y)
+    private void OpenCaptureMenu()
     {
-        if (ClosesPanel("capture")) return;
-        ShowMenu(x - 260, y,
-        [
-            (T("Capturer une zone", "Capture an area"), () => Capture("region")),
-            (T("Capturer la partie visible", "Capture the visible part"), () => Capture("visible")),
-            (T("Capturer la page entière", "Capture the full page"), () => Capture("full")),
-        ]);
+        if (_capture.Busy) return;
+        if (CapturePanel?.IsOpen == true) { CapturePanel.Hide(); return; }
+        HidePopup();
+        CapturePanel?.ShowBottom(640, JsonSerializer.Serialize(new { @event = "capture-open", mode = "visible" }));
     }
 
     private void Capture(string mode)
@@ -1901,6 +2083,7 @@ public sealed class BrowserController
     private void Refresh()
     {
         if (_closingWindow || _restoringSession) return;
+        if (_nativeZoom != UseNativeZoom) { _nativeZoom = UseNativeZoom; NativeZoomChanged?.Invoke(); }
         var starts = _tabs.Tabs.Where(t => t.Url == Settings.DefaultHomePage && !_pages.IsAsleep(t.Id)).ToList();
         if (starts.Count > 0) { var json = StartJson(); foreach (var tab in starts) _pages.PostStart(tab.Id, json); }
         // Regrouper les changements ; un crash ne perd plus toute la session depuis le démarrage.
@@ -1929,7 +2112,7 @@ public sealed class BrowserController
                 groupId = t.GroupId,
                 asleep = _pages.IsAsleep(t.Id), // déchargé : affiché atténué, il se recharge quand on y revient
                 device = _pages.DeviceOf(t.Id) is { } simulated ? DeviceLabel(simulated) : null, // simulateur : appareil affiché
-                zoom = t.Url == Settings.DefaultHomePage ? 100 : (int)Math.Round(_settings.PageZoom * 100),
+                zoom = t.Url == Settings.DefaultHomePage || _pages.IsPdf(t.Id) ? 100 : (int)Math.Round(_settings.PageZoom * 100),
                 loading = _pages.IsLoading(t.Id),
                 canGoBack = _pages.CanGoBack(t.Id),
                 canGoForward = _pages.CanGoForward(t.Id),
@@ -1941,6 +2124,7 @@ public sealed class BrowserController
             privateMode = AppPaths.Private, // fenêtre de navigation privée
             shield = _settings.BlockAds && AdBlock.ExtensionId is not null, // blocage des publicités et des traqueurs en service
             shortcuts = _settings.Shortcuts.Select(s => new { url = s.Url, name = s.Name, icon = s.Icon, tabId = _shortcutTabs.GetValueOrDefault(s) }),
+            extensions = _pinnedExtensions,
             profile = ProfileName(AppPaths.Profile),
             split = new { primaryId = _split.PrimaryId, secondaryId = _split.SecondaryId, ratio = _split.Ratio, visible = showSplit },
             maximized = IsFullScreen || Presenter?.State == OverlappedPresenterState.Maximized,

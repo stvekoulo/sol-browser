@@ -19,7 +19,8 @@ type Content =
   | { popup: 'permission'; site: string; what: string; secure: boolean }
   | { popup: 'prompt'; title: string; hint: string; placeholder: string; submit: string; value: string; command: string; id: string | null; secret?: boolean }
   | { popup: 'notice'; title: string; hint: string }
-  | { popup: 'extensions'; installed: { id: string; name: string; version: string; enabled: boolean; page: boolean }[]; available: { id: string; name: string; version: string; from: string }[] };
+  | { popup: 'extension-confirm'; id: string; name: string; version: string; permissions: string[] }
+  | { popup: 'extensions'; installed: { id: string; name: string; version: string; enabled: boolean; page: boolean; options: boolean; pinned: boolean; icon: string | null }[]; available: { id: string; name: string; version: string; from: string }[] };
 
 type Profile = { id: string; name: string; current: boolean; renamable: boolean; deletable: boolean };
 
@@ -369,6 +370,17 @@ export default function Popup() {
   if (content.popup === 'profiles')
     return <ProfileList key={opening} rootRef={root} items={content.items} />;
 
+  if (content.popup === 'extension-confirm')
+    return <div ref={root} className="popup arriving">
+      <div className="popup-header"><span className="popup-header-title">{content.name}</span></div>
+      <p className="row-sub extension-note">{t('Paquet signé du Chrome Web Store. Vérifiez les accès demandés avant de l’installer :', 'Signed Chrome Web Store package. Review the requested access before installing:')}</p>
+      <div className="popup-list">{content.permissions.map(permission => <div key={permission} className="row"><span className="row-title">{permission}</span></div>)}</div>
+      <div className="setting-row static">
+        <button className="pill-action" onClick={() => send({type:'popup.close'})}>{t('Annuler', 'Cancel')}</button>
+        <button className="pill-action" onClick={() => send({type:'extension.confirm', id:content.id})}>{t('Installer', 'Install')} · {content.version}</button>
+      </div>
+    </div>;
+
   if (content.popup === 'extensions')
     return (
       <div ref={root} className="popup arriving">
@@ -376,15 +388,19 @@ export default function Popup() {
           <span className="popup-header-title">{t('Extensions', 'Extensions')}</span>
         </div>
         <div className="popup-list">
+          <p className="row-sub extension-note">{t('Les extensions activées s’appliquent aux pages de ce profil. Rechargez la page après un changement. Elles restent désactivées en navigation privée.', 'Enabled extensions apply to pages in this profile. Reload the page after a change. They remain disabled in private browsing.')}</p>
           {content.installed.length === 0 && <p className="row-sub extension-note">{t('Aucune extension ajoutée pour l’instant.', 'No extension added yet.')}</p>}
           {content.installed.map(e => (
-            <div key={e.id} className="setting-row static">
+            <div key={e.id} className="setting-row static extension-row">
               <span className="setting-text">
-                <span className="row-title">{e.name}</span>
+                <span className="row-title extension-title">{e.icon && <img src={e.icon} alt="" />}{e.name}</span>
                 <span className="row-sub">{e.enabled ? t(`Version ${e.version}`, `Version ${e.version}`) : t('Désactivée', 'Disabled')}</span>
               </span>
               <span className="row-actions">
+                <button className={`pill-action${e.pinned ? ' on' : ''}`} aria-pressed={e.pinned} onClick={() => send({ type: 'extension.pin', id: e.id })}>{e.pinned ? t('Désépingler', 'Unpin') : t('Épingler', 'Pin')}</button>
                 {e.page && e.enabled && <button className="pill-action" onClick={() => send({ type: 'extension.show', id: e.id })}>{t('Ouvrir', 'Open')}</button>}
+                {e.options && e.enabled && <button className="pill-action" onClick={() => send({ type: 'extension.options', id: e.id })}>{t('Réglages', 'Settings')}</button>}
+                <button className="pill-action" onClick={() => send({ type: 'extension.reload', id: e.id })}>{t('Recharger', 'Reload')}</button>
                 <button className="pill-action" onClick={() => send({ type: 'extension.toggle', id: e.id })}>{e.enabled ? t('Désactiver', 'Disable') : t('Activer', 'Enable')}</button>
                 <button className="pill-action" onClick={() => send({ type: 'extension.remove', id: e.id })}>{t('Retirer', 'Remove')}</button>
               </span>
@@ -402,6 +418,9 @@ export default function Popup() {
           ))}
         </div>
         <hr />
+        <button className="row" onClick={() => send({ type: 'extension.store' })}>
+          <span className="row-title">{t('Installer depuis le Chrome Web Store…', 'Install from the Chrome Web Store…')}</span>
+        </button>
         <button className="row" onClick={() => send({ type: 'extension.folder' })}>
           <span className="row-title">{t('Ajouter depuis un dossier…', 'Add from a folder…')}</span>
         </button>

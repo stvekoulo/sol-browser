@@ -13,7 +13,16 @@ const base = resolve(`bin/navigation-check-${Date.now()}`);
 const profile = resolve(base, 'profiles/robustness');
 await mkdir(profile, { recursive: true });
 await mkdir(resolve(base, 'downloads'), { recursive: true });
+await mkdir(resolve(base, 'captures'), { recursive: true });
 const server = createServer((req, res) => {
+  if (req.url === '/document') {
+    const objects = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>', '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 500] /Contents 4 0 R >>', '<< /Length 25 >>\nstream\n0 0 1 rg 30 30 90 90 re f\nendstream'];
+    let pdf = '%PDF-1.4\n'; const offsets = [];
+    objects.forEach((o,i) => { offsets.push(Buffer.byteLength(pdf)); pdf += `${i+1} 0 obj\n${o}\nendobj\n`; });
+    const xref = Buffer.byteLength(pdf);
+    pdf += `xref\n0 5\n0000000000 65535 f \n${offsets.map(o=>String(o).padStart(10,'0')+' 00000 n \n').join('')}trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+    res.writeHead(200, {'Content-Type':'application/pdf'}); return res.end(pdf);
+  }
   if (req.url === '/large-icon.svg') {
     res.writeHead(200, { 'Content-Type': 'image/svg+xml' });
     return res.end('<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192"><rect width="192" height="192" fill="blue"/></svg>');
@@ -72,7 +81,7 @@ async function connect(target) {
     ws.send(JSON.stringify({ id, method, params }));
   });
   const evaluate = async expression => {
-    const result = await call('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
+    const result = await call('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true, userGesture: true });
     if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
     return result.result.value;
   };
@@ -83,7 +92,7 @@ const targets = () => fetch(`http://127.0.0.1:${port}/json/list`).then(r => r.js
 const command = c => ui.evaluate(`chrome.webview.postMessage(${JSON.stringify(JSON.stringify(c))})`);
 const state = () => ui.evaluate('window.__checkState');
 async function launch(extra = []) {
-  app = spawn(exe, ['--profile=robustness', '--bounds=-9000,-9000,1100,800', ...extra], { windowsHide: true, env: { ...process.env, NAVIGATEUR_DATA_DIR: base, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port} --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows`, NAVIGATEUR_DEBUG: '1', NAVIGATEUR_TEST_DOWNLOAD_DIR: resolve(base, 'downloads'), NAVIGATEUR_SAVER_TEST: '1' } });
+  app = spawn(exe, ['--profile=robustness', '--bounds=-9000,-9000,1100,800', ...extra], { windowsHide: true, env: { ...process.env, NAVIGATEUR_DATA_DIR: base, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port} --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows`, NAVIGATEUR_DEBUG: '1', NAVIGATEUR_TEST_DOWNLOAD_DIR: resolve(base, 'downloads'), NAVIGATEUR_CAPTURE_DIR: resolve(base,'captures'), NAVIGATEUR_SAVER_TEST: '1' } });
   const target = await waitFor(async () => (await targets()).find(t => t.url === 'https://ui.navigateur/index.html'), 'toolbar');
   ui = await connect(target);
   await waitFor(async () => {
@@ -108,6 +117,99 @@ async function stop() {
 }
 try {
   await launch();
+  if (process.argv.includes('--extensions')) {
+    const page = await pageAt('/a');
+    const initialWidth = await page.evaluate('innerWidth');
+    await command({type:'zoom.out'});
+    await waitFor(async()=>await page.evaluate('innerWidth') > initialWidth*1.08, 'page zoom');
+    const id = (await state()).activeId;
+    await command({type:'nav.go',id,input:`${origin}/document`});
+    const pdf = await pageAt('/document');
+    await waitFor(async()=>(await state()).tabs.find(t=>t.id===id).zoom===100, 'PDF independent zoom');
+    await delay(800);
+    await writeFile(resolve(base,'pdf.png'),Buffer.from((await pdf.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    await command({type:'zoom.out'});
+    await command({type:'nav.go',id,input:`${origin}/a`});
+    await pageAt('/a');
+    assert.equal((await state()).tabs.find(t=>t.id===id).zoom,90,'PDF leaves website zoom unchanged');
+    console.log('PASS native PDF served without .pdf extension, independent from website zoom');
+    await command({type:'capture.menu',x:900,y:50});
+    await delay(300);
+    const captureUi=await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#capture')),'capture controls'));
+    await captureUi.evaluate(`chrome.webview.addEventListener('message',e=>{if(e.data.event==='capture-state')window.__captureResult=e.data;});`);
+    await waitFor(()=>captureUi.evaluate('!!document.querySelector(".capture-action")'),'screenshot options');
+    await captureUi.evaluate('document.querySelector(".capture-action").click()');
+    const capture = await waitFor(async()=>readFile(resolve(base,'captures/capture.png')).catch(()=>null),'4K screenshot');
+    assert.equal(capture.readUInt32BE(16),3840,'screenshot renders at 3840 pixels wide');
+    await waitFor(async()=>readFile(resolve(base,'captures/capture.pdf')).catch(()=>null),'PDF image capture');
+    console.log('PASS 4K PNG and high quality PDF screenshot');
+    await command({type:'capture.menu'});
+    await waitFor(()=>captureUi.evaluate('!!document.querySelector(".capture-action")'),'capture options reopened');
+    await captureUi.evaluate('document.querySelector(".capture-browser").click()');
+    assert.match(await captureUi.evaluate('document.body.innerText'),/Fenêtre entière|Entire window/);
+    await captureUi.evaluate('window.__captureResult=null;document.querySelector(".capture-action").click()');
+    await waitFor(()=>captureUi.evaluate('window.__captureResult?.kind === "done"'),'whole browser screenshot',40000);
+    const fullBrowser=await readFile(resolve(base,'captures/capture.png'));
+    assert.equal(fullBrowser.readUInt32BE(20),2160,'whole browser capture fits within 4K');
+    assert.ok(!fullBrowser.equals(capture),'window capture differs from page-only capture');
+    await writeFile(resolve(base,'whole-browser.png'),fullBrowser);
+    console.log('PASS native whole browser screenshot including toolbar and sidebar, without screen sharing');
+    await command({type:'capture.menu'});
+    await waitFor(()=>captureUi.evaluate('!!document.querySelector(".capture-action")'),'whole browser area options');
+    await captureUi.evaluate('document.querySelector(".capture-modes button").click()');
+    await captureUi.evaluate('window.__captureResult=null;document.querySelector(".capture-action").click()');
+    await waitFor(()=>captureUi.evaluate('!!document.querySelector(".capture-selection img")?.naturalWidth'),'window region preview',40000);
+    const dimensions=await captureUi.evaluate('({w:innerWidth,h:innerHeight})');
+    await captureUi.call('Input.dispatchMouseEvent',{type:'mousePressed',x:dimensions.w*.1,y:dimensions.h*.2,button:'left',clickCount:1});
+    await captureUi.call('Input.dispatchMouseEvent',{type:'mouseMoved',x:dimensions.w*.6,y:dimensions.h*.7,button:'left',buttons:1});
+    await captureUi.call('Input.dispatchMouseEvent',{type:'mouseReleased',x:dimensions.w*.6,y:dimensions.h*.7,button:'left',clickCount:1});
+    await waitFor(()=>captureUi.evaluate('window.__captureResult?.kind === "done"'),'whole browser selected area',40000);
+    const selectedArea=await readFile(resolve(base,'captures/capture.png'));
+    assert.ok(Math.abs(selectedArea.readUInt32BE(16)-fullBrowser.readUInt32BE(16)*.5)<=2);
+    assert.ok(Math.abs(selectedArea.readUInt32BE(20)-fullBrowser.readUInt32BE(20)*.5)<=2);
+    console.log('PASS full interface region selection and cropped screenshot');
+    await command({type:'settings.set',id:'uiScale',index:2});
+    await command({type:'capture.menu'});
+    await waitFor(()=>captureUi.evaluate('!!document.querySelector(".capture-action")'),'capture options at 80%');
+    await captureUi.call('Emulation.setDeviceMetricsOverride',{width:360,height:160,deviceScaleFactor:1,mobile:false});
+    assert.ok(await captureUi.evaluate('document.querySelector(".capture-action").getBoundingClientRect().right <= innerWidth && document.querySelector(".capture-close").getBoundingClientRect().bottom <= innerHeight'),'capture controls fit narrow window at 80%');
+    await captureUi.call('Emulation.clearDeviceMetricsOverride');
+    const sizesBefore=(await readFile(resolve(profile,'debug.log'),'utf8')).split('commande capture.size').length;
+    await command({type:'capture.menu'});await delay(150);await command({type:'capture.menu'});
+    await waitFor(async()=>(await readFile(resolve(profile,'debug.log'),'utf8')).split('commande capture.size').length>sizesBefore,'capture controls reappear after toolbar toggle');
+    await captureUi.evaluate('document.querySelector(".capture-close").click()');
+    await command({type:'settings.set',id:'uiScale',index:0});
+    console.log('PASS responsive capture controls at 80% interface scale');
+    await command({type:'extensions.open'});
+    const popup = await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#popup')),'extensions manager'));
+    await popup.evaluate(`chrome.webview.addEventListener('message',e=>{ if(e.data.popup) window.__extensions=e.data; })`);
+    await command({type:'extension.install',title:'https://chromewebstore.google.com/detail/icloud-passwords/pejdijmoenmkgeppbflobdenhhabjlaj'});
+    await waitFor(()=>popup.evaluate('window.__extensions?.popup === "extension-confirm" && window.__extensions.permissions.includes("nativeMessaging")'), 'extension permissions review',90000);
+    await command({type:'extension.confirm',id:'pejdijmoenmkgeppbflobdenhhabjlaj'});
+    await waitFor(()=>popup.evaluate('window.__extensions?.installed?.some(e=>e.id === "pejdijmoenmkgeppbflobdenhhabjlaj" && e.enabled)'), 'signed iCloud extension installation',90000);
+    console.log('PASS signed Chrome Web Store package installs with original iCloud identity');
+    await command({type:'extension.pin',id:'pejdijmoenmkgeppbflobdenhhabjlaj'});
+    await waitFor(async()=>(await state()).extensions?.some(e=>e.id==='pejdijmoenmkgeppbflobdenhhabjlaj'),'extension pinned');
+    assert.ok(await ui.evaluate('document.querySelector(".pinned-extension img")?.naturalWidth >= 32'));
+    assert.ok(JSON.parse(await readFile(resolve(profile,'settings.json'),'utf8')).PinnedExtensions.includes('pejdijmoenmkgeppbflobdenhhabjlaj'),'pin is persisted in profile settings');
+    await command({type:'extension.show',id:'pejdijmoenmkgeppbflobdenhhabjlaj'});
+    const extension = await connect(await waitFor(async()=>(await targets()).find(t=>t.url.startsWith('chrome-extension://pejdijmoenmkgeppbflobdenhhabjlaj/') && t.type==='page'), 'iCloud popup'));
+    await waitFor(()=>extension.evaluate('document.readyState === "complete"'),'iCloud popup ready');
+    console.log('PASS iCloud popup opens (no passwords inspected; real autofill remains a manual check)');
+    await command({type:'extension.reload',id:'pejdijmoenmkgeppbflobdenhhabjlaj'});
+    await command({type:'extension.toggle',id:'pejdijmoenmkgeppbflobdenhhabjlaj'});
+    await waitFor(async()=>!(await state()).extensions?.some(e=>e.id==='pejdijmoenmkgeppbflobdenhhabjlaj'),'disabled extension leaves quick access');
+    await command({type:'extensions.open'});
+    await waitFor(()=>popup.evaluate('window.__extensions?.installed?.some(e=>!e.enabled)'), 'disable extension');
+    await waitFor(async()=>(await state()).extensions?.length===0,'disabled extension hidden from quick access');
+    await command({type:'extension.remove',id:'pejdijmoenmkgeppbflobdenhhabjlaj'});
+    await waitFor(async()=>!(await readdir(resolve(profile,'extensions'))).includes('pejdijmoenmkgeppbflobdenhhabjlaj'), 'extension files removed');
+    await popup.evaluate('window.__extensions = null');
+    await command({type:'extensions.open'});
+    await waitFor(()=>popup.evaluate('window.__extensions?.installed?.length === 0'), 'remove extension');
+    console.log('PASS extension reload, disable and removal');
+    await stop();
+  } else {
   let s = await state();
   const first = s.activeId;
   const page = await pageAt('/a');
@@ -183,7 +285,7 @@ try {
   await pageAt('/b');
   console.log('PASS download does not suppress the following real error');
   await command({type:'settings.set',id:'theme',index:0});
-  await other.evaluate(`document.body.style.cssText='background:#121212;min-height:100vh;color:white';`);
+  await other.evaluate(`document.body.style.cssText='background:#121212;min-height:100vh;color:white'; document.body.firstElementChild.style.background='transparent';`);
   await waitFor(() => ui.evaluate('document.documentElement.dataset.theme === "dark" && getComputedStyle(document.documentElement).getPropertyValue("--page-bg").trim() === "rgb(18, 18, 18)"'), 'dark page theme');
   await other.evaluate('document.body.style.backgroundColor = "#fafafa"');
   await waitFor(() => ui.evaluate('document.documentElement.dataset.theme === "light"'), 'site switches to light without navigation');
@@ -403,7 +505,10 @@ try {
   assert.equal(await privateStart.evaluate('document.querySelectorAll(".start-history button,.start-frequent button").length'),0);
   console.log('PASS private window purple theme and no visits on private start page');
   await stop();
+  }
 } catch (error) {
+  const manager = (await targets()).find(t=>t.url.endsWith('#popup'));
+  if (manager) console.error('MANAGER',await (await connect(manager)).evaluate('JSON.stringify(window.__extensions,(key,value)=>key === "icon" ? undefined : value)'));
   if (ui) console.error(await ui.evaluate('JSON.stringify({ready:document.readyState,listening:window.__checkListening,lastEvent:window.__checkLastMessage?.event,text:document.body?.innerText.slice(0,300)})').catch(() => 'UI unavailable'));
   console.error(await readFile(resolve(profile, 'debug.log'), 'utf8').catch(() => 'No diagnostic log'));
   throw error;

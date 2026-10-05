@@ -116,14 +116,15 @@ export default function App() {
       </div>
 
       <div className="topbar-right pill-surface" onMouseDown={dragWindow}>
+        {state.extensions?.map(extension => <button key={extension.id} className="pill-icon-btn pinned-extension" aria-label={extension.name} title={extension.name}
+          onClick={e => { const box = e.currentTarget.getBoundingClientRect(); send({type:'extension.show', id:extension.id, x:box.right, y:box.bottom+6}); }}>
+          {extension.icon ? <img src={extension.icon} alt="" /> : <span>{extension.name.slice(0,1)}</span>}
+        </button>)}
         <button
           className="pill-icon-btn"
           aria-label={t("Capture d'écran", 'Screenshot')}
           title={t("Capture d'écran", 'Screenshot')}
-          onClick={e => {
-            const box = e.currentTarget.getBoundingClientRect();
-            send({ type: 'capture.menu', x: box.right, y: box.bottom + 6 });
-          }}
+            onClick={() => send({ type: 'capture.menu' })}
         >
           <Icon d="M2.5 5.5h2l1-1.5h5l1 1.5h2v7h-11zM8 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4" />
         </button>

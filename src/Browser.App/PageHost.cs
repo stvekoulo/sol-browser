@@ -13,6 +13,9 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     private readonly HashSet<string> _loading = new();
     private readonly HashSet<string> _ready = new();
     private readonly HashSet<string> _visible = new();
+    private readonly HashSet<string> _pdf = new();
+    private static Task? _blockerReady;
+    public bool IsPdf(string id) => _pdf.Contains(id);
     private bool _watchLayout;
     private (string? Primary, string? Secondary, double Ratio) _layout;
 
@@ -94,7 +97,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         {
             await StartEngineAsync(view);
             // La première page attend que le bloqueur soit prêt.
-            await AdBlock.ExtensionInstalled;
+            await (_blockerReady ??= AdBlock.ApplyExtensionAsync(view.CoreWebView2.Profile, settings.BlockAds));
         }
         catch (Exception e) when ((e is InvalidOperationException or System.Runtime.InteropServices.COMException)
             && _views.GetValueOrDefault(tab.Id) != view) { return; } // fermé pendant le démarrage
@@ -124,6 +127,9 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         core.Settings.IsBuiltInErrorPageEnabled = false; // les erreurs de chargement sont affichées par le navigateur
         core.NavigationStarting += (_, e) =>
         {
+            _pdf.Remove(tab.Id);
+            if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var document) && document.AbsolutePath.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)) _pdf.Add(tab.Id);
+            core.Settings.IsZoomControlEnabled = IsPdf(tab.Id);
             core.Settings.IsWebMessageEnabled = e.Uri == Settings.DefaultHomePage;
             Navigating?.Invoke(core);
             DebugLog.Write($"navigation.start {tab.Id} #{e.NavigationId} redirect={e.IsRedirected}");
@@ -134,6 +140,22 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
             _target[tab.Id] = _errorUrl.GetValueOrDefault(tab.Id, e.Uri);
             _loading.Add(tab.Id);
             RuntimeChanged?.Invoke();
+        };
+        core.WebResourceResponseReceived += (sender, e) =>
+        {
+            if (e.Request.Uri != _target.GetValueOrDefault(tab.Id)) return;
+            try
+            {
+                if (e.Response.Headers.Contains("Content-Type"))
+                {
+                    if (e.Response.Headers.GetHeader("Content-Type").Split(';')[0].Trim().Equals("application/pdf", StringComparison.OrdinalIgnoreCase)) _pdf.Add(tab.Id);
+                    else _pdf.Remove(tab.Id);
+                    core.Settings.IsZoomControlEnabled = IsPdf(tab.Id);
+                    _ = ApplyZoomAsync(tab.Id);
+                    RuntimeChanged?.Invoke();
+                }
+            }
+            catch (Exception error) when (error is InvalidOperationException or System.Runtime.InteropServices.COMException) { }
         };
         core.NavigationCompleted += (sender, e) =>
         {
@@ -235,7 +257,8 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     {
         if (!settings.MemorySaver && core.IsSuspended) core.Resume();
         if (!settings.MemorySaver && _hiddenSince.ContainsKey(id)) _hiddenSince[id] = DateTime.UtcNow;
-        core.Settings.IsPasswordAutosaveEnabled = settings.SavePasswords && !AppPaths.Private;
+        var iCloud = (await core.Profile.GetBrowserExtensionsAsync()).Any(e => e.IsEnabled && e.Id is "pejdijmoenmkgeppbflobdenhhabjlaj" or "mfbcdcnpokpoajjciilocoachedjkima");
+        core.Settings.IsPasswordAutosaveEnabled = settings.SavePasswords && !AppPaths.Private && !iCloud;
         // Thème clair ou sombre imposé : les sites qui proposent les deux versions suivent le même choix.
         core.Profile.PreferredColorScheme = settings.Theme switch
         {
@@ -327,6 +350,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         s.IsSwipeNavigationEnabled = true;
         s.IsZoomControlEnabled = false; // le zoom est géré par le navigateur (Ctrl +, Ctrl -, Ctrl molette), pas par le moteur // balayage horizontal : page précédente ou suivante
         s.IsGeneralAutofillEnabled = false;
+        s.HiddenPdfToolbarItems = CoreWebView2PdfToolbarItems.None; // recherche, pages, rotation, impression et enregistrement natifs
         _ = core.AddScriptToExecuteOnDocumentCreatedAsync(SidewaysScript);
         s.IsReputationCheckingRequired = true; // SmartScreen
         // Aucun certificat invalide n'est accepté silencieusement, même sur localhost.
@@ -360,6 +384,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     public void Remove(string id)
     {
         _asleep.Remove(id);
+        _pdf.Remove(id);
         _ready.Remove(id);
         _hiddenSince.Remove(id);
         if (_pip == id) ExitPip(pause: false);
@@ -831,7 +856,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     {
         // Un écran simulé et le lecteur flottant règlent eux-mêmes ces métriques : le zoom reprend quand ils se terminent.
         if (!_views.TryGetValue(id, out var view) || view.CoreWebView2 is not { } core || _mode.ContainsKey(id) || _pip == id) return;
-        var zoom = core.Source == Settings.DefaultHomePage ? 1 : settings.PageZoom;
+        var zoom = core.Source == Settings.DefaultHomePage || IsPdf(id) ? 1 : settings.PageZoom;
         try
         {
             if (zoom == 1 || view.ActualWidth < 1 || view.ActualHeight < 1)
@@ -849,6 +874,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     }
 
     public CoreWebView2? CoreOf(string id) => Core(id);
+
 
     private CoreWebView2? Core(string id) =>
         _views.TryGetValue(id, out var view) ? view.CoreWebView2 : null;

@@ -124,6 +124,10 @@ public sealed partial class MainWindow : Window
         var popupBridge = new UiBridge(Popup, "index.html#popup");
         bridge.AttachPopup(popupBridge);
         var popup = new PopupHost(PopupFrame, Popup, popupBridge);
+        var captureBridge = new UiBridge(CaptureControls, "index.html#capture");
+        bridge.AttachPopup(captureBridge);
+        var capture = new PopupHost(CaptureFrame, CaptureControls, captureBridge);
+        Root.SizeChanged += (_, _) => capture.SetHeight(CaptureFrame.Height);
         popup.PageLeft = () => SidebarColumn.ActualWidth;
         var dockBridge = new UiBridge(Dock, "index.html#dock");
         bridge.AttachPopup(dockBridge);
@@ -136,7 +140,8 @@ public sealed partial class MainWindow : Window
         var welcomeBridge = new UiBridge(Welcome, "index.html#welcome");
         bridge.AttachPopup(welcomeBridge);
         var welcome = new WelcomeHost(Welcome, welcomeBridge, () => welcomeBridge.InitAsync(uiFolder, c => _controller!.Execute(c)));
-        _controller = new BrowserController(this, pages, bridge, popup, dock, panel, welcome, settings) { ExtensionPopup = new ExtensionPopupHost(ExtensionFrame, Extension) };
+        _controller = new BrowserController(this, pages, bridge, popup, dock, panel, welcome, settings) { ExtensionPopup = new ExtensionPopupHost(ExtensionFrame, Extension), CapturePanel = capture };
+        _controller.NativeZoomChanged += () => SetShortcuts(_shortcutsActive);
         WireDivider();
         void ApplyInterfaceScale()
         {
@@ -149,9 +154,9 @@ public sealed partial class MainWindow : Window
         WireGestures();
 
         await bridge.InitAsync(uiFolder, _controller.Execute);
-        await AdBlock.ApplyExtensionAsync(Ui.CoreWebView2.Profile, settings.BlockAds);
         if (settings.BlockAds) _ = AdBlock.UpdateExtensionAsync();
         await popupBridge.InitAsync(uiFolder, _controller.Execute);
+        await captureBridge.InitAsync(uiFolder, _controller.Execute);
         popup.Hide();
         dock.Hide();
     }
@@ -381,12 +386,15 @@ public sealed partial class MainWindow : Window
         return timer;
     }
 
+    private bool _shortcutsActive;
     private void SetShortcuts(bool active)
     {
+        _shortcutsActive = active;
         for (var i = 0; i < Shortcuts.Length; i++)
         {
             UnregisterHotKey(_hwnd, i);
-            if (active) RegisterHotKey(_hwnd, i, Shortcuts[i].Modifiers | 0x4000 /* MOD_NOREPEAT */, Shortcuts[i].Key);
+            if (active && !(_controller?.UseNativeZoom == true && Shortcuts[i].Action.StartsWith("zoom.")))
+                RegisterHotKey(_hwnd, i, Shortcuts[i].Modifiers | 0x4000 /* MOD_NOREPEAT */, Shortcuts[i].Key);
         }
     }
 

@@ -75,6 +75,8 @@ public sealed class Settings
     public double PanelHeight { get; set; } = 300;
     /// <summary>Écrans affichés côte à côte par la comparaison d'écrans ; vide : le choix par défaut.</summary>
     public List<string> CompareDevices { get; set; } = new();
+    private List<string> _pinnedExtensions = new();
+    public List<string> PinnedExtensions { get => _pinnedExtensions; set => _pinnedExtensions = value?.Where(ExtensionCatalog.IsId).Distinct().ToList() ?? []; }
     /// <summary>Raccourcis de la carte latérale. Ceux-ci sont proposés au départ ; l'utilisateur les modifie ou les retire.</summary>
     public List<SiteShortcut> Shortcuts { get; set; } =
     [

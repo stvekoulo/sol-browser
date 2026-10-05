@@ -13,7 +13,7 @@ namespace Browser.App;
 public sealed class ExtensionPopupHost(Grid frame, WebView2 view)
 {
     private const double Edge = 10, MinWidth = 260, MaxWidth = 780, MinHeight = 120, MaxHeight = 620;
-    private bool _started;
+    private Task? _initialization;
     private double _anchorRight, _top;
     private DateTime _shownAt;
     private int _run;
@@ -26,35 +26,51 @@ public sealed class ExtensionPopupHost(Grid frame, WebView2 view)
     /// <param name="right">Bord droit de l'encart (celui du bouton), dans la fenêtre.</param>
     public async Task ShowAsync(string url, double right, double top)
     {
-        if (!_started)
-        {
-            _started = true;
-            await view.EnsureCoreWebView2Async(await AdBlock.EnvironmentAsync());
-            var core = view.CoreWebView2;
-            core.Settings.IsStatusBarEnabled = false;
-            core.Settings.IsZoomControlEnabled = false;
-            core.NewWindowRequested += (_, e) => { e.Handled = true; Hide(); TabRequested?.Invoke(e.Uri); };
-            core.WindowCloseRequested += (_, _) => Hide(); // l'extension ferme sa fenêtre elle-même, une fois son action faite
-            core.NavigationCompleted += (_, _) => _ = FitSoonAsync(_run);
-            // Clic ailleurs : l'encart se referme. Le tout premier changement de curseur, à l'ouverture, ne compte pas.
-            view.LostFocus += (_, _) => { if ((DateTime.UtcNow - _shownAt).TotalMilliseconds > 500) Hide(); };
-        }
-        _run++;
+        var run = ++_run;
+        try { await (_initialization ??= InitializeAsync()); }
+        catch { _initialization = null; throw; }
+        if (run != _run) return;
         (_anchorRight, _top, _shownAt) = (right, top, DateTime.UtcNow);
-        Place(380, MinHeight); // au plus court : la mesure du contenu ne peut que l'agrandir, jamais le réduire
+        Place(380, MinHeight);
         frame.Visibility = Visibility.Visible;
         frame.UpdateLayout();
         CornerClip.Set(view, 16);
         view.CoreWebView2.Navigate(url);
         await Task.Delay(180);
-        if (IsOpen) view.Focus(FocusState.Programmatic);
+        if (IsOpen && run == _run) view.Focus(FocusState.Programmatic);
+    }
+
+    private async Task InitializeAsync()
+        {
+            await view.EnsureCoreWebView2Async(await AdBlock.EnvironmentAsync());
+            var core = view.CoreWebView2;
+            core.Settings.IsStatusBarEnabled = false;
+            core.Settings.AreHostObjectsAllowed = false;
+            core.Settings.IsWebMessageEnabled = false;
+            core.Settings.IsZoomControlEnabled = false;
+            core.NewWindowRequested += (_, e) => { e.Handled = true; Hide(); TabRequested?.Invoke(e.Uri); };
+            core.WindowCloseRequested += (_, _) => Hide(); // l'extension ferme sa fenêtre elle-même, une fois son action faite
+            core.NavigationCompleted += (_, _) => _ = FitSoonAsync(_run);
+            // Clic ailleurs : l'encart se referme. Le tout premier changement de curseur, à l'ouverture, ne compte pas.
+            view.LostFocus += (_, _) => _ = HideIfUnfocusedAsync(_run);
+        }
+
+    private async Task HideIfUnfocusedAsync(int run)
+    {
+        await Task.Delay(180); // un clic dans WebView2 perd puis reprend parfois le focus
+        if (run != _run || !IsOpen || (DateTime.UtcNow - _shownAt).TotalMilliseconds < 500) return;
+        try
+        {
+            if (await view.CoreWebView2.ExecuteScriptAsync("document.hasFocus()") == "false" && run == _run) Hide();
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { Hide(); }
     }
 
     private void Place(double width, double height)
     {
         var window = (FrameworkElement)frame.Parent;
-        frame.Width = Math.Clamp(width, MinWidth, Math.Min(MaxWidth, window.ActualWidth - 2 * Edge));
-        frame.Height = Math.Clamp(height, MinHeight, Math.Min(MaxHeight, window.ActualHeight - _top - Edge));
+        frame.Width = Math.Clamp(width, Math.Min(MinWidth, Math.Max(1, window.ActualWidth - 2 * Edge)), Math.Max(1, Math.Min(MaxWidth, window.ActualWidth - 2 * Edge)));
+        frame.Height = Math.Clamp(height, Math.Min(MinHeight, Math.Max(1, window.ActualHeight - _top - Edge)), Math.Max(1, Math.Min(MaxHeight, window.ActualHeight - _top - Edge)));
         frame.Margin = new Thickness(Math.Max(Edge, Math.Min(_anchorRight, window.ActualWidth - Edge) - frame.Width), _top, 0, 0);
     }
 
@@ -80,8 +96,8 @@ public sealed class ExtensionPopupHost(Grid frame, WebView2 view)
 
     public void Hide()
     {
-        if (!IsOpen) return;
         _run++;
+        if (!IsOpen) return;
         frame.Visibility = Visibility.Collapsed;
         view.CoreWebView2?.Navigate("about:blank"); // la page de l'extension est déchargée : rien ne tourne encart fermé
     }
