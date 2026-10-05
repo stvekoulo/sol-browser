@@ -16,7 +16,12 @@ public sealed class SplitLayout
     }
 
     public void Close() => (PrimaryId, SecondaryId) = (null, null);
-    public void Resize(double ratio) => Ratio = Math.Clamp(ratio, 0.2, 0.8);
+    public void Resize(double ratio) { if (double.IsFinite(ratio)) Ratio = Math.Clamp(ratio, 0.2, 0.8); }
+    public static double FitRatio(double ratio, double width)
+    {
+        var minimum = width > 0 ? Math.Clamp(220 / width, 0.2, 0.5) : 0.5;
+        return Math.Clamp(double.IsFinite(ratio) ? ratio : 0.5, minimum, 1 - minimum);
+    }
     public bool Contains(string? id) => id is not null && (id == PrimaryId || id == SecondaryId);
     public void OnTabClosed(string id) { if (Contains(id)) Close(); }
 }

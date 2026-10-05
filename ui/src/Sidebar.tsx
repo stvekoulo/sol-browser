@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { formatDomain, onState, send, type State, type Tab } from './bridge';
+import { interfaceScale, isStartPage, formatDomain, onState, send, type State, type Tab } from './bridge';
 import { t, useLang } from './i18n';
 import { CopyIcon, Icon, LockIcon } from './Icons';
 import { startSlotDrag, useVerticalDrag } from './useVerticalDrag';
+import logo from './assets/logo.png';
 
 type Icons = Record<string, string | null | undefined>;
 
 // Décalage de la vue Sidebar dans MainWindow.xaml (colonne gauche sous la barre de 52px).
 const OFFSET_X = 0;
-const OFFSET_Y = 52;
+const OFFSET_Y = () => 52 * interfaceScale();
 
 export default function Sidebar() {
   const [state, setState] = useState<State | null>(null);
@@ -37,7 +38,7 @@ export default function Sidebar() {
   }, []);
 
   const activeTab = state?.tabs.find(t => t.id === state.activeId);
-  const activeUrl = !activeTab || activeTab.url === 'about:blank' ? '' : activeTab.url;
+  const activeUrl = !activeTab || (activeTab.url === 'about:blank' || isStartPage(activeTab.url)) ? '' : activeTab.url;
 
   useEffect(() => {
     if (!editingUrl) setUrlText(activeUrl);
@@ -96,7 +97,7 @@ export default function Sidebar() {
             onClick={() => send({ type: 'group.toggle', id: group.id })}
             onContextMenu={e => {
               e.preventDefault();
-              send({ type: 'group.menu', id: group.id, x: e.clientX + OFFSET_X, y: e.clientY + OFFSET_Y });
+              send({ type: 'group.menu', id: group.id, x: e.clientX + OFFSET_X, y: e.clientY + OFFSET_Y() });
             }}
           >
             {group.icon ? <span className="tab-group-icon" aria-hidden>{group.icon}</span> : <span className="tab-group-dot" aria-hidden />}
@@ -115,6 +116,16 @@ export default function Sidebar() {
 
   return (
     <aside className={`sidebar-card ${motion.way}`} onAnimationEnd={() => setMotion(m => ({ ...m, way: '' }))} aria-label={t('Panneau latéral des onglets', 'Tabs sidebar')}>
+      <div className="sidebar-heading">
+        <button className="sidebar-profile" title={t(`Profil : ${state.profile}`, `Profile: ${state.profile}`)} onClick={e => {
+          const box = e.currentTarget.getBoundingClientRect();
+          send({ type: 'profile.menu', x: box.right + OFFSET_X, y: box.bottom + OFFSET_Y() + 6 });
+        }}>
+          <Icon d="M8 8a2.6 2.6 0 1 0 0-5.2A2.6 2.6 0 0 0 8 8M3 13.2c.6-2.2 2.6-3.4 5-3.4s4.4 1.2 5 3.4" size={14} />
+          <span>{state.privateMode ? t('Privé', 'Private') : state.profile}</span>
+        </button>
+        <span className="sidebar-brand"><img src={logo} alt="" /><strong>Sol</strong></span>
+      </div>
       <div className="sidebar-url-pill" onClick={e => {
         if (!(e.target as Element).closest('button')) inputRef.current?.focus();
       }}>
@@ -179,6 +190,17 @@ export default function Sidebar() {
         </button>
       </div>
 
+      <div className="sidebar-quick-actions" role="group" aria-label={t('Actions rapides', 'Quick actions')}>
+        {[
+          { type: 'window.private', label: t('Navigation privée', 'Private browsing'), path: 'M6.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0M14.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0M6.5 8h3' },
+          { type: 'history.open', label: t('Historique', 'History'), path: 'M2 7a6 6 0 1 1 1.5 5M2 3v4h4M8 4.5V8l2.5 1.5' },
+          { type: 'downloads.open', label: t('Téléchargements', 'Downloads'), path: 'M8 2.5v8M4.5 7.5L8 11l3.5-3.5M3 13.5h10' },
+        ].map(action => <button key={action.type} className={`sidebar-quick-btn${action.type === 'window.private' ? ' private-action' : ''}`} aria-label={action.label} title={action.label} onClick={e => {
+          const box = e.currentTarget.getBoundingClientRect();
+          send({ type: action.type, x: box.right + OFFSET_X, y: box.bottom + OFFSET_Y() + 6 });
+        }}><Icon d={action.path} size={16} /></button>)}
+      </div>
+
       {/* Où mène le lien survolé : repère contre l'hameçonnage, à la place de la bulle noire du moteur. */}
       <div className={`sidebar-status${status ? ' shown' : ''}`} aria-live="off" title={status}>
         <Icon d="M6.5 9.5l3-3M7 4.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1M9 11.5l-1 1A2.5 2.5 0 0 1 4.5 9l1-1" size={12} />
@@ -240,7 +262,7 @@ function PinnedStrip({ shortcuts, tabs, icons, activeId }: { shortcuts: State['s
                 title={tab.title || tab.url}
                 onContextMenu={e => {
                   e.preventDefault();
-                  send({ type: 'tab.menu', id: tab.id, x: e.clientX + OFFSET_X, y: e.clientY + OFFSET_Y });
+                  send({ type: 'tab.menu', id: tab.id, x: e.clientX + OFFSET_X, y: e.clientY + OFFSET_Y() });
                 }}
                 onMouseDown={e => {
                   if (e.button === 0) send({ type: 'tab.activate', id: tab.id });
@@ -271,7 +293,7 @@ function ShortcutPill({ shortcut, index, wide, active }: { shortcut: State['shor
       title={label}
       onContextMenu={e => {
         e.preventDefault();
-        send({ type: 'shortcut.menu', index, x: e.clientX + OFFSET_X, y: e.clientY + OFFSET_Y });
+        send({ type: 'shortcut.menu', index, x: e.clientX + OFFSET_X, y: e.clientY + OFFSET_Y() });
       }}
       onMouseDown={e => {
         // La page s'ouvre dans le raccourci lui-même, sans ligne dans la liste des onglets. Clic du milieu : elle se ferme.
@@ -340,7 +362,7 @@ function SidebarTabRow({ tab, index, icon, active, grouped = false }: { tab: Tab
       {...slot}
       onContextMenu={e => {
         e.preventDefault();
-        send({ type: 'tab.menu', id: tab.id, x: e.clientX + OFFSET_X, y: e.clientY + OFFSET_Y });
+        send({ type: 'tab.menu', id: tab.id, x: e.clientX + OFFSET_X, y: e.clientY + OFFSET_Y() });
       }}
       onMouseDown={e => {
         if (e.button === 0) {

@@ -49,11 +49,36 @@ public sealed class BrowserController
         _pages.RuntimeChanged += Refresh;
         _pages.NewTabRequested += url => { Open(url); Refresh(); };
         _pages.Loaded += RecordVisit;
+        _pages.StartRequested += (id, command) =>
+        {
+            if (_closingWindow) return;
+            if (command.Type == "start.ready")
+            {
+                _bridge.BroadcastTheme();
+                _pages.PostStart(id, StartJson());
+                foreach (var url in _db.Bookmarks().Select(b => b.Url).Concat(_settings.Shortcuts.Select(s => s.Url)).Distinct().Take(24)) FetchStartIcon(url);
+                LoadStartPreviews();
+            }
+            else if (command.Type == "start.navigate") _pages.Navigate(id, Resolve(command.Input!));
+            else if (_tabs.Groups.Any(g => g.Id == command.Id) && _tabs.Tabs.FirstOrDefault(t => t.GroupId == command.Id) is { } tab)
+            { Activate(tab.Id); Refresh(); }
+        };
+        _pages.PageFocused += id => { if (!_closingWindow && _tabs.ActiveId != id) { Activate(id); Refresh(); } };
+        _bridge.ThemePublished += json => { if (!_closingWindow) foreach (var tab in _tabs.Tabs.Where(t => t.Url == Settings.DefaultHomePage)) _pages.PostStart(tab.Id, json); };
         _pages.Discarded += id => { _restored.Add(id); _network.Forget(id); Refresh(); }; // son rechargement ne sera pas une nouvelle visite
         _pages.KeepAwake = id => _split.Contains(id) || _downloads.Any(d => d.TabId == id && d.Op.State == Microsoft.Web.WebView2.Core.CoreWebView2DownloadState.InProgress);
         _pages.PipReturnRequested += id => { Activate(id); Refresh(); };
-        _pages.Loaded += id => _ = LearnShortcutNameAsync(id);
-        _pages.FaviconChanged += (id, data) => { _favicons[id] = data; PostFavicon(id); LearnShortcutIcon(id, data); };
+        _pages.Loaded += id =>
+        {
+            _ = LearnShortcutNameAsync(id);
+            if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { } tab && IsWeb(tab.Url) && tab.Url != Settings.DefaultHomePage) FetchStartIcon(tab.Url);
+        };
+        _pages.FaviconChanged += (id, data) =>
+        {
+            if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { } tab)
+                data = _startIcons.GetValueOrDefault(SiteShortcut.DomainOf(tab.Url)) ?? data;
+            _favicons[id] = data; PostFavicon(id); LearnShortcutIcon(id, data);
+        };
         _pages.ContextMenuRequested += OpenContextMenu;
         _pages.DeviceAreaMenuRequested += (tabId, x, y) => ShowMenu(x, y, DeviceEntries(tabId, x, y));
         _pages.StatusChanged += (id, text) =>
@@ -74,6 +99,7 @@ public sealed class BrowserController
         _window.Closed += (_, _) =>
         {
             _closingWindow = true;
+            _startPreviewCancel.Cancel();
             _sessionSave.Stop();
             HidePopup(); // terminer les demandes de permission encore en attente
             SaveSession();
@@ -102,6 +128,7 @@ public sealed class BrowserController
             // Vue posée sur la page : ces commandes ne changent pas l'état des onglets.
             case "suggest": Suggest(id, c.Query!, c.X!.Value, c.Y!.Value, c.Width!.Value); return;
             case "library.open": OpenLibrary(c.X!.Value, c.Y!.Value); return;
+            case "history.open": OpenLibrary(c.X!.Value, c.Y!.Value, history: true); return;
             case "downloads.open": OpenDownloads(c.X!.Value, c.Y!.Value); return;
             case "download.cancel": FindDownload(id)?.Cancel(); return; // le panneau reste ouvert
             case "download.open" or "download.reveal":
@@ -130,6 +157,17 @@ public sealed class BrowserController
             case "menu.pick": PickMenuItem(c.Index!.Value); return;
             case "settings.open": OpenSettings(c.X!.Value, c.Y!.Value); return;
             case "settings.set":
+                if (id == "uiScale")
+                {
+                    if (c.Index is not (0 or 1 or 2)) return;
+                    _settings.UiScale = new[] { 1d, 0.9, 0.8 }[c.Index.Value];
+                    JsonFileStore.Save(AppPaths.Settings, _settings);
+                    InterfaceScaleChanged?.Invoke();
+                    _bridge.BroadcastTheme();
+                    _popup.Rescale();
+                    if (_settingsOpen) _popup.Post(SettingsJson());
+                    return;
+                }
                 if (id == "theme") SetTheme(c.Index!.Value);
                 else if (id == "language") SetLanguage(c.Index!.Value);
                 else if (id == "font") SetFont(c.Index!.Value);
@@ -382,7 +420,7 @@ public sealed class BrowserController
     private void OpenDownloads(double x, double y)
     {
         if (ClosesPanel("downloads")) return;
-        const double width = 340;
+        const double width = 420;
         HidePopup();
         _downloadsOpen = true;
         _popup.Show(x - width, y, width, DownloadsJson(_downloads), focus: true);
@@ -457,6 +495,7 @@ public sealed class BrowserController
 
     // Panneau de réglages : des interrupteurs, appliqués tout de suite et enregistrés.
     private bool _settingsOpen;
+    public event Action? InterfaceScaleChanged;
 
     private string SettingsJson() => JsonSerializer.Serialize(new
     {
@@ -465,9 +504,10 @@ public sealed class BrowserController
         update = Program.Update is { } update ? new { version = update.Version, percent = update.Percent, ready = update.Ready } : null,
         check = Program.Check,
         zoom = (int)Math.Round(_settings.PageZoom * 100),
+        uiScale = _settings.UiScale,
         theme = Math.Max(0, Array.IndexOf(Themes, _settings.Theme)),
         language = Math.Max(0, Array.IndexOf(Languages, _settings.Language)),
-        home = _settings.HomePage,
+        home = _settings.HomePage == Settings.DefaultHomePage ? "" : _settings.HomePage,
         font = Math.Max(0, Array.IndexOf(Fonts, _settings.Font)),
         // Version installée ; null : extension absente, ou coupée (ses pages de réglages ne s'ouvrent pas tant qu'elle l'est).
         ublock = AdBlock.ExtensionId is null || !_settings.BlockAds ? null : AdBlock.ExtensionVersion,
@@ -493,6 +533,7 @@ public sealed class BrowserController
         },
         items = new[]
         {
+            new { key = "startWallpaper", label = T("Image d'arrière-plan du nouvel onglet", "New tab background image"), hint = T("Affiche l'image de fond sur la page d'accueil ; sinon, suit le thème du navigateur", "Shows the background image on the start page; otherwise follows the browser theme"), on = _settings.StartWallpaper },
             new { key = "blocker", label = T("Bloquer les publicités et les traqueurs", "Block ads and trackers"), hint = AdBlock.ExtensionId is null ? T("uBlock Origin Lite est absent : rien n'est bloqué", "uBlock Origin Lite is missing: nothing is blocked") : T("Avec uBlock Origin Lite, intégré au navigateur", "With uBlock Origin Lite, built into the browser"), on = _settings.BlockAds },
             new { key = "pip", label = T("Lecteur flottant", "Floating player"), hint = T("En quittant un onglet où une vidéo joue, elle reste à l'écran", "Leaving a tab with a playing video keeps it on screen"), on = _settings.AutoPip },
             new { key = "memory", label = T("Économie de mémoire", "Memory saver"), hint = MemoryHint(), on = _settings.MemorySaver },
@@ -507,10 +548,10 @@ public sealed class BrowserController
     private void OpenSettings(double x, double y)
     {
         if (ClosesPanel("settings")) return;
-        const double width = 340;
+        const double width = 420;
         HidePopup();
         _settingsOpen = true;
-        _popup.Show(x - width, y, width, SettingsJson(), focus: true);
+        _popup.Show(x - width * _settings.UiScale, y, width, SettingsJson(), focus: true);
     }
 
     private static readonly string[] Themes = ["page", "light", "dark", "system"];
@@ -664,6 +705,7 @@ public sealed class BrowserController
             case "floatingDownloads": _settings.FloatingDownloads = on; break;
             case "onlineSuggestions": _settings.OnlineSuggestions = on; break;
             case "passwords": _settings.SavePasswords = on; break;
+            case "startWallpaper": _settings.StartWallpaper = on; break;
             case "tint.topbar": _settings.TintTopbar = on; break;
             case "tint.sidebar": _settings.TintSidebar = on; break;
             case "tint.menus": _settings.TintMenus = on; break;
@@ -742,7 +784,7 @@ public sealed class BrowserController
     private void Zoom(string? id, string action)
     {
         if (id is null) return;
-        if (_tabs.Tabs.All(t => t.Id != id)) return;
+        if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is not { } tab || tab.Url == Settings.DefaultHomePage) return;
         var current = _settings.PageZoom;
         var zoom = action switch
         {
@@ -819,7 +861,8 @@ public sealed class BrowserController
         _splitBlankTab = null;
         _split.Close();
         // Resté vide : il n'a servi à rien, il repart avec la vue scindée.
-        if (blank is not null && _tabs.Tabs.Count > 1 && _tabs.Tabs.FirstOrDefault(t => t.Id == blank) is { Url: "about:blank" or "" })
+        if (blank is not null && _tabs.Tabs.Count > 1 && _tabs.Tabs.FirstOrDefault(t => t.Id == blank) is { } tab
+            && (tab.Url is "about:blank" or "" || tab.Url == Settings.DefaultHomePage))
             Close(blank);
     }
 
@@ -828,7 +871,7 @@ public sealed class BrowserController
     {
         if (_tabs.ActiveId is not { } active) return;
         if (otherId is not null && (otherId == active || _tabs.Tabs.All(t => t.Id != otherId))) return;
-        var other = otherId ?? Open("about:blank", activate: false).Id;
+        var other = otherId ?? Open(Settings.DefaultHomePage, activate: false).Id;
         _splitBlankTab = otherId is null ? other : null;
 
         _split.Open(active, other);
@@ -1079,29 +1122,59 @@ public sealed class BrowserController
 
     private const int MaxShortcutIcon = 100_000; // octets
 
-    // Site jamais visité : son icône est demandée à l'adresse habituelle, /favicon.ico. Rien d'autre n'est envoyé.
+    // Préférer les icônes déclarées par le site aux petites icônes historiques.
     private async Task FetchShortcutIconAsync(SiteShortcut shortcut)
     {
-        if (!IsWeb(shortcut.Url) || !Uri.TryCreate(shortcut.Url, UriKind.Absolute, out var site)) return;
-        try
-        {
-            using var response = await Http.GetAsync(new Uri(site, "/favicon.ico"));
-            var type = response.Content.Headers.ContentType?.MediaType ?? "";
-            if (!response.IsSuccessStatusCode || !type.StartsWith("image/", StringComparison.OrdinalIgnoreCase)) return;
-            if (response.Content.Headers.ContentLength is > MaxShortcutIcon) return;
-            var bytes = await response.Content.ReadAsByteArrayAsync();
-            // Entre-temps, un onglet a pu fournir l'icône, ou le raccourci a pu changer de site ou disparaître.
-            if (bytes.Length is 0 or > MaxShortcutIcon || shortcut.Icon is not null || !_settings.Shortcuts.Contains(shortcut)) return;
-            if (SiteShortcut.DomainOf(shortcut.Url) != SiteShortcut.DomainOf(site.AbsoluteUri)) return;
-            shortcut.Icon = $"data:{type};base64,{Convert.ToBase64String(bytes)}";
-            SaveShortcuts();
-        }
-        catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
-        {
-            // hors ligne ou site sans icône : le raccourci garde sa lettre, jusqu'à la première visite
-        }
+        var url = shortcut.Url;
+        var icon = await FetchSiteIconAsync(url);
+        if (icon is null || shortcut.Icon is not null || !_settings.Shortcuts.Contains(shortcut) || shortcut.Url != url) return;
+        shortcut.Icon = icon;
+        SaveShortcuts();
     }
 
+    private static async Task<string?> FetchSiteIconAsync(string url)
+    {
+        if (!IsWeb(url) || !Uri.TryCreate(url, UriKind.Absolute, out var site)) return null;
+        var candidates = new List<(Uri Url, int Size)>();
+        try
+        {
+            using var page = await Http.GetAsync(site, HttpCompletionOption.ResponseHeadersRead);
+            if (page.IsSuccessStatusCode && page.Content.Headers.ContentType?.MediaType == "text/html")
+            {
+                using var stream = await page.Content.ReadAsStreamAsync();
+                using var reader = new StreamReader(stream);
+                var buffer = new char[131072];
+                var count = await reader.ReadBlockAsync(buffer, 0, buffer.Length);
+                var html = new string(buffer, 0, count);
+                foreach (System.Text.RegularExpressions.Match link in System.Text.RegularExpressions.Regex.Matches(html, @"<link\b[^>]*>", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                {
+                    var attrs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (System.Text.RegularExpressions.Match attr in System.Text.RegularExpressions.Regex.Matches(link.Value, "([\\w-]+)\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s>]+))"))
+                        attrs[attr.Groups[1].Value] = System.Net.WebUtility.HtmlDecode(attr.Groups[2].Success ? attr.Groups[2].Value : attr.Groups[3].Success ? attr.Groups[3].Value : attr.Groups[4].Value);
+                    if (!attrs.TryGetValue("rel", out var rel) || !rel.Split(' ', StringSplitOptions.RemoveEmptyEntries).Any(r => r.Equals("icon", StringComparison.OrdinalIgnoreCase) || r.Equals("apple-touch-icon", StringComparison.OrdinalIgnoreCase))) continue;
+                    if (!attrs.TryGetValue("href", out var href) || !Uri.TryCreate(page.RequestMessage?.RequestUri ?? site, href, out var iconUrl) || !IsWeb(iconUrl.AbsoluteUri)) continue;
+                    var sizes = attrs.GetValueOrDefault("sizes", "");
+                    var size = sizes.Equals("any", StringComparison.OrdinalIgnoreCase) || iconUrl.AbsolutePath.EndsWith(".svg", StringComparison.OrdinalIgnoreCase) ? int.MaxValue
+                        : System.Text.RegularExpressions.Regex.Matches(sizes, @"\d+(?=x)").Select(m => int.TryParse(m.Value, out var n) ? n : 0).DefaultIfEmpty(rel.Contains("apple", StringComparison.OrdinalIgnoreCase) ? 180 : 16).Max();
+                    candidates.Add((iconUrl, size));
+                }
+            }
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException or IOException) { }
+        var urls = candidates.OrderByDescending(c => c.Size).Select(c => c.Url).Concat(new[] { new Uri(site, "/apple-touch-icon.png"), new Uri(site, "/favicon.ico") }).Distinct().Take(6);
+        foreach (var iconUrl in urls)
+        try
+        {
+            using var response = await Http.GetAsync(iconUrl);
+            var type = response.Content.Headers.ContentType?.MediaType ?? "";
+            if (!response.IsSuccessStatusCode || !type.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
+                || response.Content.Headers.ContentLength is > MaxShortcutIcon) continue;
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+            if (bytes.Length is > 0 and <= MaxShortcutIcon) return $"data:{type};base64,{Convert.ToBase64String(bytes)}";
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException) { }
+        return null;
+    }
     private void Activate(string id)
     {
         if (_asking is not null && _tabs.ActiveId != id) HidePopup();
@@ -1646,7 +1719,7 @@ public sealed class BrowserController
         ShowMenu(x, y, items, deferral.Complete);
     }
 
-    private void OpenLibrary(double x, double y)
+    private void OpenLibrary(double x, double y, bool history = false)
     {
         // Recliquer l'icône referme le panneau : le clic lui fait d'abord perdre le curseur, donc il vient de se fermer.
         // ponytail: seuil de temps ; à remplacer par un état explicite si d'autres menus s'ajoutent.
@@ -1656,6 +1729,7 @@ public sealed class BrowserController
         _popup.Show(x - width, y, width, JsonSerializer.Serialize(new
         {
             popup = "library",
+            tab = history ? "history" : (string?)null,
             bookmarks = _db.Bookmarks().Select(b => new { url = b.Url, title = b.Title }),
             history = _db.RecentHistory(12).Select(v => new { url = v.Url, title = v.Title }),
         }), focus: true); // la vue prend le curseur : la perdre la referme
@@ -1666,7 +1740,7 @@ public sealed class BrowserController
         if (_closingWindow) return;
         if (_restored.Remove(id)) return; // rouvrir une session n'est pas une visite
         if (AppPaths.Private) return;     // navigation privée : aucun historique
-        if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { } tab && IsWeb(tab.Url))
+        if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { } tab && IsWeb(tab.Url) && tab.Url != Settings.DefaultHomePage)
             _db.RecordVisit(tab.Url, tab.Title, DateTimeOffset.UtcNow);
     }
 
@@ -1737,10 +1811,98 @@ public sealed class BrowserController
     }
 
     private string? _lastActive;
+    private readonly Dictionary<string, string> _startPreviews = new();
+    private readonly HashSet<string> _startPreviewFailed = new();
+    private readonly CancellationTokenSource _startPreviewCancel = new();
+    private bool _loadingStartPreviews;
+    private readonly Dictionary<string, string?> _startIcons = new();
+    private async void FetchStartIcon(string url)
+    {
+        var domain = SiteShortcut.DomainOf(url);
+        if (_startIcons.ContainsKey(domain)) return;
+        _startIcons[domain] = null;
+        var icon = await FetchSiteIconAsync(url);
+        if (_closingWindow) return;
+        _startIcons[domain] = icon;
+        if (icon is not null)
+            foreach (var tab in _tabs.Tabs.Where(t => SiteShortcut.DomainOf(t.Url) == domain))
+            {
+                _favicons[tab.Id] = icon;
+                PostFavicon(tab.Id);
+                LearnShortcutIcon(tab.Id, icon);
+            }
+        Refresh();
+    }
+    private async void LoadStartPreviews()
+    {
+        if (AppPaths.Private || _closingWindow || _loadingStartPreviews) return;
+        _loadingStartPreviews = true;
+        var directory = Path.Combine(AppPaths.DataDir, "start-previews");
+        try
+        {
+            Directory.CreateDirectory(directory);
+            var sites = _db.FrequentSites(80).Where(v => IsWeb(v.Url) && v.Url != Settings.DefaultHomePage)
+                .DistinctBy(v => SiteShortcut.DomainOf(v.Url)).Take(6).ToList();
+            var files = sites.ToDictionary(s => s.Url, s => Path.Combine(directory,
+                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(s.Url))) + ".png"));
+            _startPreviews.Clear();
+            // Show every cached image before any site can delay the queue, including stale images during refresh.
+            foreach (var site in sites)
+                if (File.Exists(files[site.Url]))
+                    _startPreviews[site.Url] = "data:image/png;base64," + Convert.ToBase64String(await File.ReadAllBytesAsync(files[site.Url], _startPreviewCancel.Token));
+            Refresh();
+            using var slots = new SemaphoreSlim(2);
+            await Task.WhenAll(sites.Where(s => !File.Exists(files[s.Url]) || File.GetLastWriteTimeUtc(files[s.Url]) <= DateTime.UtcNow.AddMinutes(-10)).Select(async site =>
+            {
+                await slots.WaitAsync(_startPreviewCancel.Token);
+                try
+                {
+                    if (_closingWindow || !_tabs.Tabs.Any(t => t.Url == Settings.DefaultHomePage && !_pages.IsAsleep(t.Id))) return;
+                    var image = await _pages.PreviewUrlAsync(site.Url, _startPreviewCancel.Token);
+                    if (_closingWindow) return;
+                    if (image is null)
+                    {
+                        if (!_startPreviews.ContainsKey(site.Url)) _startPreviewFailed.Add(site.Url);
+                    }
+                    else
+                    {
+                        _startPreviewFailed.Remove(site.Url);
+                        _startPreviews[site.Url] = image;
+                        await File.WriteAllBytesAsync(files[site.Url], Convert.FromBase64String(image["data:image/png;base64,".Length..]), _startPreviewCancel.Token);
+                    }
+                    Refresh();
+                }
+                finally { slots.Release(); }
+            }));
+            foreach (var file in new DirectoryInfo(directory).GetFiles("*.png").OrderByDescending(f => f.LastWriteTimeUtc).Skip(24)) file.Delete();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or OperationCanceledException) { }
+        finally { _loadingStartPreviews = false; }
+    }
+    private string? StartIcon(string url) => _startIcons.GetValueOrDefault(SiteShortcut.DomainOf(url)) ?? (_tabs.Tabs.FirstOrDefault(t => SiteShortcut.DomainOf(t.Url) == SiteShortcut.DomainOf(url)) is { } tab
+        && _favicons.GetValueOrDefault(tab.Id) is { } icon ? icon : _settings.Shortcuts.FirstOrDefault(s => SiteShortcut.DomainOf(s.Url) == SiteShortcut.DomainOf(url))?.Icon);
+
+    private string StartJson()
+    {
+        IReadOnlyList<Visit> history = AppPaths.Private ? [] : _db.RecentHistory(13).Where(v => v.Url != Settings.DefaultHomePage).Take(12).ToList();
+        var frequent = AppPaths.Private ? [] : _db.FrequentSites(80).Where(v => IsWeb(v.Url) && v.Url != Settings.DefaultHomePage)
+            .DistinctBy(v => SiteShortcut.DomainOf(v.Url)).Take(6).ToList();
+        return JsonSerializer.Serialize(new
+        {
+            @event = "start", privateMode = AppPaths.Private, lang = Language.Current, wallpaper = _settings.StartWallpaper,
+            favorites = _db.Bookmarks().Take(24).Select(b => new { url = b.Url, title = b.Title, icon = StartIcon(b.Url) })
+                .Concat(_settings.Shortcuts.Select(s => new { url = s.Url, title = s.Name, icon = StartIcon(s.Url) })).DistinctBy(b => b.url).Take(24),
+            frequent = frequent.Select(v => new { url = v.Url, title = v.Title, preview = _startPreviews.GetValueOrDefault(v.Url), previewFailed = _startPreviewFailed.Contains(v.Url) }),
+            history = history.Select(v => new { url = v.Url, title = v.Title, last = v.Last.ToUnixTimeMilliseconds() }),
+            groups = _tabs.Groups.Select(g => new { id = g.Id, name = g.Name, color = g.Color, count = _tabs.Tabs.Count(t => t.GroupId == g.Id) }),
+        });
+    }
 
     private void Refresh()
     {
         if (_closingWindow || _restoringSession) return;
+        var starts = _tabs.Tabs.Where(t => t.Url == Settings.DefaultHomePage && !_pages.IsAsleep(t.Id)).ToList();
+        if (starts.Count > 0) { var json = StartJson(); foreach (var tab in starts) _pages.PostStart(tab.Id, json); }
         // Regrouper les changements ; un crash ne perd plus toute la session depuis le démarrage.
         if (!AppPaths.Private) { _sessionSave.Stop(); _sessionSave.Start(); }
         if (_tabs.ActiveId is { } recent && _recentTabs.LastOrDefault() != recent)
@@ -1767,7 +1929,7 @@ public sealed class BrowserController
                 groupId = t.GroupId,
                 asleep = _pages.IsAsleep(t.Id), // déchargé : affiché atténué, il se recharge quand on y revient
                 device = _pages.DeviceOf(t.Id) is { } simulated ? DeviceLabel(simulated) : null, // simulateur : appareil affiché
-                zoom = (int)Math.Round(_settings.PageZoom * 100),
+                zoom = t.Url == Settings.DefaultHomePage ? 100 : (int)Math.Round(_settings.PageZoom * 100),
                 loading = _pages.IsLoading(t.Id),
                 canGoBack = _pages.CanGoBack(t.Id),
                 canGoForward = _pages.CanGoForward(t.Id),

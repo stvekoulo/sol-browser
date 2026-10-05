@@ -13,11 +13,47 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     private readonly HashSet<string> _loading = new();
     private readonly HashSet<string> _ready = new();
     private readonly HashSet<string> _visible = new();
+    private bool _watchLayout;
+    private (string? Primary, string? Secondary, double Ratio) _layout;
 
     public event Action<string, string?, string?>? PageChanged; // id, url, titre
     public event Action? RuntimeChanged;                         // chargement, historique
     public event Action<string>? Loaded;                         // id, page chargée avec succès
+    public event Action<string>? PageFocused;
+    public event Action<string, Command>? StartRequested;
+    public void PostStart(string id, string json)
+    {
+        if (Core(id) is { } core && core.Source == Settings.DefaultHomePage) core.PostWebMessageAsJson(json);
+    }
     public event Action<CoreWebView2>? Navigating;
+    public async Task<string?> PreviewUrlAsync(string url, CancellationToken cancellation)
+    {
+        var preview = new WebView2 { Width = 1024, Height = 640, Opacity = 0, IsHitTestVisible = false,
+            HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
+        container.Children.Insert(0, preview);
+        try
+        {
+            await StartEngineAsync(preview);
+            var core = preview.CoreWebView2;
+            Harden(core);
+            core.PermissionRequested += (_, e) => { e.State = CoreWebView2PermissionState.Deny; e.Handled = true; };
+            core.NewWindowRequested += (_, e) => e.Handled = true;
+            core.LaunchingExternalUriScheme += (_, e) => e.Cancel = true;
+            core.DownloadStarting += (_, e) => e.Cancel = true;
+            var loaded = new TaskCompletionSource<bool>();
+            core.DOMContentLoaded += (_, _) => loaded.TrySetResult(true);
+            core.NavigationCompleted += (_, e) => { if (!e.IsSuccess) loaded.TrySetResult(false); };
+            core.Navigate(url);
+            if (!await loaded.Task.WaitAsync(TimeSpan.FromSeconds(18), cancellation)) return null;
+            await Task.Delay(300, cancellation);
+            var json = await core.CallDevToolsProtocolMethodAsync("Page.captureScreenshot", "{\"format\":\"png\",\"captureBeyondViewport\":false}");
+            using var result = System.Text.Json.JsonDocument.Parse(json);
+            return "data:image/png;base64," + result.RootElement.GetProperty("data").GetString();
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException
+            or TimeoutException or OperationCanceledException or System.Text.Json.JsonException) { return null; }
+        finally { container.Children.Remove(preview); preview.Close(); }
+    }
     public event Action<string>? NewTabRequested;
     public event Action<string, double, double, CoreWebView2ContextMenuRequestedEventArgs>? ContextMenuRequested; // id, x, y dans la fenêtre
     public event Action<string, double, double>? DeviceAreaMenuRequested; // id, x, y : clic droit à côté d'un appareil simulé
@@ -44,9 +80,15 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
 
     public async void Add(Tab tab)
     {
+        if (!_watchLayout)
+        {
+            _watchLayout = true;
+            container.SizeChanged += (_, _) => ApplyLayout(_layout.Primary, _layout.Secondary, _layout.Ratio);
+        }
         var view = new WebView2 { Visibility = Visibility.Collapsed, Opacity = 0, DefaultBackgroundColor = UiBridge.InitialBackground };
         view.SizeChanged += (_, _) => _ = ApplyZoomAsync(tab.Id);
         _views[tab.Id] = view;
+        view.GotFocus += (_, _) => { if (_visible.Contains(tab.Id) && _views.GetValueOrDefault(tab.Id) == view) PageFocused?.Invoke(tab.Id); };
         container.Children.Add(view);
         try
         {
@@ -61,16 +103,28 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         var core = view.CoreWebView2;
         core.DOMContentLoaded += (_, _) => view.Opacity = 1;
         Harden(core);
+        core.SetVirtualHostNameToFolderMapping("start.sol", Path.Combine(AppContext.BaseDirectory, "ui"), CoreWebView2HostResourceAccessKind.Deny);
+        core.WebMessageReceived += (_, e) =>
+        {
+            if (e.Source != Settings.DefaultHomePage || core.Source != Settings.DefaultHomePage) return;
+            if (CommandParser.Parse(e.TryGetWebMessageAsString()) is { } command && command.Type is "start.ready" or "start.navigate" or "start.group")
+                StartRequested?.Invoke(tab.Id, command);
+        };
         await ApplySettingsAsync(tab.Id, core);
         if (!_views.TryGetValue(tab.Id, out initializing) || initializing != view) return;
 
         // Pendant qu'une page d'erreur est affichée, l'onglet garde l'adresse demandée, pas celle de la page d'erreur.
-        core.SourceChanged += (_, _) => PageChanged?.Invoke(tab.Id, _errorUrl.GetValueOrDefault(tab.Id, core.Source), null);
+        core.SourceChanged += (_, _) =>
+        {
+            PageChanged?.Invoke(tab.Id, _errorUrl.GetValueOrDefault(tab.Id, core.Source), null);
+            _ = ApplyZoomAsync(tab.Id);
+        };
         core.DocumentTitleChanged += (_, _) => PageChanged?.Invoke(tab.Id, null, core.DocumentTitle);
         core.HistoryChanged += (_, _) => RuntimeChanged?.Invoke();
         core.Settings.IsBuiltInErrorPageEnabled = false; // les erreurs de chargement sont affichées par le navigateur
         core.NavigationStarting += (_, e) =>
         {
+            core.Settings.IsWebMessageEnabled = e.Uri == Settings.DefaultHomePage;
             Navigating?.Invoke(core);
             DebugLog.Write($"navigation.start {tab.Id} #{e.NavigationId} redirect={e.IsRedirected}");
             if (_navigation.GetValueOrDefault(tab.Id) != e.NavigationId) _downloading.Remove(tab.Id);
@@ -380,6 +434,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
 
     public void ApplyLayout(string? activeId, string? secondaryId, double ratio)
     {
+        _layout = (activeId, secondaryId, ratio);
         _visible.Clear();
         if (activeId is not null) _visible.Add(activeId);
         if (secondaryId is not null) _visible.Add(secondaryId);
@@ -387,6 +442,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         foreach (var id in new[] { activeId, secondaryId })
             if (id is not null && _asleep.Remove(id, out var tab)) Add(tab);
         var split = secondaryId is not null && _views.ContainsKey(secondaryId);
+        ratio = SplitLayout.FitRatio(ratio, container.ActualWidth - 8);
         primary.Width = new GridLength(split ? ratio : 1, GridUnitType.Star);
         divider.Width = new GridLength(split ? 8 : 0);
         secondary.Width = split ? new GridLength(1 - ratio, GridUnitType.Star) : new GridLength(0);
@@ -775,7 +831,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     {
         // Un écran simulé et le lecteur flottant règlent eux-mêmes ces métriques : le zoom reprend quand ils se terminent.
         if (!_views.TryGetValue(id, out var view) || view.CoreWebView2 is not { } core || _mode.ContainsKey(id) || _pip == id) return;
-        var zoom = settings.PageZoom;
+        var zoom = core.Source == Settings.DefaultHomePage ? 1 : settings.PageZoom;
         try
         {
             if (zoom == 1 || view.ActualWidth < 1 || view.ActualHeight < 1)

@@ -74,15 +74,27 @@ export type HostEvent = {
   font?: string; // police de l'interface : default, system, inter, sf
   lang?: string; // langue de l'interface, choisie par l'hôte
   systemDark?: boolean; // thème de Windows, lu par l'hôte
+  privateMode?: boolean;
+  uiScale?: number;
   tint?: { topbar: boolean; sidebar: boolean; menus: boolean; background: boolean };
 };
 
 // Fonds neutres des thèmes imposés. En thème par défaut, le fond de l'interface est celui de la page.
 // Le sombre est proche du noir des sites sombres : « Sombre » et « Système » rendent comme « Par défaut » sur un tel site.
 const NEUTRAL = { light: 'rgb(243, 243, 246)', dark: 'rgb(9, 9, 11)' };
+export const interfaceScale = () => Number(document.documentElement.style.getPropertyValue('--ui-scale')) || 1;
 
 function applyTheme(ev: HostEvent) {
   const root = document.documentElement.style;
+  if (location.hostname === 'ui.navigateur') {
+    const scale = ev.uiScale === 0.8 || ev.uiScale === 0.9 ? ev.uiScale : 1;
+    const changed = interfaceScale() !== scale;
+    root.setProperty('--ui-scale', String(scale));
+    document.body.style.zoom = String(scale);
+    document.body.style.height = `${100 / scale}%`;
+    if (changed) window.dispatchEvent(new Event('ui-scale'));
+  }
+  document.documentElement.dataset.private = String(!!ev.privateMode);
   document.documentElement.dataset.font = ev.font ?? 'default';
   // L'accueil est clair par défaut : il ne suit pas la page ouverte derrière lui, seulement un thème choisi exprès.
   const welcome = location.hash === '#welcome';
@@ -90,7 +102,10 @@ function applyTheme(ev: HostEvent) {
   if (welcome) ev = { ...ev, accent: null };
   const dark = mode === 'page' ? !!ev.dark : mode === 'system' ? !!ev.systemDark : mode === 'dark';
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-  root.setProperty('--page-bg', mode === 'page' || (dark && ev.dark) ? ev.bg! : dark ? NEUTRAL.dark : NEUTRAL.light);
+  root.setProperty('--page-bg', ev.privateMode ? (dark ? '#171120' : '#eee7f7') : mode === 'page' || (dark && ev.dark) ? ev.bg! : dark ? NEUTRAL.dark : NEUTRAL.light);
+  if (ev.privateMode) ev = { ...ev, accent: '#8b5cf6' };
+  if (ev.accent) root.setProperty('--tab-accent', ev.accent);
+  else root.removeProperty('--tab-accent');
   // Couleur réelle de la page, quel que soit le thème : c'est elle que prennent les coins des vues flottantes,
   // pour se fondre dans la page qu'elles recouvrent.
   root.setProperty('--page-real', ev.bg!);
@@ -129,8 +144,9 @@ export function onState(callback: (state: State) => void, onEvent?: (event: Host
 }
 
 // Extrait le nom de domaine épuré (ex. "corn.tech") pour la pilule centrale de la barre du haut.
+export const isStartPage = (url: string) => url === 'https://start.sol/index.html#start';
 export function formatDomain(url: string): string {
-  if (!url || url === 'about:blank') return '';
+  if (!url || url === 'about:blank' || isStartPage(url)) return '';
   try {
     const parsed = new URL(url);
     if (parsed.protocol === 'http:' || parsed.protocol === 'https:')

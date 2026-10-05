@@ -18,7 +18,8 @@ public sealed class SidebarHost(WebView2 sidebar, ColumnDefinition column, Actio
     /// <summary>Change la largeur de la carte ; la colonne suit tout de suite si la carte y est épinglée.</summary>
     public void Resize(double width)
     {
-        Width = Math.Clamp(Math.Round(width), MinWidth, MaxWidth);
+        var scale = UiBridge.Settings?.UiScale ?? 1;
+        Width = Math.Clamp(Math.Round(width), MinWidth * scale, MaxWidth * scale);
         if (_pinned && column.Width.Value > 0) column.Width = new GridLength(Width);
     }
     private const float CardRadius = 22; // rayon de la carte (--radius-card)
@@ -45,7 +46,7 @@ public sealed class SidebarHost(WebView2 sidebar, ColumnDefinition column, Actio
     public void PointerAt(double x, double y, bool menuOpen)
     {
         if (_pinned) return;
-        if (!_peeking && x <= EdgeZone && y > 52) { _peeking = true; Enter(dockAfter: false); }
+        if (!_peeking && x <= EdgeZone && y > 52 * (UiBridge.Settings?.UiScale ?? 1)) { _peeking = true; Enter(dockAfter: false); }
         else if (_peeking && (x > Width + 40 || y < 40) && !menuOpen) { _peeking = false; Leave(); }
     }
 
@@ -80,10 +81,11 @@ public sealed class SidebarHost(WebView2 sidebar, ColumnDefinition column, Actio
         Canvas.SetZIndex(sidebar, 1);
         sidebar.HorizontalAlignment = HorizontalAlignment.Left;
         // La vue se réduit à la carte elle-même : autour d'elle, c'est la vraie page qu'on voit.
-        sidebar.Margin = new Thickness(CardMargin, 2, 0, CardMargin);
-        sidebar.Width = Width - 2 * CardMargin;
+        var scale = UiBridge.Settings?.UiScale ?? 1;
+        sidebar.Margin = new Thickness(CardMargin * scale, 2 * scale, 0, CardMargin * scale);
+        sidebar.Width = Width - 2 * CardMargin * scale;
         sidebar.UpdateLayout();
-        CornerClip.Set(sidebar, CardRadius); // flottante : ses coins laissent voir la page
+        CornerClip.Set(sidebar, CardRadius * (float)scale); // flottante : ses coins laissent voir la page
     }
 
     private void Dock()

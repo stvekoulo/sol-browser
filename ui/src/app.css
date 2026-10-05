@@ -201,3 +201,25 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   background: #3b2f63; color: #ffffff;
   font-size: 12.5px; font-weight: 600;
 }
+
+.navigation-actions { display:flex; align-items:center; gap:2px; padding:2px 4px; height:34px; flex:none; }
+.navigation-actions .pill-surface { background:none; box-shadow:none; }
+.navigation-actions .sidebar-toggle { width:32px; height:28px; }
+.navigation-actions .sidebar-toggle:hover, .navigation-actions .sidebar-toggle.active { background:var(--bg-tab-hover); }
+.topbar-right.pill-surface { width:max-content; justify-self:end; padding:2px 5px; height:34px; gap:2px; }
+:root[data-private="true"] .private-chip { color:var(--private-accent); background:color-mix(in srgb, var(--private-accent) 14%, transparent); }
+@media (max-width:1000px) { .topbar { grid-template-columns:auto minmax(160px,1fr) auto; gap:8px; } .topbar-left { gap:6px; } }
+
+/* Chaque adresse réserve réellement l'espace de ses boutons, même en vue scindée. */
+.address-pill { container-type:inline-size; container-name:address; overflow:hidden; }
+.address-form { flex:1; min-width:0; width:auto; }
+.address-form input, .address-pill.editing .address-form input { min-width:0; padding:0 8px 0 34px; text-overflow:ellipsis; }
+.address-trail { position:static; flex:none; margin-right:6px; opacity:1; }
+.address-trail .zoom-chip { max-width:100px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.split-addresses .address-pill.focused { box-shadow:var(--shadow-glass-pill), inset 0 0 0 1.5px var(--border-active-tab); }
+.split-addresses:has(.editing) .address-pill.editing { flex-grow:3 !important; }
+.split-addresses .address-pill { min-width:64px; }
+@container address (max-width:300px) { .address-trail .zoom-chip, .address-trail button[aria-label*="Pivoter"], .address-trail button[aria-label*="Rotate"] { display:none; } }
+@container address (max-width:200px) { .address-trail button:not(:last-child) { display:none; } .address-form input, .address-pill.editing .address-form input { padding-left:28px; } .address-lead { left:9px; } }
+@container address (max-width:110px) { .address-lead { display:none; } .address-form input, .address-pill.editing .address-form input { padding-left:8px; } }
+@media (max-width:760px) { .topbar-right.pill-surface { max-width:32vw; overflow-x:auto; scrollbar-width:none; } .topbar-right .pill-icon-btn, .private-chip { flex:none; } .topbar { gap:6px; padding:0 8px; } }

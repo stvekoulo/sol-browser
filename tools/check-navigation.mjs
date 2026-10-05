@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdir, writeFile, readFile } from 'node:fs/promises';
+import { mkdir, writeFile, readFile, readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -14,6 +14,14 @@ const profile = resolve(base, 'profiles/robustness');
 await mkdir(profile, { recursive: true });
 await mkdir(resolve(base, 'downloads'), { recursive: true });
 const server = createServer((req, res) => {
+  if (req.url === '/large-icon.svg') {
+    res.writeHead(200, { 'Content-Type': 'image/svg+xml' });
+    return res.end('<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192"><rect width="192" height="192" fill="blue"/></svg>');
+  }
+  if (req.url === '/favicon.ico') {
+    res.writeHead(200, { 'Content-Type': 'image/svg+xml' });
+    return res.end('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="green"/></svg>');
+  }
   if (req.url === '/reset') return req.socket.resetAndDestroy();
   if (req.url === '/redirect') { res.writeHead(302, { Location: '/redirect' }); return res.end(); }
   if (req.url === '/download') {
@@ -21,7 +29,7 @@ const server = createServer((req, res) => {
     return res.end('Sol navigation regression check');
   }
   res.writeHead(req.url === '/missing' ? 404 : 200, { 'Content-Type': 'text/html' });
-  const respond = () => res.end(`<html><head><title>Check ${req.url}</title></head><body>Server page ${req.url}</body></html>`);
+  const respond = () => res.end(`<html><head><title>Check ${req.url}</title><link href='/favicon.ico' rel='icon' sizes='16x16'><link sizes='any' href='/large-icon.svg' rel='icon'></head><body style="background:#f5f6fa;color:#172233;font:20px system-ui;margin:0"><div style="background:#2769d4;height:100px"></div><main style="padding:40px"><h1>Server page ${req.url}</h1></main></body></html>`);
   if (req.url === '/slow') setTimeout(respond, 1500); else respond();
 });
 server.listen(0, '127.0.0.1');
@@ -74,8 +82,8 @@ async function connect(target) {
 const targets = () => fetch(`http://127.0.0.1:${port}/json/list`).then(r => r.json()).catch(() => []);
 const command = c => ui.evaluate(`chrome.webview.postMessage(${JSON.stringify(JSON.stringify(c))})`);
 const state = () => ui.evaluate('window.__checkState');
-async function launch() {
-  app = spawn(exe, ['--profile=robustness', '--bounds=-9000,-9000,1100,800'], { windowsHide: true, env: { ...process.env, NAVIGATEUR_DATA_DIR: base, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port} --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows`, NAVIGATEUR_DEBUG: '1', NAVIGATEUR_TEST_DOWNLOAD_DIR: resolve(base, 'downloads'), NAVIGATEUR_SAVER_TEST: '1' } });
+async function launch(extra = []) {
+  app = spawn(exe, ['--profile=robustness', '--bounds=-9000,-9000,1100,800', ...extra], { windowsHide: true, env: { ...process.env, NAVIGATEUR_DATA_DIR: base, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port} --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows`, NAVIGATEUR_DEBUG: '1', NAVIGATEUR_TEST_DOWNLOAD_DIR: resolve(base, 'downloads'), NAVIGATEUR_SAVER_TEST: '1' } });
   const target = await waitFor(async () => (await targets()).find(t => t.url === 'https://ui.navigateur/index.html'), 'toolbar');
   ui = await connect(target);
   await waitFor(async () => {
@@ -103,6 +111,8 @@ try {
   let s = await state();
   const first = s.activeId;
   const page = await pageAt('/a');
+  const iconSidebar = await connect((await targets()).find(t=>t.url.endsWith('#sidebar')));
+  await waitFor(()=>iconSidebar.evaluate('Array.from(document.querySelectorAll("img.favicon")).some(i=>i.naturalWidth === 192)'), 'high resolution icon also used in sidebar');
   const initialWidth = await page.evaluate('innerWidth');
   await command({ type: 'zoom.out' });
   await waitFor(async () => (await state()).tabs.find(t => t.id === first)?.zoom === 90, '90% zoom');
@@ -135,6 +145,17 @@ try {
   await waitFor(async () => !(await state()).tabs.find(t => t.id === second).loading, 'reload');
   assert.ok((await other.evaluate('innerWidth')) > initialWidth * 1.08, 'reload must preserve zoom');
   await command({ type: 'split.open', id: first });
+  await command({type:'split.resize',ratio:0.2});
+  await waitFor(() => ui.evaluate('document.querySelectorAll(".split-addresses .address-pill").length === 2'), 'two independent split addresses');
+  await ui.call('Emulation.setDeviceMetricsOverride',{width:850,height:52,deviceScaleFactor:1,mobile:false});
+  await ui.evaluate(`document.querySelector('[data-tab-id="${first}"] input').focus()`);
+  await waitFor(async () => (await state()).activeId === first, 'editing the second address activates its own page');
+  assert.ok(await ui.evaluate(`(() => {const pill=document.querySelector('[data-tab-id="${first}"]');return pill.querySelector('input').getBoundingClientRect().right <= pill.querySelector('.address-trail').getBoundingClientRect().left + 1;})()`), 'address text does not overlap action buttons');
+  assert.ok(await ui.evaluate('document.querySelector(".topbar-center").getBoundingClientRect().right <= document.querySelector(".topbar-right").getBoundingClientRect().left'), 'split addresses stay inside the toolbar');
+  await ui.evaluate('document.activeElement.blur()');
+  await ui.call('Emulation.clearDeviceMetricsOverride');
+  await command({type:'tab.activate',id:second});
+  console.log('PASS split address focus, compact toolbar and text/button separation');
   await command({ type: 'split.close' });
   await command({ type: 'nav.go', id: second, input: `${origin}/missing` });
   await pageAt('/missing');
@@ -258,6 +279,9 @@ try {
   const popupTarget = await waitFor(async () => (await targets()).find(t => t.url.endsWith('#popup')), 'settings popup');
   const popup = await connect(popupTarget);
   await waitFor(() => popup.evaluate('document.body.innerText.includes("Conservé pour toutes les pages")'), 'profile zoom label');
+  assert.equal(await popup.evaluate('document.querySelectorAll(".settings-nav button").length'),5);
+  await popup.evaluate('Array.from(document.querySelectorAll(".settings-nav button")).find(b=>b.textContent === "Apparence").click()');
+  assert.ok(await popup.evaluate('Array.from(document.querySelectorAll("[role=radio]")).some(b=>b.textContent === "80 %" && b.getBoundingClientRect().height > 0)'), 'interface size controls visible');
   const cookiePage = await pageAt('/a');
   await command({type:'popup.close'});
   await cookiePage.evaluate('window.__geoDenied = false; navigator.geolocation.getCurrentPosition(() => {}, e => window.__geoDenied = e.code === 1)');
@@ -269,6 +293,8 @@ try {
   console.log('PASS native permission prompt and persisted denial');
   await delay(650); // fermeture sur blur (150 ms), puis protection contre le recliquage (350 ms)
   await command({type:'settings.open',x:900,y:58});
+  await waitFor(() => popup.evaluate('!!document.querySelector(".settings-nav")'), 'settings sections');
+  await popup.evaluate('Array.from(document.querySelectorAll(".settings-nav button")).find(b => b.textContent === "Sécurité").click()');
   await waitFor(() => popup.evaluate('document.body.innerText.includes("Cookies et données des sites")'), 'cookie settings reopened');
   await cookiePage.call('Network.setCookie', {name:'sol-check',value:'test',url:origin,httpOnly:true,sameSite:'Lax'});
   await cookiePage.evaluate('localStorage.setItem("sol-check", "test")');
@@ -282,6 +308,94 @@ try {
   await writeFile(resolve(base, 'settings.png'), Buffer.from(settingsShot.data, 'base64'));
   await command({ type: 'popup.close' });
   console.log('PASS zoom survives restart and resets across all tabs');
+  await delay(650);
+  const designSidebar = await connect((await targets()).find(t => t.url.endsWith('#sidebar')));
+  await waitFor(() => designSidebar.evaluate('document.querySelectorAll(".sidebar-quick-actions button").length === 3 && document.querySelector(".sidebar-brand img").naturalWidth > 0'), 'sidebar branding and quick actions');
+  assert.equal(await ui.evaluate('!!document.querySelector("button[aria-label=Téléchargements],button[aria-label=\\"Favoris et historique\\"]")'), false, 'no duplicate toolbar shortcuts');
+  await designSidebar.evaluate('document.querySelector("button[aria-label=Historique]").click()');
+  await waitFor(() => popup.evaluate('document.querySelector("[role=tab][aria-selected=true]")?.textContent.includes("Historique")'), 'history shortcut selects history directly');
+  await command({type:'popup.close'});
+  const sidebarShot = await designSidebar.call('Page.captureScreenshot',{format:'png'});
+  await writeFile(resolve(base,'sidebar-design.png'),Buffer.from(sidebarShot.data,'base64'));
+  await ui.call('Emulation.setDeviceMetricsOverride',{width:850,height:52,deviceScaleFactor:1,mobile:false});
+  assert.ok(await ui.evaluate('document.querySelector(".navigation-actions").getBoundingClientRect().right < document.querySelector(".topbar-center").getBoundingClientRect().left && document.querySelector(".topbar-center").getBoundingClientRect().right <= document.querySelector(".topbar-right").getBoundingClientRect().left'), 'toolbar groups do not overlap at 850px');
+  await ui.call('Emulation.clearDeviceMetricsOverride');
+  console.log('PASS sidebar branding, quick history action and toolbar layout');
+  await command({type:'tab.open',url:`${origin}/preview-check`});
+  await pageAt('/preview-check');
+  const previewTab=(await state()).activeId;
+  await command({type:'tab.close',id:previewTab});
+  await waitFor(async()=>!(await state()).tabs.some(t=>t.id===previewTab),'preview source tab closed');
+  await command({type:'bookmark.add',url:`${origin}/b`,title:'Favorite check'});
+  await command({type:'group.create',id:(await state()).activeId,title:'Start group'});
+  await command({type:'settings.text',id:'home',input:''});
+  await command({type:'tab.open'});
+  const startUrl = 'https://start.sol/index.html#start';
+  const startTarget = await waitFor(async () => (await targets()).find(t=>t.url===startUrl), 'local start target');
+  const startPage = await connect(startTarget);
+  await waitFor(()=>startPage.evaluate('document.querySelector(".start-favorites")?.textContent.includes("Favorite check") && document.querySelector(".start-groups")?.textContent.includes("Start group") && document.querySelectorAll(".start-history button").length > 0'), 'real profile data on start page');
+  await waitFor(()=>startPage.evaluate('document.querySelector(".start-favorites img")?.naturalWidth > 0 && document.querySelector(".start-preview-image > img")?.naturalWidth > 0'),'real favicon and page preview');
+  await waitFor(()=>startPage.evaluate('document.querySelector(".start-favorites img")?.naturalWidth === 192'), 'high resolution declared icon preferred');
+  assert.equal(await startPage.evaluate('document.documentElement.dataset.wallpaper'),'false');
+  assert.equal(await startPage.evaluate('getComputedStyle(document.body).backgroundImage'),'none');
+  await command({type:'settings.set',id:'startWallpaper',index:1});
+  await waitFor(()=>startPage.evaluate('document.documentElement.dataset.wallpaper === "true" && getComputedStyle(document.body).backgroundImage.includes("start-background-")'),'optional start wallpaper enabled');
+  assert.equal(await startPage.evaluate('getComputedStyle(document.body).backgroundSize'),'cover');
+  assert.equal(await startPage.evaluate('document.querySelectorAll(".start-preview-placeholder img").length'),0);
+  assert.equal(await startPage.evaluate('document.documentElement.dataset.theme'),await ui.evaluate('document.documentElement.dataset.theme'));
+  const startWidth = await startPage.evaluate('innerWidth');
+  await command({type:'zoom.out'});
+  await delay(200);
+  assert.equal(await startPage.evaluate('innerWidth'), startWidth, 'start ignores page zoom');
+  const startState = await state();
+  assert.equal(startState.tabs.find(t=>t.id===startState.activeId)?.zoom,100);
+  await command({type:'settings.set',id:'uiScale',index:2});
+  await waitFor(()=>ui.evaluate('document.body.style.zoom === "0.8"'),'80% interface scale');
+  assert.ok(await designSidebar.evaluate('document.body.style.zoom === "0.8"'));
+  assert.ok(await startPage.evaluate('!document.body.style.zoom || document.body.style.zoom === "1"'), 'start remains at 100%');
+  assert.equal(JSON.parse(await readFile(resolve(profile,'settings.json'),'utf8')).UiScale,0.8);
+  await command({type:'settings.set',id:'uiScale',index:0});
+  await waitFor(()=>ui.evaluate('document.body.style.zoom === "1"'),'restore interface scale');
+  const tabCount = (await state()).tabs.length;
+  await command({type:'split.open'});
+  await waitFor(async()=> (await state()).tabs.length === tabCount + 1,'new split start tab');
+  await waitFor(async()=> (await targets()).filter(t=>t.url===startUrl).length === 2,'both split panes show start');
+  await command({type:'split.close'});
+  await waitFor(async()=> (await state()).tabs.length === tabCount,'untouched split start cleaned up');
+  console.log('PASS start zoom isolation, interface scaling and new split start page');
+  const savedPreviews = await readdir(resolve(profile,'start-previews'));
+  assert.ok(savedPreviews.some(file=>file.endsWith('.png')), 'URL previews persist in the profile');
+  assert.equal(await ui.evaluate('document.querySelector(".address-pill input").value'), '');
+  assert.equal(await startPage.evaluate('document.querySelector(".start-history").textContent.includes("start.sol")'), false);
+  const startShot=await startPage.call('Page.captureScreenshot',{format:'png'});
+  await writeFile(resolve(base,'start-page.png'),Buffer.from(startShot.data,'base64'));
+  await command({type:'settings.set',id:'theme',index:1});
+  await waitFor(()=>startPage.evaluate('document.documentElement.dataset.theme === "light"'),'start page follows light browser theme');
+  await startPage.call('Emulation.setDeviceMetricsOverride',{width:360,height:650,deviceScaleFactor:1,mobile:false});
+  assert.ok(await startPage.evaluate('document.documentElement.scrollWidth <= innerWidth'),'start page fits a narrow split pane');
+  assert.equal(await startPage.evaluate('getComputedStyle(document.body).backgroundSize'),'cover');
+  await startPage.call('Emulation.clearDeviceMetricsOverride');
+  await command({type:'settings.set',id:'startWallpaper',index:0});
+  await command({type:'settings.set',id:'theme',index:2});
+  await startPage.evaluate('Array.from(document.querySelectorAll(".start-favorites button")).find(b=>b.textContent.includes("Favorite check")).click()');
+  const navigated = await connect(await waitFor(async ()=>(await targets()).find(t=>t.id===startTarget.id && t.url===`${origin}/b`),'favorite navigation'));
+  await waitFor(()=>navigated.evaluate('document.readyState === "complete" && document.body.textContent.includes("Server page")'),'favorite page loaded');
+  await navigated.evaluate('try { window.chrome?.webview?.postMessage(JSON.stringify({type:"start.navigate",input:"https://example.com"})); } catch {}');
+  await delay(300);
+  assert.equal(await navigated.evaluate('location.href'), `${origin}/b`, 'websites cannot control the start bridge');
+  console.log('PASS custom start page, real profile data, favorite navigation and bridge isolation');
+  await stop();
+  await launch(['--private']);
+  await waitFor(() => ui.evaluate('document.documentElement.dataset.private === "true" && document.documentElement.style.getPropertyValue("--tab-accent") === "#8b5cf6"'), 'native private window purple identity');
+  const privateSidebar = await connect((await targets()).find(t => t.url.endsWith('#sidebar')));
+  await waitFor(() => privateSidebar.evaluate('document.querySelector(".sidebar-profile")?.textContent.includes("Privé")'), 'private profile label');
+  const privateShot = await privateSidebar.call('Page.captureScreenshot',{format:'png'});
+  await writeFile(resolve(base,'sidebar-private.png'),Buffer.from(privateShot.data,'base64'));
+  await command({type:'tab.open'});
+  const privateStart = await connect(await waitFor(async ()=>(await targets()).find(t=>t.url==='https://start.sol/index.html#start'),'private start page'));
+  await waitFor(()=>privateStart.evaluate('document.documentElement?.dataset.private === "true"'),'private start data');
+  assert.equal(await privateStart.evaluate('document.querySelectorAll(".start-history button,.start-frequent button").length'),0);
+  console.log('PASS private window purple theme and no visits on private start page');
   await stop();
 } catch (error) {
   if (ui) console.error(await ui.evaluate('JSON.stringify({ready:document.readyState,listening:window.__checkListening,lastEvent:window.__checkLastMessage?.event,text:document.body?.innerText.slice(0,300)})').catch(() => 'UI unavailable'));

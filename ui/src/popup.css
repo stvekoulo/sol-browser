@@ -27,6 +27,16 @@
   overflow-y: auto;
   scrollbar-width: none;
 }
+.settings-popup { padding:14px; gap:10px; }
+.settings-popup [hidden] { display:none !important; }
+.settings-popup .popup-list { max-height:none; overflow:visible; }
+.settings-popup .popup-header { display:flex; align-items:center; justify-content:space-between; padding:0 5px; }
+.settings-close { width:28px; height:28px; display:grid; place-items:center; border-radius:50%; background:var(--bg-glass-pill); }
+.settings-intro { margin:0 5px 3px; color:var(--text-dim); font-size:11px; line-height:1.5; }
+.settings-nav { flex-shrink:0; gap:6px; padding:5px; }
+.settings-nav .popup-seg-btn { flex:1 0 auto; padding:0 10px; }
+.settings-popup .theme-row { padding:12px 8px; border-bottom:1px solid var(--border); }
+.settings-popup .setting-row { padding:12px 8px; }
 .popup-list::-webkit-scrollbar { display: none; }
 
 /* Sélecteur segmenté flottant (Favoris / Historique) */

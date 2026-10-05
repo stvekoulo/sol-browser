@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
-import { formatDomain, onMessage, onState, send, type State, type Tab } from './bridge';
+import { isStartPage, formatDomain, onMessage, onState, send, type State, type Tab } from './bridge';
 import { t, useLang } from './i18n';
 import { Icon, ShieldIcon, SidebarIcon } from './Icons';
 
@@ -70,6 +70,7 @@ export default function App() {
           />
         </div>
 
+        <div className="pill-surface navigation-actions" role="group" aria-label={t('Navigation et panneau latéral', 'Navigation and sidebar')}>
         <button
           className={`pill-surface sidebar-toggle${sidebarOpen ? ' active' : ''}`}
           aria-label={sidebarOpen ? t('Masquer les onglets', 'Hide tabs') : t('Afficher les onglets', 'Show tabs')}
@@ -99,9 +100,10 @@ export default function App() {
             <Icon d="M6.5 4l4 4-4 4" />
           </button>
         </div>
+        </div>
       </div>
 
-      <div className="topbar-center" onMouseDown={dragWindow} onDoubleClick={maximize}>
+      <div className={`topbar-center${split.visible ? ' split-addresses' : ''}`} onMouseDown={dragWindow} onDoubleClick={maximize}>
         {panes.map((tab, i) => (
           <AddressPill
             key={tab?.id ?? i}
@@ -113,20 +115,7 @@ export default function App() {
         ))}
       </div>
 
-      <div className="topbar-right" onMouseDown={dragWindow}>
-        {state.downloads.count > 0 && !state.downloads.docked && (
-          <button
-            className={`pill-icon-btn${state.downloads.active > 0 ? ' on' : ''}`}
-            aria-label={state.downloads.active > 0 ? t('Téléchargements (en cours)', 'Downloads (in progress)') : t('Téléchargements', 'Downloads')}
-            title={t('Téléchargements', 'Downloads')}
-            onClick={e => {
-              const box = e.currentTarget.getBoundingClientRect();
-              send({ type: 'downloads.open', x: box.right, y: box.bottom + 6 });
-            }}
-          >
-            <Icon d="M8 2.5v8M4.5 7.5L8 11l3.5-3.5M3 13.5h10" />
-          </button>
-        )}
+      <div className="topbar-right pill-surface" onMouseDown={dragWindow}>
         <button
           className="pill-icon-btn"
           aria-label={t("Capture d'écran", 'Screenshot')}
@@ -147,17 +136,7 @@ export default function App() {
         >
           <Icon d="M2 3h12v10H2zM8 3v10" />
         </button>
-        <button
-          className="pill-icon-btn"
-          aria-label={t('Favoris et historique', 'Bookmarks and history')}
-          title={t('Favoris et historique', 'Bookmarks and history')}
-          onClick={e => {
-            const box = e.currentTarget.getBoundingClientRect();
-            send({ type: 'library.open', x: box.right, y: box.bottom + 6 });
-          }}
-        >
-          <Icon d="M3 4h10M3 8h10M3 12h10" />
-        </button>
+
         {state.privateMode && (
           <span className="private-chip" title={t('Rien de ce que vous visitez ici n’est gardé : tout est effacé à la fermeture de la fenêtre.', 'Nothing you visit here is kept: everything is erased when the window closes.')}>
             {t('Privé', 'Private')}
@@ -205,7 +184,7 @@ export default function App() {
 
 // Pilule d'adresse centrale : affiche le domaine centré au repos, et l'URL complète à l'édition.
 function AddressPill({ tab, focused, grow, shield }: { tab: Tab | undefined; focused: boolean; grow: number; shield: boolean }) {
-  const rawUrl = !tab || tab.url === 'about:blank' ? '' : tab.url;
+  const rawUrl = !tab || (tab.url === 'about:blank' || isStartPage(tab.url)) ? '' : tab.url;
   const domain = formatDomain(rawUrl);
   const [text, setText] = useState(rawUrl);
   const [editing, setEditing] = useState(false);
@@ -237,7 +216,7 @@ function AddressPill({ tab, focused, grow, shield }: { tab: Tab | undefined; foc
   };
 
   return (
-    <div ref={pillRef} className={`address-pill${focused ? ' focused' : ''}${editing ? ' editing' : ''}`} style={{ flexGrow: grow }}>
+    <div ref={pillRef} data-tab-id={id} className={`address-pill${focused ? ' focused' : ''}${editing ? ' editing' : ''}`} style={{ flexGrow: grow }}>
       <span
         className={`address-lead${shield ? '' : ' unshielded'}`}
         title={shield ? t('Publicités et traqueurs bloqués', 'Ads and trackers blocked') : t('Publicités non bloquées (réglage coupé dans Réglages)', 'Ads are not blocked (turned off in Settings)')}
@@ -259,6 +238,7 @@ function AddressPill({ tab, focused, grow, shield }: { tab: Tab | undefined; foc
           placeholder={t('Rechercher ou saisir une adresse', 'Search or enter an address')}
           spellCheck={false}
           value={editing ? text : domain}
+          title={rawUrl}
           onChange={e => {
             setText(e.target.value);
             const box = (pillRef.current ?? e.target).getBoundingClientRect();

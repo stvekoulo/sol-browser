@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { onMessage, send } from './bridge';
+import { interfaceScale, onMessage, send } from './bridge';
 import { DownloadCard, percent, type Download } from './Downloads';
 import { t, useLang } from './i18n';
 import { Icon } from './Icons';
@@ -26,7 +26,12 @@ export default function Dock() {
   }, []);
 
   useLayoutEffect(() => {
-    if ((items.length > 0 || update) && root.current) send({ type: 'dock.size', width: root.current.offsetWidth, height: root.current.offsetHeight });
+    if (!(items.length > 0 || update) || !root.current) return;
+    const el = root.current;
+    const report = () => send({ type: 'dock.size', width: el.offsetWidth * interfaceScale(), height: el.offsetHeight * interfaceScale() });
+    report();
+    window.addEventListener('ui-scale', report);
+    return () => window.removeEventListener('ui-scale', report);
   }, [items, minimized, update]);
 
   if (items.length === 0 && !update) return null;

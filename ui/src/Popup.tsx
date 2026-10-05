@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
-import { formatDomain, onMessage, send } from './bridge';
+import { formatDomain, interfaceScale, onMessage, send } from './bridge';
 import { DownloadCard, type Download } from './Downloads';
 import GroupEditor from './GroupEditor';
 import { t, useLang } from './i18n';
@@ -8,10 +8,10 @@ import { Icon } from './Icons';
 type Item = { url: string; title: string; kind?: 'search' | 'go' | 'history' | 'site' };
 type Content =
   | { popup: 'suggestions'; items: Item[] }
-  | { popup: 'library'; bookmarks: Item[]; history: Item[] }
+  | { popup: 'library'; tab?: 'history' | 'bookmarks' | null; bookmarks: Item[]; history: Item[] }
   | { popup: 'menu'; items: string[] }
   | { popup: 'downloads'; items: Download[] }
-  | { popup: 'settings'; version: string; update: { version: string; percent: number; ready: boolean } | null; check: 'idle' | 'checking' | 'current' | 'failed' | 'portable'; zoom: number; theme: number; language: number; home: string; font: number; ublock: string | null; engine: number; engines: string[]; sites: { origin: string; host: string; summary: string }[]; permissions: number; siteData: 'idle' | 'clearing' | 'done' | 'failed'; tint: Setting[]; items: Setting[] }
+  | { popup: 'settings'; version: string; update: { version: string; percent: number; ready: boolean } | null; check: 'idle' | 'checking' | 'current' | 'failed' | 'portable'; zoom: number; uiScale: number; theme: number; language: number; home: string; font: number; ublock: string | null; engine: number; engines: string[]; sites: { origin: string; host: string; summary: string }[]; permissions: number; siteData: 'idle' | 'clearing' | 'done' | 'failed'; tint: Setting[]; items: Setting[] }
   | { popup: 'profiles'; items: Profile[] }
   | { popup: 'group-edit'; create: boolean; id: string; name: string; color: string; icon: string; presets: string[] }
   | { popup: 'shortcut-edit'; id: string; name: string; url: string }
@@ -55,6 +55,7 @@ const isClosing = (label: string) => /fermer|close/i.test(label);
 export default function Popup() {
   const [content, setContent] = useState<Content | null>(null);
   const [selected, setSelected] = useState(-1);
+  const [settingsSection, setSettingsSection] = useState('general');
   const [libTab, setLibTab] = useState<'bookmarks' | 'history'>('bookmarks');
   const root = useRef<HTMLDivElement>(null);
   const fresh = useRef(false);
@@ -72,7 +73,7 @@ export default function Popup() {
       const next = data as Content;
       setSelected(-1);
       if (next.popup === 'library')
-        setLibTab(next.bookmarks.length > 0 ? 'bookmarks' : 'history');
+        setLibTab(next.tab ?? (next.bookmarks.length > 0 ? 'bookmarks' : 'history'));
       setContent(next);
     });
     const close = () => send({ type: 'popup.close' });
@@ -99,12 +100,13 @@ export default function Popup() {
   useLayoutEffect(() => {
     const el = root.current;
     if (!content || !el) return;
-    const report = () => send({ type: 'popup.size', height: el.offsetHeight });
+    const report = () => send({ type: 'popup.size', height: el.offsetHeight * interfaceScale() });
+    window.addEventListener('ui-scale', report);
     report();
     const observer = new ResizeObserver(report);
     observer.observe(el);
-    return () => observer.disconnect();
-  }, [content, libTab]);
+    return () => { observer.disconnect(); window.removeEventListener('ui-scale', report); };
+  }, [content, libTab, settingsSection]);
 
   if (!content) return null;
 
@@ -162,11 +164,22 @@ export default function Popup() {
 
   if (content.popup === 'settings')
     return (
-      <div key={opening} ref={root} className="popup arriving">
+      <div key={opening} ref={root} className="popup settings-popup arriving">
         <div className="popup-header">
-          <span className="popup-header-title">{t('Réglages', 'Settings')}</span>
+          <span className="popup-header-title">{t('Paramètres', 'Settings')}</span>
+<button className="settings-close" aria-label={t('Fermer','Close')} onClick={()=>send({type:'popup.close'})}><Icon d="M4 4l8 8M12 4l-8 8" size={14}/></button>
         </div>
-        <div className="setting-row static">
+<p className="settings-intro">{t('Les modifications sont enregistrées automatiquement.', 'Changes are saved automatically.')}</p>
+<nav className="popup-segment settings-nav" aria-label={t('Sections des paramètres', 'Settings sections')}>
+{[['general',t('Général','General')],['appearance',t('Apparence','Appearance')],['privacy',t('Sécurité','Security')],['data',t('Données','Data')],['about','Sol']].map(([key,label])=><button key={key} aria-pressed={settingsSection===key} className={'popup-seg-btn'+(settingsSection===key?' active':'')} onClick={()=>setSettingsSection(key)}>{label}</button>)}
+</nav>
+<div className="theme-row" hidden={settingsSection !== 'appearance'}>
+<span className="row-title">{t('Taille de l’interface', 'Interface size')}</span>
+<span className="row-sub">{t('Barres, boutons et menus. Le zoom des sites reste indépendant.', 'Bars, buttons and menus. Website zoom stays independent.')}</span>
+<div className="popup-segment" role="radiogroup" aria-label={t('Taille de l’interface','Interface size')}>
+{[1,.9,.8].map((scale,index)=><button key={scale} role="radio" aria-checked={content.uiScale===scale} className={'popup-seg-btn'+(content.uiScale===scale?' active':'')} onClick={()=>send({type:'settings.set',id:'uiScale',index})}>{Math.round(scale*100)} %</button>)}
+</div></div>
+        <div className="setting-row static" hidden={settingsSection !== 'general'}>
           <span className="setting-text">
             <span className="row-title">{t('Zoom des pages', 'Page zoom')}</span>
             <span className="row-sub">{t('Conservé pour toutes les pages de ce profil. Ctrl +, Ctrl − ou Ctrl avec la molette.', 'Saved for all pages in this profile. Ctrl +, Ctrl − or Ctrl with the mouse wheel.')}</span>
@@ -179,7 +192,7 @@ export default function Popup() {
             <button aria-label={t('Agrandir', 'Zoom in')} onClick={() => send({ type: 'zoom.in' })}>+</button>
           </span>
         </div>
-        <div className="theme-row">
+        <div className="theme-row" hidden={settingsSection !== 'appearance'}>
           <span className="row-title">{t('Thème', 'Theme')}</span>
           <div className="popup-segment" role="radiogroup" aria-label={t('Thème', 'Theme')}>
             {[t('Par défaut', 'Default'), t('Clair', 'Light'), t('Sombre', 'Dark'), t('Système', 'System')].map((label, index) => (
@@ -196,7 +209,7 @@ export default function Popup() {
             ))}
           </div>
         </div>
-        <div className="theme-row">
+        <div className="theme-row" hidden={settingsSection !== 'general'}>
           <span className="row-title">{t('Langue', 'Language')}</span>
           <div className="popup-segment" role="radiogroup" aria-label={t('Langue', 'Language')}>
             {[t('Système', 'System'), 'Français', 'English'].map((label, index) => (
@@ -213,7 +226,7 @@ export default function Popup() {
             ))}
           </div>
         </div>
-        <div className="theme-row">
+        <div className="theme-row" hidden={settingsSection !== 'appearance'}>
           <span className="row-title">{t('Police', 'Font')}</span>
           <div className="popup-segment grid" role="radiogroup" aria-label={t('Police', 'Font')}>
             {[t('Défaut', 'Default'), t('Système', 'System'), 'Inter', 'Inter Bold', 'SF Pro', 'SF Pro Bold'].map((label, index) => (
@@ -229,7 +242,7 @@ export default function Popup() {
             ))}
           </div>
         </div>
-        <div className="theme-row">
+        <div className="theme-row" hidden={settingsSection !== 'general'}>
           <span className="row-title">{t('Moteur de recherche', 'Search engine')}</span>
           <div className="popup-segment" role="radiogroup" aria-label={t('Moteur de recherche', 'Search engine')}>
             {content.engines.map((label, index) => (
@@ -245,10 +258,10 @@ export default function Popup() {
             ))}
           </div>
         </div>
-        <HomeField key={content.home} home={content.home} />
-        <TintSettings items={content.tint} />
+        {settingsSection === 'general' && <HomeField key={content.home} home={content.home} />}
+        {settingsSection === 'appearance' && <TintSettings items={content.tint} />}
         <div className="popup-list">
-          {content.items.map(s => (
+          {content.items.filter(s => (['startWallpaper','scrollbars','blur'].includes(s.key) ? 'appearance' : ['blocker','onlineSuggestions','passwords'].includes(s.key) ? 'privacy' : 'general') === settingsSection).map(s => (
             <button
               key={s.key}
               className="setting-row"
@@ -263,7 +276,7 @@ export default function Popup() {
               <span className={`switch${s.on ? ' on' : ''}`} aria-hidden />
             </button>
           ))}
-          {content.ublock && (
+          {settingsSection === 'privacy' && content.ublock && (
             <div className="setting-row static">
               <span className="setting-text">
                 <span className="row-title">uBlock Origin Lite {content.ublock}</span>
@@ -272,7 +285,7 @@ export default function Popup() {
               <button className="pill-action" onClick={() => send({ type: 'blocker.options' })}>{t('Ouvrir', 'Open')}</button>
             </div>
           )}
-          <div className="setting-row static">
+          <div className="setting-row static" hidden={settingsSection !== 'data'}>
             <span className="setting-text">
               <span className="row-title">{t('Importer d’un autre navigateur', 'Import from another browser')}</span>
               <span className="row-sub">{t('Favoris, historique et mots de passe de Chrome, Edge, Brave, Comet… ou mots de passe d’un fichier CSV exporté.', 'Bookmarks, history and passwords from Chrome, Edge, Brave, Comet… or passwords from an exported CSV file.')}</span>
@@ -282,14 +295,14 @@ export default function Popup() {
               <button className="pill-action" onClick={() => send({ type: 'import.csv', id: 'settings' })}>{t('Fichier CSV', 'CSV file')}</button>
             </span>
           </div>
-          <div className="setting-row static">
+          <div className="setting-row static" hidden={settingsSection !== 'general'}>
             <span className="setting-text">
               <span className="row-title">{t('Extensions', 'Extensions')}</span>
               <span className="row-sub">{t('Ajouter celles de vos autres navigateurs (Mots de passe iCloud, par exemple) ou un dossier d’extension.', 'Add the ones from your other browsers (iCloud Passwords, for example) or an extension folder.')}</span>
             </span>
             <button className="pill-action" onClick={() => send({ type: 'extensions.open' })}>{t('Gérer', 'Manage')}</button>
           </div>
-          <div className="setting-row static">
+          <div className="setting-row static" hidden={settingsSection !== 'about'}>
             <span className="setting-text">
               <span className="row-title">Sol {content.version}</span>
               <span className="row-sub">
@@ -309,7 +322,7 @@ export default function Popup() {
               <button className="pill-action" disabled={content.check === 'checking'} onClick={() => send({ type: 'update.check' })}>{t('Vérifier', 'Check')}</button>
             )}
           </div>
-          <div className="setting-row static">
+          <div className="setting-row static" hidden={settingsSection !== 'data'}>
             <span className="setting-text">
               <span className="row-title">{t('Sauvegarde', 'Backup')}</span>
               <span className="row-sub">{t('Réglages, onglets, favoris, historique et mots de passe dans un fichier chiffré par une clé que vous choisissez.', 'Settings, tabs, bookmarks, history and passwords in a file encrypted with a key you choose.')}</span>
@@ -319,7 +332,7 @@ export default function Popup() {
               <button className="pill-action" onClick={() => send({ type: 'backup.import' })}>{t('Restaurer', 'Restore')}</button>
             </span>
           </div>
-          <div className="setting-row static">
+          <div className="setting-row static" hidden={settingsSection !== 'privacy'}>
             <span className="setting-text">
               <span className="row-title">{t('Accès accordés aux sites', 'Site permissions')}</span>
               <span className="row-sub">
@@ -333,8 +346,8 @@ export default function Popup() {
             </span>
             <button className="pill-action" disabled={content.permissions === 0} onClick={() => send({ type: 'permissions.clear' })}>{t('Tout oublier', 'Forget all')}</button>
           </div>
-          <SiteData status={content.siteData} key={opening} />
-          {content.sites.length > 0 && (
+          {settingsSection === 'privacy' && <SiteData status={content.siteData} key={opening} />}
+          {settingsSection === 'privacy' && content.sites.length > 0 && (
             <div className="setting-sub">
               {content.sites.map(site => (
                 <div key={site.origin} className="setting-row static">
@@ -507,7 +520,7 @@ function HomeField({ home }: { home: string }) {
         <span className="row-title">{t("Page d'accueil", 'Home page')}</span>
         <span className="row-sub">{t('Ouverte dans chaque nouvel onglet. Vide : Google.', 'Opened in every new tab. Empty: Google.')}</span>
       </label>
-      <input id="home-input" type="text" inputMode="url" spellCheck={false} placeholder="https://www.google.com" value={text} onChange={e => setText(e.target.value)} onBlur={save} />
+      <input id="home-input" type="text" inputMode="url" spellCheck={false} placeholder={t('Page d’accueil Sol', 'Sol start page')} value={text} onChange={e => setText(e.target.value)} onBlur={save} />
     </form>
   );
 }

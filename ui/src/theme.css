@@ -150,3 +150,19 @@
 :root[data-font="sf"], :root[data-font="sf-bold"] { --font: "SF Pro Display", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
 /* Versions grasses (Inter Bold, SF Pro Bold) : toute l'interface est écrite en gras. */
 :root[data-font$="-bold"] body, :root[data-font$="-bold"] body * { font-weight: 700 !important; }
+
+/* Un voile léger ; seul l'onglet actif reçoit une teinte plus affirmée. */
+:root {
+  --private-accent:#8b5cf6;
+  --bg-pill-solid:rgba(255,255,255,0.80);
+  --bg-pill-solid-hover:rgba(255,255,255,0.92);
+  --bg-active-tab:color-mix(in oklab,var(--tab-accent,var(--accent)) 23%,rgba(255,255,255,0.86));
+  --border-active-tab:color-mix(in srgb,var(--tab-accent,var(--accent)) 35%,transparent);
+}
+:root[data-theme="dark"] {
+  --bg-active-tab:color-mix(in oklab,var(--tab-accent,var(--accent)) 27%,rgba(20,20,24,0.86));
+  --border-active-tab:color-mix(in srgb,var(--tab-accent,var(--accent)) 42%,transparent);
+  --bg-pill-solid:rgba(255,255,255,0.065);
+  --bg-pill-solid-hover:rgba(255,255,255,0.12);
+}
+:root[data-private="true"] { --accent:var(--private-accent); }

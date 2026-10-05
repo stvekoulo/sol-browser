@@ -2,6 +2,30 @@ using Browser.Core;
 
 public class JsonFileStoreTests : IDisposable
 {
+    [Theory]
+    [InlineData(1, 1)]
+    [InlineData(0.9, 0.9)]
+    [InlineData(0.8, 0.8)]
+    [InlineData(0.7, 1)]
+    [InlineData(double.NaN, 1)]
+    public void Interface_scale_only_accepts_supported_sizes_and_does_not_change_page_zoom(double scale, double expected)
+    {
+        var settings = new Settings { PageZoom = 1.5, UiScale = scale };
+        var path = File_("scale.json");
+        JsonFileStore.Save(path, settings);
+        var saved = JsonFileStore.Load<Settings>(path);
+        Assert.Equal(expected, saved.UiScale);
+        Assert.Equal(1.5, saved.PageZoom);
+    }
+    [Theory]
+    [InlineData("https://www.google.com")]
+    [InlineData("https://www.google.com/")]
+    [InlineData("")]
+    public void Old_default_home_page_becomes_local_start_page(string url)
+    {
+        Assert.Equal(Settings.DefaultHomePage, new Settings { HomePage = url }.HomePage);
+        Assert.Equal("https://custom.test/", new Settings { HomePage = "https://custom.test/" }.HomePage);
+    }
     [Fact]
     public void Preserves_the_page_zoom_in_profile_settings()
     {

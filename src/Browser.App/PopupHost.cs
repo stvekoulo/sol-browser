@@ -15,6 +15,12 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge)
     private bool _pending;
     private bool _focus;
     private double _x, _y;
+    private double _width;
+    public void Rescale()
+    {
+        if (!IsOpen) return;
+        frame.Width = Math.Clamp(_width * (UiBridge.Settings?.UiScale ?? 1), 128, 900);
+    }
 
     /// <summary>Un menu est affiché ou en cours d'affichage.</summary>
     public bool IsOpen => _pending || frame.Visibility == Visibility.Visible;
@@ -22,7 +28,8 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge)
     /// <summary>Place la vue et lui envoie son contenu. Elle devient visible quand elle a annoncé sa hauteur.</summary>
     public void Show(double x, double y, double width, string contentJson, bool focus)
     {
-        frame.Width = Math.Clamp(width, 160, 900);
+        _width = width;
+        frame.Width = Math.Clamp(width * (UiBridge.Settings?.UiScale ?? 1), 128, 900);
         (_x, _y) = (x, y);
         _pending = true;
         _focus = focus;
@@ -39,7 +46,7 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge)
     {
         var window = (FrameworkElement)frame.Parent;
         var left = PageLeft?.Invoke() ?? 0;
-        Show(left + Math.Max(0, (window.ActualWidth - left - width) / 2), top ?? Math.Max(90, window.ActualHeight / 2 - 150), width, contentJson, focus: true);
+        Show(left + Math.Max(0, (window.ActualWidth - left - width * (UiBridge.Settings?.UiScale ?? 1)) / 2), top ?? Math.Max(90, window.ActualHeight / 2 - 150), width, contentJson, focus: true);
     }
 
     public void Post(string json) => bridge.Post(json);
@@ -59,7 +66,7 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge)
 
         frame.Visibility = Visibility.Visible;
         frame.UpdateLayout();
-        CornerClip.Set(view, Radius);
+        CornerClip.Set(view, Radius * (float)(UiBridge.Settings?.UiScale ?? 1));
         if (_pending && _focus) view.Focus(FocusState.Programmatic);
         _pending = false;
     }

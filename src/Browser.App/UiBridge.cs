@@ -119,19 +119,29 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
     /// <summary>Envoie les couleurs de la page active à toutes les vues d'interface, avec les réglages de teinte.</summary>
     public void BroadcastTheme()
     {
+        var on = Settings;
+        if (pages is not null && _activeId is not null && pages.CoreOf(_activeId) is { Source: Settings.DefaultHomePage })
+        {
+            var wall = on?.StartWallpaper == true;
+            var darkStart = wall || on?.Theme == "dark" || (on?.Theme == "system" && IsSystemDark());
+            s_lastProbe = (wall ? "rgb(40, 68, 105)" : darkStart ? "rgb(9, 9, 11)" : "rgb(238, 240, 226)", darkStart, null);
+        }
         if (s_lastProbe is not var (bg, dark, accent)) return;
         accent = AmbientAccent ?? accent; // ce que la page montre à l'instant, sinon la couleur annoncée par le site
-        var on = Settings;
         s_lastThemeMsg = JsonSerializer.Serialize(new
         {
             @event = "theme", bg, dark, accent, mode = on?.Theme ?? "page", systemDark = IsSystemDark(), lang = Language.Current,
+            privateMode = AppPaths.Private,
             font = on?.Font ?? "default",
+            uiScale = on?.UiScale ?? 1,
             tint = new { topbar = on?.TintTopbar ?? true, sidebar = on?.TintSidebar ?? true, menus = on?.TintMenus ?? true, background = on?.TintBackground ?? true },
         });
         view.CoreWebView2?.PostWebMessageAsJson(s_lastThemeMsg);
         sidebar?.CoreWebView2?.PostWebMessageAsJson(s_lastThemeMsg);
         foreach (var floating in _floating) floating.Post(s_lastThemeMsg);
+        ThemePublished?.Invoke(s_lastThemeMsg);
     }
+    public event Action<string>? ThemePublished;
     private string? _activeId;
     private readonly List<UiBridge> _floating = new(); // vues flottantes qui suivent la couleur de la page : menus, encart
 
@@ -249,6 +259,13 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
         if (pages is null || _activeId is null || pages.CoreOf(_activeId) is not { } core) return;
         var id = _activeId;
         var source = core.Source;
+        if (source == Settings.DefaultHomePage)
+        {
+            BroadcastTheme();
+            if (s_lastProbe is var (startBg, _, _) && System.Text.RegularExpressions.Regex.Match(startBg, @"rgb\((\d+), (\d+), (\d+)\)") is { Success: true } sm)
+                PageColorChanged?.Invoke(byte.Parse(sm.Groups[1].Value), byte.Parse(sm.Groups[2].Value), byte.Parse(sm.Groups[3].Value));
+            return;
+        }
         var request = ++_themeRequest;
         try
         {

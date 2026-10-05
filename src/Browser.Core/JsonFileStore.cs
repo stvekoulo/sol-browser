@@ -4,6 +4,8 @@ namespace Browser.Core;
 
 public sealed class Settings
 {
+    private double _uiScale = 1;
+    public double UiScale { get => _uiScale; set => _uiScale = value is 1 or 0.9 or 0.8 ? value : 1; }
     private double _pageZoom = 1;
     /// <summary>Zoom commun aux pages du profil, conservé au redémarrage (50 à 200 %).</summary>
     public double PageZoom
@@ -35,9 +37,16 @@ public sealed class Settings
     /// <summary>Envoie la saisie de la barre d'adresse au moteur de recherche pour obtenir des complétions.</summary>
     public bool OnlineSuggestions { get; set; } = true;
     public string SuggestUrlTemplate { get; set; } = "https://suggestqueries.google.com/complete/search?client=firefox&ie=utf-8&oe=utf-8&q={0}";
-    public const string DefaultHomePage = "https://www.google.com";
+    public const string DefaultHomePage = "https://start.sol/index.html#start";
     /// <summary>Page ouverte dans un nouvel onglet. (Nouveau nom : l'ancien réglage « HomeUrl » valait toujours about:blank.)</summary>
-    public string HomePage { get; set; } = DefaultHomePage;
+    private string _homePage = DefaultHomePage;
+    public string HomePage
+    {
+        get => _homePage;
+        set => _homePage = string.IsNullOrWhiteSpace(value) || value is "https://www.google.com" or "https://www.google.com/" ? DefaultHomePage : value;
+    }
+    /// <summary>Affiche l'image d'arrière-plan sur la page d'accueil d'un nouvel onglet.</summary>
+    public bool StartWallpaper { get; set; }
     /// <summary>Langue de l'interface : "system" (celle de Windows), "fr" ou "en".</summary>
     public string Language { get; set; } = "system";
     /// <summary>L'accueil de première ouverture (nom, import, apparence) a été vu.</summary>

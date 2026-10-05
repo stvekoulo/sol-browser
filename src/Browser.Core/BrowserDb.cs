@@ -29,6 +29,9 @@ public sealed class BrowserDb : IDisposable
     public IReadOnlyList<Visit> RecentHistory(int limit) => Visits(
         "SELECT url, title, count, last FROM visits ORDER BY last DESC LIMIT $limit", ("$limit", limit));
 
+    public IReadOnlyList<Visit> FrequentSites(int limit) => Visits(
+        "SELECT url, title, count, last FROM visits ORDER BY count DESC, last DESC LIMIT $limit", ("$limit", limit));
+
     public IReadOnlyList<Visit> Suggest(string query, int limit)
     {
         var pattern = "%" + query.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%";

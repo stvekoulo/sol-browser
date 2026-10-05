@@ -244,3 +244,18 @@ html.painted .sidebar-body:not(.floating) { transition: background-color 220ms v
 /* Onglet déchargé : il garde sa place, atténué, et se recharge au clic. */
 .sidebar-tab.asleep, .pinned-pill.asleep { opacity: 0.55; }
 .sidebar-tab.asleep:hover, .pinned-pill.asleep:hover { opacity: 0.85; }
+
+/* En-tête et actions du profil : la liste conserve son propre défilement. */
+.sidebar-heading { display:flex; align-items:center; justify-content:space-between; gap:10px; flex:none; margin:0 2px 13px; }
+.sidebar-profile { display:flex; align-items:center; gap:6px; min-width:0; max-width:65%; padding:6px 9px; border-radius:var(--radius-pill); background:var(--bg-glass-pill); color:var(--text-dim); }
+.sidebar-profile span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sidebar-profile svg { flex:none; }
+.sidebar-profile:hover { color:var(--text); background:var(--bg-glass-pill-hover); }
+.sidebar-brand { display:flex; align-items:center; gap:6px; font-size:15px; flex:none; }
+.sidebar-brand img { width:23px; height:23px; object-fit:contain; }
+.sidebar-quick-actions { display:flex; align-items:center; gap:6px; flex:none; border-top:1px solid var(--border); padding-top:10px; margin-top:8px; }
+.sidebar-quick-actions .private-action { margin-right:auto; }
+.sidebar-quick-btn { width:34px; height:34px; display:grid; place-items:center; border-radius:50%; background:var(--bg-glass-pill); color:var(--text-dim); }
+.sidebar-quick-btn:hover { color:var(--text); background:var(--bg-glass-pill-hover); }
+.private-action { color:var(--private-accent); }
+.sidebar-tab.active, .sidebar-tab.active:hover, .sidebar-split-group .sidebar-tab.active, .pinned-pill.active, .pinned-pill.loaded.active { background:var(--bg-active-tab); box-shadow:var(--shadow-pill-elevated), inset 0 0 0 1px var(--border-active-tab); }

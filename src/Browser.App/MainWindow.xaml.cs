@@ -138,7 +138,13 @@ public sealed partial class MainWindow : Window
         var welcome = new WelcomeHost(Welcome, welcomeBridge, () => welcomeBridge.InitAsync(uiFolder, c => _controller!.Execute(c)));
         _controller = new BrowserController(this, pages, bridge, popup, dock, panel, welcome, settings) { ExtensionPopup = new ExtensionPopupHost(ExtensionFrame, Extension) };
         WireDivider();
-        _sidebar.Resize(settings.SidebarWidth);
+        void ApplyInterfaceScale()
+        {
+            if (_beforeFullScreen is null) Root.RowDefinitions[0].Height = new GridLength(52 * settings.UiScale);
+            _sidebar.Resize(settings.SidebarWidth * settings.UiScale);
+        }
+        _controller.InterfaceScaleChanged += ApplyInterfaceScale;
+        ApplyInterfaceScale();
         WireSidebarGrip(settings);
         WireGestures();
 
@@ -301,7 +307,7 @@ public sealed partial class MainWindow : Window
             if ((GetAsyncKeyState(button) & 0x8000) == 0)
             {
                 timer.Stop();
-                settings.SidebarWidth = _sidebar!.Width;
+                settings.SidebarWidth = _sidebar!.Width / settings.UiScale;
                 JsonFileStore.Save(AppPaths.Settings, settings);
                 return;
             }
@@ -320,8 +326,8 @@ public sealed partial class MainWindow : Window
             lastPress = doubleClick ? 0 : now;
             if (!doubleClick) { timer.Start(); return; }
             timer.Stop();
-            _sidebar!.Resize(SidebarHost.DefaultWidth);
-            settings.SidebarWidth = _sidebar.Width;
+            _sidebar!.Resize(SidebarHost.DefaultWidth * settings.UiScale);
+            settings.SidebarWidth = _sidebar.Width / settings.UiScale;
             JsonFileStore.Save(AppPaths.Settings, settings);
         };
     }
@@ -363,10 +369,11 @@ public sealed partial class MainWindow : Window
             if ((GetAsyncKeyState(button) & 0x8000) == 0) { timer.Stop(); return; }
             if (!GetCursorPos(out var point) || !ScreenToClient(_hwnd, ref point) || !GetClientRect(_hwnd, out var rect)) return;
 
-            var sideWidth = SidebarColumn.Width.Value;
-            var pagesWidth = rect.Right - sideWidth;
+            var scale = Root.XamlRoot.RasterizationScale;
+            var sideWidth = SidebarColumn.ActualWidth * scale;
+            var pagesWidth = rect.Right - sideWidth - 8 * scale;
             if (pagesWidth <= 0) return;
-            var ratio = (point.X - sideWidth) / pagesWidth;
+            var ratio = (point.X - sideWidth - 4 * scale) / pagesWidth;
             if (Math.Abs(ratio - _dividerRatio) < 0.002) return;
             _dividerRatio = ratio;
             _controller?.Execute(new Command("split.resize", Ratio: ratio));
