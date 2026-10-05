@@ -2,6 +2,27 @@ using Browser.Core;
 
 public class ErrorPagesTests
 {
+    [Theory]
+    [InlineData("reset", "Connexion interrompue")]
+    [InlineData("response", "Réponse du serveur invalide")]
+    [InlineData("redirect", "Redirection impossible")]
+    [InlineData("connect", "Site inaccessible")]
+    public void Distinguishes_server_failures_from_being_offline(string kind, string title)
+    {
+        var description = ErrorPages.Describe(kind);
+        Assert.Equal(title, description.Title);
+        Assert.DoesNotContain("pas connecté", description.Text);
+    }
+
+    [Fact]
+    public void Shows_the_engine_status_without_allowing_markup()
+    {
+        var html = ErrorPages.Html("https://example.test", "other", status: "<script>Unknown</script>");
+        Assert.Contains("&lt;script&gt;Unknown&lt;/script&gt;", html);
+        Assert.DoesNotContain("<script>", html);
+        Assert.Contains("Cette page ne peut pas", html);
+    }
+
     [Fact]
     public void Shows_the_address_and_a_retry_link()
     {

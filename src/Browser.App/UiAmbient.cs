@@ -37,11 +37,17 @@ public sealed partial class UiBridge
             } catch { /* vidéo illisible : on prend les couleurs de la page */ }
           }
           const out = [];
+          const colors = document.createElement('canvas'); colors.width = colors.height = 1;
+          const color = colors.getContext('2d', { willReadFrequently: true });
+          if (!color) return null;
           for (const x of [0.25, 0.5, 0.75]) for (const y of [0.12, 0.5, 0.88]) {
             let el = document.elementFromPoint(innerWidth * x, innerHeight * y);
             for (let depth = 0; el && depth < 12; el = el.parentElement, depth++) {
-              const m = getComputedStyle(el).backgroundColor.match(/[\d.]+/g);
-              if (m && (m.length < 4 || +m[3] > 0.5)) { out.push(+m[0], +m[1], +m[2], 255); break; }
+              const css = getComputedStyle(el).backgroundColor;
+              if (!CSS.supports('color', css)) continue;
+              color.clearRect(0, 0, 1, 1); color.fillStyle = css; color.fillRect(0, 0, 1, 1);
+              const pixel = color.getImageData(0, 0, 1, 1).data;
+              if (pixel[3] > 127) { out.push(pixel[0], pixel[1], pixel[2], 255); break; }
             }
           }
           return out.length ? out : null;
@@ -56,7 +62,13 @@ public sealed partial class UiBridge
         {
             if (_ambientBusy) return;
             _ambientBusy = true;
-            try { SetAmbient(await ReadAmbientAsync()); }
+            try
+            {
+                var id = _activeId;
+                await SampleOnceAsync(); // suit aussi un changement clair/sombre sans navigation
+                var color = await ReadAmbientAsync();
+                if (_activeId == id) SetAmbient(color);
+            }
             finally { _ambientBusy = false; }
         };
         _ambientTimer.Start();

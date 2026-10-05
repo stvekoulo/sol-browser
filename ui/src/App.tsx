@@ -14,7 +14,11 @@ export default function App() {
   useEffect(() => {
     const off = onState(setState, e => {
       if (e.event === 'focus-address')
-        document.querySelector<HTMLInputElement>('.address-pill.focused input, .address-pill input')?.focus();
+        requestAnimationFrame(() => {
+          const input = document.querySelector<HTMLInputElement>('.address-pill.focused input, .address-pill input');
+          input?.focus();
+          input?.select();
+        });
       if (e.event === 'sidebar' && typeof e.open === 'boolean')
         setSidebarOpen(e.open);
     });

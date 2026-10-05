@@ -11,7 +11,7 @@ type Content =
   | { popup: 'library'; bookmarks: Item[]; history: Item[] }
   | { popup: 'menu'; items: string[] }
   | { popup: 'downloads'; items: Download[] }
-  | { popup: 'settings'; version: string; update: { version: string; percent: number; ready: boolean } | null; check: 'idle' | 'checking' | 'current' | 'failed' | 'portable'; zoom: number; theme: number; language: number; home: string; font: number; ublock: string | null; engine: number; engines: string[]; sites: { origin: string; host: string; summary: string }[]; permissions: number; tint: Setting[]; items: Setting[] }
+  | { popup: 'settings'; version: string; update: { version: string; percent: number; ready: boolean } | null; check: 'idle' | 'checking' | 'current' | 'failed' | 'portable'; zoom: number; theme: number; language: number; home: string; font: number; ublock: string | null; engine: number; engines: string[]; sites: { origin: string; host: string; summary: string }[]; permissions: number; siteData: 'idle' | 'clearing' | 'done' | 'failed'; tint: Setting[]; items: Setting[] }
   | { popup: 'profiles'; items: Profile[] }
   | { popup: 'group-edit'; create: boolean; id: string; name: string; color: string; icon: string; presets: string[] }
   | { popup: 'shortcut-edit'; id: string; name: string; url: string }
@@ -168,10 +168,10 @@ export default function Popup() {
         </div>
         <div className="setting-row static">
           <span className="setting-text">
-            <span className="row-title">{t('Zoom de la page', 'Page zoom')}</span>
-            <span className="row-sub">{t('Ctrl + et Ctrl −, ou Ctrl avec la molette', 'Ctrl + and Ctrl −, or Ctrl with the mouse wheel')}</span>
+            <span className="row-title">{t('Zoom des pages', 'Page zoom')}</span>
+            <span className="row-sub">{t('Conservé pour toutes les pages de ce profil. Ctrl +, Ctrl − ou Ctrl avec la molette.', 'Saved for all pages in this profile. Ctrl +, Ctrl − or Ctrl with the mouse wheel.')}</span>
           </span>
-          <span className="stepper" role="group" aria-label={t('Zoom de la page', 'Page zoom')}>
+          <span className="stepper" role="group" aria-label={t('Zoom des pages', 'Page zoom')}>
             <button aria-label={t('Réduire', 'Zoom out')} onClick={() => send({ type: 'zoom.out' })}>−</button>
             <button className="stepper-value" aria-label={t('Revenir à 100 %', 'Reset to 100%')} title={t('Revenir à 100 %', 'Reset to 100%')} onClick={() => send({ type: 'zoom.reset' })}>
               {content.zoom} %
@@ -333,6 +333,7 @@ export default function Popup() {
             </span>
             <button className="pill-action" disabled={content.permissions === 0} onClick={() => send({ type: 'permissions.clear' })}>{t('Tout oublier', 'Forget all')}</button>
           </div>
+          <SiteData status={content.siteData} key={opening} />
           {content.sites.length > 0 && (
             <div className="setting-sub">
               {content.sites.map(site => (
@@ -512,6 +513,26 @@ function HomeField({ home }: { home: string }) {
 }
 
 // Sous-menu des réglages : où la couleur du site visité teinte l'interface.
+function SiteData({ status }: { status: 'idle' | 'clearing' | 'done' | 'failed' }) {
+  const [confirm, setConfirm] = useState(false);
+  return <div className="setting-row static">
+    <span className="setting-text">
+      <span className="row-title">{t('Cookies et données des sites', 'Cookies and site data')}</span>
+      <span className="row-sub">{status === 'clearing' ? t('Effacement en cours…', 'Clearing…')
+        : status === 'done' ? t('Données effacées. Rechargez les pages ouvertes.', 'Data cleared. Reload open pages.')
+        : status === 'failed' ? t('Effacement impossible. Réessayez.', 'Could not clear data. Try again.')
+        : t('Déconnecte les comptes de ce profil. Conserve les favoris et mots de passe.', 'Signs out accounts in this profile. Keeps bookmarks and passwords.')}</span>
+    </span>
+    <span className="row-actions">
+      {confirm && <button className="pill-action" onClick={() => setConfirm(false)}>{t('Annuler', 'Cancel')}</button>}
+      <button className="pill-action" disabled={status === 'clearing'} onClick={() => {
+        if (!confirm) { setConfirm(true); return; }
+        setConfirm(false); send({ type: 'site-data.clear' });
+      }}>{confirm ? t('Confirmer', 'Confirm') : t('Effacer', 'Clear')}</button>
+    </span>
+  </div>;
+}
+
 function TintSettings({ items }: { items: Setting[] }) {
   const [open, setOpen] = useState(false);
   const active = items.filter(s => s.on).length;

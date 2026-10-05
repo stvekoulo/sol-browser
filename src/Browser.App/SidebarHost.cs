@@ -24,7 +24,7 @@ public sealed class SidebarHost(WebView2 sidebar, ColumnDefinition column, Actio
     private const float CardRadius = 22; // rayon de la carte (--radius-card)
     private const double CardMargin = 10; // marge de la carte dans sa colonne (sidebar.css)
     private const double EdgeZone = 16; // largeur de la bande, au bord gauche, qui fait apparaître la carte fermée
-    private static readonly TimeSpan In = TimeSpan.FromMilliseconds(320), Out = TimeSpan.FromMilliseconds(260); // durées de motion.css
+    private static readonly TimeSpan In = TimeSpan.FromMilliseconds(220), Out = TimeSpan.FromMilliseconds(180); // durées de motion.css
 
     private bool _pinned = true; // au démarrage, la carte est ouverte dans sa colonne
     private bool _peeking;

@@ -19,6 +19,9 @@ public sealed class BrowserController
     private readonly TabManager _tabs = new();
     private readonly SplitLayout _split = new();
     private readonly HashSet<string> _restored = new(); // onglets dont le premier chargement vient de la session
+    private readonly List<string> _recentTabs = new();
+    private bool _restoringSession, _closingWindow;
+    private readonly DispatcherTimer _sessionSave = new() { Interval = TimeSpan.FromSeconds(2) };
     private readonly Dictionary<string, string?> _favicons = new();
     private DateTime _libraryClosedAt;
     private IReadOnlyList<Suggestion> _suggestions = [];
@@ -37,6 +40,7 @@ public sealed class BrowserController
         _welcome = welcome;
         (_window, _pages, _bridge, _popup, _dock, _tools, _settings) = (window, pages, bridge, popup, dock, panel, settings);
         _network = new NetworkInspector(panel.Post);
+        _sessionSave.Tick += (_, _) => { _sessionSave.Stop(); SaveSession(); };
         Directory.CreateDirectory(AppPaths.DataDir);
         _db = new BrowserDb(AppPaths.Database);
         _capture = new CaptureService(window);
@@ -45,8 +49,8 @@ public sealed class BrowserController
         _pages.RuntimeChanged += Refresh;
         _pages.NewTabRequested += url => { Open(url); Refresh(); };
         _pages.Loaded += RecordVisit;
-        _pages.Discarded += id => { _restored.Add(id); Refresh(); }; // son rechargement ne sera pas une nouvelle visite
-        _pages.KeepAwake = id => _split.Contains(id);
+        _pages.Discarded += id => { _restored.Add(id); _network.Forget(id); Refresh(); }; // son rechargement ne sera pas une nouvelle visite
+        _pages.KeepAwake = id => _split.Contains(id) || _downloads.Any(d => d.TabId == id && d.Op.State == Microsoft.Web.WebView2.Core.CoreWebView2DownloadState.InProgress);
         _pages.PipReturnRequested += id => { Activate(id); Refresh(); };
         _pages.Loaded += id => _ = LearnShortcutNameAsync(id);
         _pages.FaviconChanged += (id, data) => { _favicons[id] = data; PostFavicon(id); LearnShortcutIcon(id, data); };
@@ -59,6 +63,7 @@ public sealed class BrowserController
         };
         _pages.DownloadStarting += OnDownloadStarting;
         _pages.PermissionRequested += OnPermissionRequested;
+        _pages.Navigating += core => { if (_asking is { } pending && pending.Core == core) HidePopup(); };
         _window.AppWindow.Changed += (_, e) => { if (e.DidPresenterChange || e.DidSizeChange) Refresh(); };
         // Mise à jour de Sol : l'encart en bas à droite et les réglages suivent le téléchargement, puis proposent de redémarrer.
         Program.UpdateChanged += () => _window.DispatcherQueue.TryEnqueue(() =>
@@ -68,6 +73,9 @@ public sealed class BrowserController
         });
         _window.Closed += (_, _) =>
         {
+            _closingWindow = true;
+            _sessionSave.Stop();
+            HidePopup(); // terminer les demandes de permission encore en attente
             SaveSession();
             _db.Dispose();
             // Fenêtre privée : ses données sont effacées dès maintenant, par un processus qui attend la fin de celui-ci.
@@ -195,6 +203,7 @@ public sealed class BrowserController
             case "permission.answer": AnswerPermission(c.Index != 0); return;
             case "permissions.forget": _permissions.Forget(id); if (_settingsOpen) _popup.Post(SettingsJson()); return;
             case "permissions.clear": _permissions.Clear(); if (_settingsOpen) _popup.Post(SettingsJson()); return;
+            case "site-data.clear": if (_settingsOpen) _ = ClearSiteDataAsync(); return;
             case "profile.menu": OpenProfileMenu(c.X!.Value, c.Y!.Value); return;
             case "profile.new": AskProfileName(); return;
             case "profile.create": SwitchProfile(Profiles.Create(AppPaths.BaseDir, c.Title!)); return;
@@ -221,6 +230,7 @@ public sealed class BrowserController
                     _pages.Navigate(_suggestTab, _suggestions[i].Url);
                 break;
             case "ui.ready":
+                _bridge.BroadcastTheme();
                 if (_tabs.Tabs.Count == 0)
                 {
                     RestoreSession();
@@ -238,7 +248,12 @@ public sealed class BrowserController
                 }
                 foreach (var tabId in _favicons.Keys) PostFavicon(tabId);
                 break;
-            case "tab.open": Open(c.Url is null ? _settings.HomePage : Resolve(c.Url)); break;
+            case "tab.open":
+                Open(c.Url is null ? _settings.HomePage : Resolve(c.Url));
+                HidePopup();
+                Refresh();
+                if (c.Url is null) _bridge.FocusAddress();
+                return;
             case "tab.close": Close(id); break;
             case "tab.activate": Activate(id); break;
             case "group.new": EditGroup(tabId: id, group: null); return;
@@ -279,7 +294,7 @@ public sealed class BrowserController
     }
 
     // Téléchargements de la session, du plus récent au plus ancien.
-    private readonly List<(string Id, Microsoft.Web.WebView2.Core.CoreWebView2DownloadOperation Op)> _downloads = new();
+    private readonly List<(string Id, Microsoft.Web.WebView2.Core.CoreWebView2DownloadOperation Op, string TabId)> _downloads = new();
     private bool _downloadsOpen;
     private DateTime _downloadsPosted;
 
@@ -289,8 +304,11 @@ public sealed class BrowserController
     private void OnDownloadStarting(string tabId, Microsoft.Web.WebView2.Core.CoreWebView2DownloadStartingEventArgs e)
     {
         e.Handled = true; // pas de fenêtre de téléchargement du moteur : le navigateur affiche la sienne
+        // Vérification dans un profil jetable : les fichiers de test restent avec ses données.
+        if (Environment.GetEnvironmentVariable("NAVIGATEUR_TEST_DOWNLOAD_DIR") is { Length: > 0 } dir && Directory.Exists(dir))
+            e.ResultFilePath = Path.Combine(dir, Path.GetFileName(e.ResultFilePath));
         var op = e.DownloadOperation;
-        _downloads.Insert(0, ($"d{_downloads.Count + 1}", op));
+        _downloads.Insert(0, ($"d{_downloads.Count + 1}", op, tabId));
         var id = _downloads[0].Id;
         op.BytesReceivedChanged += (_, _) => DownloadsChanged(throttle: true);
         op.StateChanged += async (_, _) =>
@@ -348,7 +366,7 @@ public sealed class BrowserController
         if (changed) Refresh(); // le bouton de la barre apparaît quand l'encart disparaît, et inversement
     }
 
-    private static string DownloadsJson(IEnumerable<(string Id, Microsoft.Web.WebView2.Core.CoreWebView2DownloadOperation Op)> downloads) => JsonSerializer.Serialize(new
+    private static string DownloadsJson(IEnumerable<(string Id, Microsoft.Web.WebView2.Core.CoreWebView2DownloadOperation Op, string TabId)> downloads) => JsonSerializer.Serialize(new
     {
         popup = "downloads",
         items = downloads.Select(d => new
@@ -373,7 +391,7 @@ public sealed class BrowserController
     // Demandes d'accès des sites. Une réponse est retenue pour ce site et ce type d'accès ; fermer la question
     // sans répondre refuse pour cette fois seulement.
     private readonly PermissionStore _permissions = new(AppPaths.Permissions);
-    private (Microsoft.Web.WebView2.Core.CoreWebView2PermissionRequestedEventArgs Args, Windows.Foundation.Deferral Deferral, string Origin)? _asking;
+    private (Microsoft.Web.WebView2.Core.CoreWebView2PermissionRequestedEventArgs Args, Windows.Foundation.Deferral Deferral, string Origin, Microsoft.Web.WebView2.Core.CoreWebView2 Core, string? PageOrigin)? _asking;
 
     private static string PermissionLabel(Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind kind) => kind switch
     {
@@ -388,12 +406,12 @@ public sealed class BrowserController
         _ => T($"utiliser une fonction sensible ({kind})", $"use a sensitive feature ({kind})"),
     };
 
-    private void OnPermissionRequested(Microsoft.Web.WebView2.Core.CoreWebView2PermissionRequestedEventArgs e)
+    private void OnPermissionRequested(Microsoft.Web.WebView2.Core.CoreWebView2 core, Microsoft.Web.WebView2.Core.CoreWebView2PermissionRequestedEventArgs e)
     {
         e.SavesInProfile = false; // les réponses sont gardées par le navigateur, pas par le moteur
         var origin = PermissionStore.OriginOf(e.Uri);
         // Pas de site identifiable, ou une question déjà affichée : refus, sans rien retenir.
-        if (origin is null || _asking is not null)
+        if (origin is null || _asking is not null || _tabs.ActiveId is not { } active || _pages.CoreOf(active) != core)
         {
             e.State = Microsoft.Web.WebView2.Core.CoreWebView2PermissionState.Deny;
             return;
@@ -405,7 +423,7 @@ public sealed class BrowserController
         }
 
         HidePopup();
-        _asking = (e, e.GetDeferral(), origin);
+        _asking = (e, e.GetDeferral(), origin, core, PermissionStore.OriginOf(core.Source));
         _popup.ShowCentered(360, JsonSerializer.Serialize(new
         {
             popup = "permission",
@@ -417,12 +435,24 @@ public sealed class BrowserController
 
     private void AnswerPermission(bool allow)
     {
-        if (_asking is not var (args, deferral, origin)) return;
+        if (_asking is not var (args, deferral, origin, core, pageOrigin)) return;
         _asking = null;
-        _permissions.Set(origin, args.PermissionKind.ToString(), allow);
+        if (_tabs.ActiveId is not { } active || _pages.CoreOf(active) != core || PermissionStore.OriginOf(core.Source) != pageOrigin)
+        { args.State = Microsoft.Web.WebView2.Core.CoreWebView2PermissionState.Deny; deferral.Complete(); HidePopup(); return; }
         args.State = allow ? Microsoft.Web.WebView2.Core.CoreWebView2PermissionState.Allow : Microsoft.Web.WebView2.Core.CoreWebView2PermissionState.Deny;
         deferral.Complete();
+        _permissions.Set(origin, args.PermissionKind.ToString(), allow);
         HidePopup();
+    }
+
+    private string _siteData = "idle";
+    private async Task ClearSiteDataAsync()
+    {
+        if (_siteData == "clearing") return;
+        _siteData = "clearing";
+        _popup.Post(SettingsJson());
+        _siteData = await _pages.ClearSiteDataAsync() ? "done" : "failed";
+        if (_settingsOpen && !_closingWindow) _popup.Post(SettingsJson());
     }
 
     // Panneau de réglages : des interrupteurs, appliqués tout de suite et enregistrés.
@@ -434,7 +464,7 @@ public sealed class BrowserController
         version = typeof(App).Assembly.GetName().Version?.ToString(3) ?? "",
         update = Program.Update is { } update ? new { version = update.Version, percent = update.Percent, ready = update.Ready } : null,
         check = Program.Check,
-        zoom = _tabs.ActiveId is { } activeId ? (int)Math.Round(_pages.ZoomOf(activeId) * 100) : 100,
+        zoom = (int)Math.Round(_settings.PageZoom * 100),
         theme = Math.Max(0, Array.IndexOf(Themes, _settings.Theme)),
         language = Math.Max(0, Array.IndexOf(Languages, _settings.Language)),
         home = _settings.HomePage,
@@ -451,6 +481,7 @@ public sealed class BrowserController
             summary = string.Join(" · ", g.Select(a => T($"{KindName(a.Kind)} : {(a.Allowed ? "autorisé" : "refusé")}", $"{KindName(a.Kind)}: {(a.Allowed ? "allowed" : "denied")}"))),
         }),
         permissions = _permissions.Count, // réponses retenues aux demandes d'accès des sites
+        siteData = _siteData,
         // Sous-menu : où la couleur du site teinte l'interface.
         tint = new[]
         {
@@ -672,7 +703,7 @@ public sealed class BrowserController
         _profilesOpen = false;
         _extensionsOpen = false;
         // Question d'accès fermée sans réponse : refus pour cette fois, rien n'est retenu.
-        if (_asking is var (pendingArgs, pendingDeferral, _))
+        if (_asking is var (pendingArgs, pendingDeferral, _, _, _))
         {
             _asking = null;
             pendingArgs.State = Microsoft.Web.WebView2.Core.CoreWebView2PermissionState.Deny;
@@ -711,14 +742,16 @@ public sealed class BrowserController
     private void Zoom(string? id, string action)
     {
         if (id is null) return;
-        var current = _pages.ZoomOf(id);
+        if (_tabs.Tabs.All(t => t.Id != id)) return;
+        var current = _settings.PageZoom;
         var zoom = action switch
         {
             "zoom.in" => ZoomSteps.FirstOrDefault(z => z > current + 0.001, ZoomSteps[^1]),
             "zoom.out" => ZoomSteps.LastOrDefault(z => z < current - 0.001, ZoomSteps[0]),
             _ => 1,
         };
-        _pages.SetZoom(id, zoom); // l'état est renvoyé à l'interface par RuntimeChanged
+        _pages.SetZoom(zoom); // toutes les pages du profil, présentes et futures
+        JsonFileStore.Save(AppPaths.Settings, _settings);
         if (_settingsOpen) _popup.Post(SettingsJson());
     }
 
@@ -738,6 +771,14 @@ public sealed class BrowserController
 
     private void Close(string id)
     {
+        if (_asking is not null && _tabs.ActiveId == id) HidePopup();
+        if (_tabs.ActiveId == id)
+        {
+            // La fermeture revient à une page déjà chargée ; elle ne réveille jamais un onglet déchargé.
+            var next = _recentTabs.LastOrDefault(other => other != id && !_pages.IsAsleep(other) && _tabs.Tabs.Any(t => t.Id == other));
+            if (next is not null) Activate(next);
+            else Open(_settings.HomePage);
+        }
         // Fermer un onglet épinglé, ou rangé dans un groupe, ferme sa page, pas son emplacement : il reste à sa place,
         // déchargé, et se recharge quand on y revient. Pour le retirer pour de bon : le fermer une seconde fois quand il
         // est dans un groupe (il est alors déjà déchargé), ou « Détacher l'onglet » puis fermer quand il est épinglé.
@@ -758,6 +799,8 @@ public sealed class BrowserController
             return;
         }
         if (!_tabs.Close(id)) return;
+        _recentTabs.Remove(id);
+        _restored.Remove(id);
         _pages.Remove(id);
         _favicons.Remove(id);
         _split.OnTabClosed(id);
@@ -1061,6 +1104,7 @@ public sealed class BrowserController
 
     private void Activate(string id)
     {
+        if (_asking is not null && _tabs.ActiveId != id) HidePopup();
         if (!_tabs.Activate(id)) return;
         // Un onglet rangé dans un groupe replié : le groupe se déplie pour le montrer.
         if (_tabs.Tabs.First(t => t.Id == id).GroupId is { } groupId && _tabs.Groups.First(g => g.Id == groupId).Collapsed)
@@ -1619,6 +1663,7 @@ public sealed class BrowserController
 
     private void RecordVisit(string id)
     {
+        if (_closingWindow) return;
         if (_restored.Remove(id)) return; // rouvrir une session n'est pas une visite
         if (AppPaths.Private) return;     // navigation privée : aucun historique
         if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { } tab && IsWeb(tab.Url))
@@ -1628,6 +1673,9 @@ public sealed class BrowserController
     // Les onglets rouverts restent endormis : seul celui qu'on affiche charge sa page (voir PageHost.AddAsleep).
     private void RestoreSession()
     {
+        _restoringSession = true;
+        try
+        {
         var session = JsonFileStore.Load<Session>(AppPaths.Session);
         var tabs = session.Urls.Select((url, i) => Open(url, activate: false, pinned: i < session.PinnedCount, asleep: true)).ToList();
         if (tabs.Count == 0) { Open(_settings.HomePage); return; }
@@ -1657,11 +1705,11 @@ public sealed class BrowserController
             }
         }
 
-        Activate(tabs[Math.Clamp(session.ActiveIndex, 0, tabs.Count - 1)].Id);
-        bool Valid(int? i) => i is >= 0 && i < tabs.Count;
-        if (Valid(session.PrimaryIndex) && Valid(session.SecondaryIndex)
-            && _split.Open(tabs[session.PrimaryIndex!.Value].Id, tabs[session.SecondaryIndex!.Value].Id))
-            _split.Resize(session.Ratio);
+        if (session.ActiveIndex >= 0 && session.ActiveIndex < tabs.Count) Activate(tabs[session.ActiveIndex].Id);
+        else Open(_settings.HomePage);
+        // Les anciennes vues scindées ne chargent pas une seconde page inactive au redémarrage.
+        }
+        finally { _restoringSession = false; }
     }
 
     private const int MaxSessionIcon = 48_000; // caractères : une icône plus lourde n'est pas gardée dans la session
@@ -1692,6 +1740,14 @@ public sealed class BrowserController
 
     private void Refresh()
     {
+        if (_closingWindow || _restoringSession) return;
+        // Regrouper les changements ; un crash ne perd plus toute la session depuis le démarrage.
+        if (!AppPaths.Private) { _sessionSave.Stop(); _sessionSave.Start(); }
+        if (_tabs.ActiveId is { } recent && _recentTabs.LastOrDefault() != recent)
+        {
+            _recentTabs.Remove(recent);
+            _recentTabs.Add(recent);
+        }
         var showSplit = _split.Contains(_tabs.ActiveId);
         FollowNetwork();
         // On vient de quitter un onglet : s'il joue une vidéo, elle reste à l'écran dans le lecteur flottant.
@@ -1711,7 +1767,7 @@ public sealed class BrowserController
                 groupId = t.GroupId,
                 asleep = _pages.IsAsleep(t.Id), // déchargé : affiché atténué, il se recharge quand on y revient
                 device = _pages.DeviceOf(t.Id) is { } simulated ? DeviceLabel(simulated) : null, // simulateur : appareil affiché
-                zoom = (int)Math.Round(_pages.ZoomOf(t.Id) * 100),
+                zoom = (int)Math.Round(_settings.PageZoom * 100),
                 loading = _pages.IsLoading(t.Id),
                 canGoBack = _pages.CanGoBack(t.Id),
                 canGoForward = _pages.CanGoForward(t.Id),

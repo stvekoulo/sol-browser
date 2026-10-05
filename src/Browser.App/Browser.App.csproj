@@ -32,7 +32,7 @@
     <!-- Interface React compilée (npm run build dans ui/) -->
     <Content Include="inject\**" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\Sol.ico" CopyToOutputDirectory="PreserveNewest" />
-    <!-- uBlock Origin Lite, récupéré par tools/get-ublock.ps1 (absent : le navigateur garde son blocage par domaines) -->
+    <!-- uBlock Origin Lite, récupéré par tools/get-ublock.ps1 (absent : aucun blocage) -->
     <Content Include="extensions\**" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\ui\dist\**" Link="ui\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

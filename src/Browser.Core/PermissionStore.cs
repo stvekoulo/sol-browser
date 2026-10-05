@@ -8,7 +8,8 @@ public sealed class PermissionStore(string path)
 {
     private Dictionary<string, bool>? _answers;
 
-    private Dictionary<string, bool> Answers => _answers ??= JsonFileStore.Load<Dictionary<string, bool>>(path);
+    // Une ancienne copie ne doit jamais rétablir un accès révoqué : fichier abîmé = redemander.
+    private Dictionary<string, bool> Answers => _answers ??= JsonFileStore.Load<Dictionary<string, bool>>(path, recoverBackup: false);
 
     /// <summary>true = autorisé, false = refusé, null = jamais demandé.</summary>
     public bool? Get(string origin, string kind) => Answers.TryGetValue(Key(origin, kind), out var allowed) ? allowed : null;

@@ -57,6 +57,7 @@ type WebView = {
 const webview = (window as unknown as { chrome?: { webview?: WebView } }).chrome?.webview;
 
 export const send = (command: Command) => webview?.postMessage(JSON.stringify(command));
+export const painted = () => webview?.postMessage('"ui.painted"');
 
 // L'hôte envoie soit l'état complet, soit un événement ponctuel { event: "…" }.
 export type HostEvent = {
@@ -78,7 +79,7 @@ export type HostEvent = {
 
 // Fonds neutres des thèmes imposés. En thème par défaut, le fond de l'interface est celui de la page.
 // Le sombre est proche du noir des sites sombres : « Sombre » et « Système » rendent comme « Par défaut » sur un tel site.
-const NEUTRAL = { light: 'rgb(243, 243, 246)', dark: 'rgb(16, 16, 18)' };
+const NEUTRAL = { light: 'rgb(243, 243, 246)', dark: 'rgb(9, 9, 11)' };
 
 function applyTheme(ev: HostEvent) {
   const root = document.documentElement.style;
@@ -89,7 +90,7 @@ function applyTheme(ev: HostEvent) {
   if (welcome) ev = { ...ev, accent: null };
   const dark = mode === 'page' ? !!ev.dark : mode === 'system' ? !!ev.systemDark : mode === 'dark';
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-  root.setProperty('--page-bg', mode === 'page' ? ev.bg! : dark ? NEUTRAL.dark : NEUTRAL.light);
+  root.setProperty('--page-bg', mode === 'page' || (dark && ev.dark) ? ev.bg! : dark ? NEUTRAL.dark : NEUTRAL.light);
   // Couleur réelle de la page, quel que soit le thème : c'est elle que prennent les coins des vues flottantes,
   // pour se fondre dans la page qu'elles recouvrent.
   root.setProperty('--page-real', ev.bg!);

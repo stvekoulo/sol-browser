@@ -1,8 +1,8 @@
 /* Carte latérale flottante (#sidebar) : aucun cadre externe, tout flotte sur --page-bg. */
 .sidebar-body {
   background-color: var(--chrome-bg);
-  transition: background-color 220ms var(--ease-out);
 }
+html.painted .sidebar-body:not(.floating) { transition: background-color 220ms var(--ease-out); }
 
 .sidebar-card {
   height: calc(100% - 12px);
@@ -205,7 +205,7 @@
 
 /* Carte flottante au-dessus de la page : la vue a exactement sa taille, la page reste visible tout autour. */
 .sidebar-body.floating .sidebar-card { margin: 0; height: 100%; }
-.sidebar-body.floating { background-color: var(--page-real, var(--page-bg)); }
+.sidebar-body.floating { background-color: transparent; transition: none; }
 
 /* Groupes d'onglets : un en-tête à la couleur du groupe, ses onglets en retrait derrière un filet de même couleur */
 .tab-group-block { display: flex; flex-direction: column; gap: 2px; --group: #8fa8e8; }

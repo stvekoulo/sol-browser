@@ -8,13 +8,13 @@
       <RowDefinition Height="52" />
       <RowDefinition Height="*" />
     </Grid.RowDefinitions>
-    <WebView2 x:Name="Ui" Grid.Row="0" />
+    <WebView2 x:Name="Ui" Grid.Row="0" Opacity="0" />
     <Grid Grid.Row="1">
       <Grid.ColumnDefinitions>
         <ColumnDefinition x:Name="SidebarColumn" Width="296" />
         <ColumnDefinition Width="*" />
       </Grid.ColumnDefinitions>
-      <WebView2 x:Name="Sidebar" Grid.Column="0" />
+      <WebView2 x:Name="Sidebar" Grid.Column="0" Opacity="0" />
       <!-- Bord droit de la carte latérale : le tirer change sa largeur. Dans la marge de la carte, donc sur rien d'utile. -->
       <local:DividerGrip x:Name="SidebarGrip" Grid.Column="0" Width="8" HorizontalAlignment="Right" Background="Transparent" />
       <!-- Les pages, et dessous le panneau des outils de développement (fermé : hauteur nulle). -->

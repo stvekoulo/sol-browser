@@ -5,6 +5,7 @@ import Panel from './Panel';
 import Popup from './Popup';
 import Sidebar from './Sidebar';
 import Welcome from './Welcome';
+import { painted } from './bridge';
 import '@fontsource-variable/inter'; // police Inter, livrée avec le navigateur (chargée seulement si elle est choisie)
 import './theme.css';
 import './app.css';
@@ -21,5 +22,16 @@ if (hash === '#sidebar') document.body.classList.add('sidebar-body');
 if (hash === '#panel') document.body.classList.add('panel-body');
 if (hash === '#welcome') document.body.classList.add('welcome-body');
 
-const root = createRoot(document.getElementById('root')!);
+const container = document.getElementById('root')!;
+// L'hôte ne dévoile la surface qu'une fois son contenu rendu, pour éviter le cadre vide du moteur.
+const firstPaint = new MutationObserver(() => {
+  if (!container.firstElementChild) return;
+  firstPaint.disconnect();
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    document.documentElement.classList.add('painted');
+    painted();
+  }));
+});
+firstPaint.observe(container, { childList: true });
+const root = createRoot(container);
 root.render(hash === '#welcome' ? <Welcome /> : hash === '#panel' ? <Panel /> : hash === '#popup' ? <Popup /> : hash === '#dock' ? <Dock /> : hash === '#sidebar' ? <Sidebar /> : <App />);

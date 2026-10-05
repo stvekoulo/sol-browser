@@ -7,6 +7,16 @@ public class PermissionStoreTests : IDisposable
     public void Dispose() => Directory.Delete(_dir, recursive: true);
 
     [Fact]
+    public void Corruption_never_restores_a_revoked_permission_from_backup()
+    {
+        var store = new PermissionStore(File_);
+        store.Set("https://a.test", "Camera", true);
+        store.Set("https://a.test", "Camera", false);
+        File.WriteAllText(File_, "{ broken");
+        Assert.Null(new PermissionStore(File_).Get("https://a.test", "Camera"));
+    }
+
+    [Fact]
     public void An_unanswered_request_has_no_answer()
     {
         var store = new PermissionStore(File_);

@@ -11,15 +11,18 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     private readonly Dictionary<string, WebView2> _views = new();
     private readonly Dictionary<string, string> _blurScriptIds = new(); // vues où le flou est installé
     private readonly HashSet<string> _loading = new();
+    private readonly HashSet<string> _ready = new();
+    private readonly HashSet<string> _visible = new();
 
     public event Action<string, string?, string?>? PageChanged; // id, url, titre
     public event Action? RuntimeChanged;                         // chargement, historique
     public event Action<string>? Loaded;                         // id, page chargée avec succès
+    public event Action<CoreWebView2>? Navigating;
     public event Action<string>? NewTabRequested;
     public event Action<string, double, double, CoreWebView2ContextMenuRequestedEventArgs>? ContextMenuRequested; // id, x, y dans la fenêtre
     public event Action<string, double, double>? DeviceAreaMenuRequested; // id, x, y : clic droit à côté d'un appareil simulé
     public event Action<string, CoreWebView2DownloadStartingEventArgs>? DownloadStarting; // onglet d'origine
-    public event Action<CoreWebView2PermissionRequestedEventArgs>? PermissionRequested;
+    public event Action<CoreWebView2, CoreWebView2PermissionRequestedEventArgs>? PermissionRequested;
     public event Action<string, string>? StatusChanged;         // id, adresse du lien survolé (vide = aucun)
     public event Action<string, string?>? FaviconChanged;        // id, icône en data: (ou null)
     public event Action<bool>? FullScreenChanged;                // une page (vidéo…) entre en plein écran ou en sort
@@ -41,17 +44,25 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
 
     public async void Add(Tab tab)
     {
-        var view = new WebView2 { Visibility = Visibility.Collapsed };
-        view.SizeChanged += (_, _) => { if (_zoom.ContainsKey(tab.Id)) _ = ApplyZoomAsync(tab.Id); };
+        var view = new WebView2 { Visibility = Visibility.Collapsed, Opacity = 0, DefaultBackgroundColor = UiBridge.InitialBackground };
+        view.SizeChanged += (_, _) => _ = ApplyZoomAsync(tab.Id);
         _views[tab.Id] = view;
         container.Children.Add(view);
-        await StartEngineAsync(view);
-        if (!_views.ContainsKey(tab.Id)) return; // fermé pendant l'initialisation
+        try
+        {
+            await StartEngineAsync(view);
+            // La première page attend que le bloqueur soit prêt.
+            await AdBlock.ExtensionInstalled;
+        }
+        catch (Exception e) when ((e is InvalidOperationException or System.Runtime.InteropServices.COMException)
+            && _views.GetValueOrDefault(tab.Id) != view) { return; } // fermé pendant le démarrage
+        if (!_views.TryGetValue(tab.Id, out var initializing) || initializing != view) return; // fermé ou rouvert pendant l'initialisation
 
         var core = view.CoreWebView2;
+        core.DOMContentLoaded += (_, _) => view.Opacity = 1;
         Harden(core);
         await ApplySettingsAsync(tab.Id, core);
-        if (!_views.ContainsKey(tab.Id)) return;
+        if (!_views.TryGetValue(tab.Id, out initializing) || initializing != view) return;
 
         // Pendant qu'une page d'erreur est affichée, l'onglet garde l'adresse demandée, pas celle de la page d'erreur.
         core.SourceChanged += (_, _) => PageChanged?.Invoke(tab.Id, _errorUrl.GetValueOrDefault(tab.Id, core.Source), null);
@@ -60,26 +71,40 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         core.Settings.IsBuiltInErrorPageEnabled = false; // les erreurs de chargement sont affichées par le navigateur
         core.NavigationStarting += (_, e) =>
         {
+            Navigating?.Invoke(core);
+            DebugLog.Write($"navigation.start {tab.Id} #{e.NavigationId} redirect={e.IsRedirected}");
+            if (_navigation.GetValueOrDefault(tab.Id) != e.NavigationId) _downloading.Remove(tab.Id);
+            _navigation[tab.Id] = e.NavigationId;
             // Toute navigation autre que l'affichage de notre page d'erreur remet l'onglet dans son état normal.
             if (!_showingError.Remove(tab.Id)) _errorUrl.Remove(tab.Id);
             _target[tab.Id] = _errorUrl.GetValueOrDefault(tab.Id, e.Uri);
             _loading.Add(tab.Id);
             RuntimeChanged?.Invoke();
         };
-        core.NavigationCompleted += (_, e) =>
+        core.NavigationCompleted += (sender, e) =>
         {
+            DebugLog.Write($"navigation.end {tab.Id} #{e.NavigationId} current={_navigation.GetValueOrDefault(tab.Id)} success={e.IsSuccess} status={e.WebErrorStatus} http={e.HttpStatusCode}");
+            // Une navigation remplacée ne peut ni arrêter le nouvel indicateur ni remplacer sa page.
+            if (!_views.TryGetValue(tab.Id, out var current) || current != view
+                || _navigation.GetValueOrDefault(tab.Id) != e.NavigationId) return;
             _loading.Remove(tab.Id);
+            var downloading = _downloading.Remove(tab.Id);
+            _ = ApplyZoomAsync(tab.Id);
             RuntimeChanged?.Invoke();
             // Une réponse d'erreur du serveur (403, 404, 500…) est quand même sa page à lui : on la laisse affichée. Les
             // vérifications anti-robots, par exemple, répondent 403 puis rechargent la vraie page.
-            if (e.IsSuccess || e.HttpStatusCode >= 400) { if (!_errorUrl.ContainsKey(tab.Id)) Loaded?.Invoke(tab.Id); }
+            if (e.IsSuccess || (e.HttpStatusCode >= 400 && e.WebErrorStatus is not
+                (CoreWebView2WebErrorStatus.ValidProxyAuthenticationRequired or CoreWebView2WebErrorStatus.ValidAuthenticationCredentialsRequired)))
+            { if (!_errorUrl.ContainsKey(tab.Id)) Loaded?.Invoke(tab.Id); }
             // Ni une navigation annulée (arrêt, remplacement), ni un lien devenu téléchargement ne sont des erreurs.
-            else if (e.WebErrorStatus != CoreWebView2WebErrorStatus.OperationCanceled && !_downloading.Remove(tab.Id))
-                ShowError(tab.Id, core, _target.GetValueOrDefault(tab.Id, core.Source), ErrorKind(e.WebErrorStatus));
+            else if (!downloading && !_errorUrl.ContainsKey(tab.Id)
+                && e.WebErrorStatus is not (CoreWebView2WebErrorStatus.OperationCanceled or CoreWebView2WebErrorStatus.ConnectionAborted
+                    or CoreWebView2WebErrorStatus.ValidAuthenticationCredentialsRequired))
+                ShowError(tab.Id, core, _target.GetValueOrDefault(tab.Id, core.Source), ErrorKind(e.WebErrorStatus), e.WebErrorStatus.ToString());
         };
         core.ProcessFailed += (_, e) =>
         {
-            if (e.ProcessFailedKind == CoreWebView2ProcessFailedKind.RenderProcessExited && _views.ContainsKey(tab.Id))
+            if (e.ProcessFailedKind == CoreWebView2ProcessFailedKind.RenderProcessExited && _views.GetValueOrDefault(tab.Id) == view)
                 ShowError(tab.Id, core, _errorUrl.GetValueOrDefault(tab.Id, core.Source), "crash");
         };
         core.NewWindowRequested += (_, e) => { e.Handled = true; NewTabRequested?.Invoke(e.Uri); };
@@ -92,25 +117,35 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         view.SizeChanged += (_, _) => { if (_pip != tab.Id) ClipToDevice(view); };
         core.SourceChanged += (_, _) => SyncMirrors(tab.Id, core.Source);
         WatchFrames(tab.Id, core);
-        core.DownloadStarting += (_, e) => { _downloading.Add(tab.Id); DownloadStarting?.Invoke(tab.Id, e); };
+        core.DownloadStarting += (_, e) =>
+        {
+            DebugLog.Write($"download.start {tab.Id} current={_navigation.GetValueOrDefault(tab.Id)}");
+            _downloading.Add(tab.Id);
+            DownloadStarting?.Invoke(tab.Id, e);
+        };
         // Adresse du lien survolé : la bulle du moteur est coupée, le navigateur l'affiche dans son propre design.
         core.Settings.IsStatusBarEnabled = false;
         core.StatusBarTextChanged += (_, _) => StatusChanged?.Invoke(tab.Id, core.StatusBarText);
         core.FaviconChanged += async (_, _) => FaviconChanged?.Invoke(tab.Id, await ReadFaviconAsync(core));
-        Navigate(tab.Id, tab.Url);
+        await ApplyZoomAsync(tab.Id);
+        if (!_views.TryGetValue(tab.Id, out initializing) || initializing != view) return;
+        _ready.Add(tab.Id);
+        Navigate(tab.Id, _target.GetValueOrDefault(tab.Id, tab.Url));
         if (_wanted.Remove(tab.Id, out var wanted)) SetDevice(tab.Id, wanted.Name, wanted.Landscape);
     }
 
     // Pages d'erreur du navigateur. _target : adresse de la navigation en cours ; _errorUrl : adresse dont la page
     // d'erreur est affichée ; _showingError : notre page d'erreur est en train de se charger.
     private readonly Dictionary<string, string> _target = new(), _errorUrl = new();
+    private readonly Dictionary<string, ulong> _navigation = new();
     private readonly HashSet<string> _showingError = new(), _downloading = new();
 
-    private void ShowError(string id, CoreWebView2 core, string url, string kind)
+    private void ShowError(string id, CoreWebView2 core, string url, string kind, string? status = null)
     {
         _errorUrl[id] = url;
         _showingError.Add(id);
-        try { core.NavigateToString(ErrorPages.Html(url, kind, Language.Current)); }
+        DebugLog.Write($"navigation {id} : {status ?? kind}");
+        try { core.NavigateToString(ErrorPages.Html(url, kind, Language.Current, status)); }
         catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { _showingError.Remove(id); }
         PageChanged?.Invoke(id, url, ErrorPages.Describe(kind, Language.Current).Title);
     }
@@ -119,8 +154,12 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     {
         CoreWebView2WebErrorStatus.HostNameNotResolved => "dns",
         CoreWebView2WebErrorStatus.Timeout => "timeout",
-        CoreWebView2WebErrorStatus.Disconnected or CoreWebView2WebErrorStatus.CannotConnect or CoreWebView2WebErrorStatus.ConnectionAborted
-            or CoreWebView2WebErrorStatus.ConnectionReset or CoreWebView2WebErrorStatus.ServerUnreachable => "offline",
+        CoreWebView2WebErrorStatus.Disconnected => "offline",
+        CoreWebView2WebErrorStatus.CannotConnect or CoreWebView2WebErrorStatus.ServerUnreachable => "connect",
+        CoreWebView2WebErrorStatus.ConnectionReset => "reset",
+        CoreWebView2WebErrorStatus.ErrorHttpInvalidServerResponse => "response",
+        CoreWebView2WebErrorStatus.RedirectFailed => "redirect",
+        CoreWebView2WebErrorStatus.ValidProxyAuthenticationRequired => "proxy",
         CoreWebView2WebErrorStatus.CertificateCommonNameIsIncorrect or CoreWebView2WebErrorStatus.CertificateExpired
             or CoreWebView2WebErrorStatus.CertificateIsInvalid or CoreWebView2WebErrorStatus.CertificateRevoked
             or CoreWebView2WebErrorStatus.ClientCertificateContainsErrors => "certificate",
@@ -140,6 +179,8 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
 
     private async Task ApplySettingsAsync(string id, CoreWebView2 core)
     {
+        if (!settings.MemorySaver && core.IsSuspended) core.Resume();
+        if (!settings.MemorySaver && _hiddenSince.ContainsKey(id)) _hiddenSince[id] = DateTime.UtcNow;
         core.Settings.IsPasswordAutosaveEnabled = settings.SavePasswords && !AppPaths.Private;
         // Thème clair ou sombre imposé : les sites qui proposent les deux versions suivent le même choix.
         core.Profile.PreferredColorScheme = settings.Theme switch
@@ -234,11 +275,10 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         s.IsGeneralAutofillEnabled = false;
         _ = core.AddScriptToExecuteOnDocumentCreatedAsync(SidewaysScript);
         s.IsReputationCheckingRequired = true; // SmartScreen
-        // Serveur de développement en https avec un certificat fait maison : accepté pour cet ordinateur seulement
-        // (localhost, 127.0.0.1, ::1). Partout ailleurs, une erreur de certificat bloque la page.
+        // Aucun certificat invalide n'est accepté silencieusement, même sur localhost.
         core.ServerCertificateErrorDetected += (_, e) =>
         {
-            if (Uri.TryCreate(e.RequestUri, UriKind.Absolute, out var uri) && uri.IsLoopback) e.Action = CoreWebView2ServerCertificateErrorAction.AlwaysAllow;
+            e.Action = CoreWebView2ServerCertificateErrorAction.Cancel;
         };
         core.ContainsFullScreenElementChanged += (_, _) => FullScreenChanged?.Invoke(core.ContainsFullScreenElement);
         // Accès sensibles (micro, caméra, position, notifications…) : jamais accordés d'office, le navigateur
@@ -246,13 +286,27 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         core.PermissionRequested += (_, e) =>
         {
             if (PermissionRequested is null) e.State = CoreWebView2PermissionState.Deny;
-            else PermissionRequested(e);
+            else PermissionRequested(core, e);
         };
+    }
+
+    public async Task<bool> ClearSiteDataAsync()
+    {
+        if (_views.Values.Select(v => v.CoreWebView2).FirstOrDefault(c => c is not null) is not { } core) return false;
+        try
+        {
+            await core.Profile.ClearBrowsingDataAsync(CoreWebView2BrowsingDataKinds.Cookies |
+                CoreWebView2BrowsingDataKinds.AllDomStorage | CoreWebView2BrowsingDataKinds.DiskCache);
+            return true;
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException)
+        { DebugLog.Write($"site-data.clear {e.GetType().Name}"); return false; }
     }
 
     public void Remove(string id)
     {
         _asleep.Remove(id);
+        _ready.Remove(id);
         _hiddenSince.Remove(id);
         if (_pip == id) ExitPip(pause: false);
         _childFrames.Remove(id);
@@ -260,7 +314,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         if (!_views.Remove(id, out var view)) return;
         _loading.Remove(id);
         _blurScriptIds.Remove(id);
-        _zoom.Remove(id);
+        _navigation.Remove(id);
         _target.Remove(id); _errorUrl.Remove(id); _showingError.Remove(id); _downloading.Remove(id);
         container.Children.Remove(view);
         view.Close();
@@ -268,26 +322,67 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
 
     public void Navigate(string id, string url)
     {
-        if (Core(id) is { } core && Uri.TryCreate(url, UriKind.Absolute, out _)) core.Navigate(url);
+        if (!Uri.TryCreate(url, UriKind.Absolute, out _)) return;
+        if (_ready.Contains(id) && Core(id) is { } core)
+        {
+            // Le moteur termine parfois l'ancien chargement avant d'annoncer le suivant (ConnectionAborted).
+            // Il est déjà remplacé dès que l'utilisateur demande une autre adresse.
+            _navigation.Remove(id);
+            core.Navigate(url);
+        }
+        else if (_views.ContainsKey(id))
+        {
+            // Saisie pendant le démarrage du moteur : la dernière adresse remplace la page initiale.
+            _target[id] = url;
+            PageChanged?.Invoke(id, url, null);
+        }
+        else if (_asleep.TryGetValue(id, out var tab))
+        {
+            _asleep[id] = tab with { Url = url };
+            PageChanged?.Invoke(id, url, null);
+        }
     }
 
-    public void Back(string id) => Core(id)?.GoBack();
-    public void Forward(string id) => Core(id)?.GoForward();
+    public void Back(string id)
+    {
+        if (Core(id) is not { CanGoBack: true } core) return;
+        _navigation.Remove(id);
+        core.GoBack();
+    }
+    public void Forward(string id)
+    {
+        if (Core(id) is not { CanGoForward: true } core) return;
+        _navigation.Remove(id);
+        core.GoForward();
+    }
     // Recharger une page d'erreur, c'est retenter l'adresse qui a échoué.
     public void Reload(string id)
     {
         if (_errorUrl.TryGetValue(id, out var failed)) Navigate(id, failed);
-        else Core(id)?.Reload();
+        else if (Core(id) is { } core)
+        {
+            _navigation.Remove(id);
+            core.Reload();
+        }
         foreach (var mirror in _sims.GetValueOrDefault(id, []).Skip(1))
         {
             _following.Add(mirror.View);
             mirror.View.CoreWebView2?.Reload();
         }
     }
-    public void Stop(string id) => Core(id)?.Stop();
+    public void Stop(string id)
+    {
+        _navigation.Remove(id);
+        Core(id)?.Stop();
+        _loading.Remove(id);
+        RuntimeChanged?.Invoke();
+    }
 
     public void ApplyLayout(string? activeId, string? secondaryId, double ratio)
     {
+        _visible.Clear();
+        if (activeId is not null) _visible.Add(activeId);
+        if (secondaryId is not null) _visible.Add(secondaryId);
         // Un onglet endormi qu'on affiche se réveille : sa vue est créée et sa page chargée maintenant.
         foreach (var id in new[] { activeId, secondaryId })
             if (id is not null && _asleep.Remove(id, out var tab)) Add(tab);
@@ -647,8 +742,9 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
             try
             {
                 if (core.IsDocumentPlayingAudio) { _hiddenSince[id] = now; continue; } // musique, appel : il reste éveillé
-                var busy = KeepAwake(id) || _sims.ContainsKey(id) || _loading.Contains(id);
-                if (!busy && now - since >= DiscardAfter && core.Source.StartsWith("http", StringComparison.Ordinal) && !_errorUrl.ContainsKey(id)) Discard(id, core);
+                var busy = KeepAwake(id) || _pip == id || _sims.ContainsKey(id) || _loading.Contains(id);
+                if (busy) continue;
+                if (now - since >= DiscardAfter && core.Source.StartsWith("http", StringComparison.Ordinal) && !_errorUrl.ContainsKey(id)) Discard(id, core);
                 else if (now - since >= SuspendAfter && !core.IsSuspended) _ = core.TrySuspendAsync();
             }
             catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { /* vue fermée entre-temps */ }
@@ -667,24 +763,19 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     // Zoom d'une page. Ce type de vue n'expose pas le zoom du moteur : la page est donc mise en page dans une fenêtre
     // plus petite (ou plus grande), puis rendue à l'échelle sur toute la vue, avec la densité de pixels qu'il faut pour
     // rester nette. Pour la page, c'est un vrai zoom de navigateur : largeur, hauteur et unités « vh » suivent, et un
-    // élément en plein écran couvre tout. Le réglage tient d'une page à l'autre de l'onglet et suit la taille de la vue.
-    private readonly Dictionary<string, double> _zoom = new();
-
-    public double ZoomOf(string id) => _zoom.GetValueOrDefault(id, 1);
-
-    public void SetZoom(string id, double zoom)
+    // élément en plein écran couvre tout. Le réglage du profil suit chaque navigation et la taille de chaque vue.
+    public void SetZoom(double zoom)
     {
-        if (Core(id) is null) return;
-        if (zoom == 1) _zoom.Remove(id); else _zoom[id] = zoom;
+        settings.PageZoom = zoom;
         RuntimeChanged?.Invoke();
-        _ = ApplyZoomAsync(id);
+        foreach (var id in _views.Keys.ToList()) _ = ApplyZoomAsync(id);
     }
 
     private async Task ApplyZoomAsync(string id)
     {
         // Un écran simulé et le lecteur flottant règlent eux-mêmes ces métriques : le zoom reprend quand ils se terminent.
         if (!_views.TryGetValue(id, out var view) || view.CoreWebView2 is not { } core || _mode.ContainsKey(id) || _pip == id) return;
-        var zoom = ZoomOf(id);
+        var zoom = settings.PageZoom;
         try
         {
             if (zoom == 1 || view.ActualWidth < 1 || view.ActualHeight < 1)

@@ -114,8 +114,10 @@ export default function Sidebar() {
   }
 
   return (
-    <aside key={motion.run} className={`sidebar-card ${motion.way}`} aria-label={t('Panneau latéral des onglets', 'Tabs sidebar')}>
-      <div className="sidebar-url-pill">
+    <aside className={`sidebar-card ${motion.way}`} onAnimationEnd={() => setMotion(m => ({ ...m, way: '' }))} aria-label={t('Panneau latéral des onglets', 'Tabs sidebar')}>
+      <div className="sidebar-url-pill" onClick={e => {
+        if (!(e.target as Element).closest('button')) inputRef.current?.focus();
+      }}>
         <LockIcon />
         <form
           className="sidebar-url-form"
@@ -127,8 +129,8 @@ export default function Sidebar() {
         >
           <input
             ref={inputRef}
-            aria-label={t('Adresse complète', 'Full address')}
-            placeholder="https://..."
+            aria-label={t('Adresse ou recherche', 'Address or search')}
+            placeholder={t('Rechercher ou saisir une adresse', 'Search or enter an address')}
             spellCheck={false}
             value={urlText}
             onChange={e => setUrlText(e.target.value)}

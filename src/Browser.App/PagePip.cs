@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.Web.WebView2.Core;
 
 namespace Browser.App;
@@ -20,10 +21,12 @@ namespace Browser.App;
 public sealed partial class PageHost
 {
     private sealed record PipState(double X, double Y, double W, double H, int ViewWidth, int ViewHeight,
-        string Title, bool Paused, bool Ended, double Time, double Duration, bool Call);
+        string Title, bool Paused, bool Ended, double Time, double Duration, bool Muted, bool Call);
 
-    private const double PipMin = 240, PipMax = 960, PipStep = 1.25, PipEdge = 18;
-    private double PipWidth => Math.Clamp(settings.PipWidth, PipMin, Math.Max(PipMin, Math.Min(PipMax, container.ActualWidth - 2 * PipEdge)));
+    private const double PipMin = 240, PipMax = 960, PipStep = 1.25, PipEdge = 18, PipFooter = 76;
+    private double PipWidth => Math.Clamp(settings.PipWidth, Math.Min(PipMin, PipAvailable), PipAvailable);
+    private double PipAvailable => Math.Max(120, Math.Min(PipMax, Math.Min(container.ActualWidth - 2 * PipEdge,
+        (container.ActualHeight - 2 * PipEdge - PipFooter) / _pipAspect)));
 
     private string? _pip;
     private CoreWebView2Frame? _pipFrame; // cadre (lecteur intégré d'un autre site) qui contient la vidéo ; null : la page elle-même
@@ -35,9 +38,15 @@ public sealed partial class PageHost
     private double _pipDrop;                          // descente sous sa place, en unités d'affichage (ouverture, fermeture)
     private int _pipMissing, _pipMove;                // _pipMove : numéro du mouvement en cours (un nouveau annule l'ancien)
     private bool _pipClosing;
+    private int _pipRequest;
+    private bool _pipProbing;
     private FontIcon? _pipPlay;
     private TextBlock? _pipTitle;
-    private Border? _pipProgress;
+    private Slider? _pipSeek;
+    private TextBlock? _pipTime;
+    private FontIcon? _pipMute;
+    private StackPanel? _pipJumps;
+    private bool _pipUpdating;
     private double _dockHeight;
 
     // Cadres directs de chaque onglet : un lecteur intégré (YouTube dans un article…) vit dans l'un d'eux.
@@ -82,7 +91,7 @@ public sealed partial class PageHost
           return {
             x: r.left, y: r.top, w: r.width, h: r.height, sx: scrollX, sy: scrollY, vw: innerWidth, vh: innerHeight,
             origin: location.origin, title: document.title, paused: video.paused, ended: video.ended,
-            time: video.currentTime, duration: isFinite(video.duration) ? video.duration : 0, call: location.hostname === 'meet.google.com',
+            time: video.currentTime, duration: isFinite(video.duration) ? video.duration : 0, muted: video.muted, call: location.hostname === 'meet.google.com',
           };
         })()
         """;
@@ -114,20 +123,22 @@ public sealed partial class PageHost
 
     private static PipState State(JsonElement v, double x, double y, int viewWidth, int viewHeight, string title) => new(
         x, y, Num(v, "w"), Num(v, "h"), viewWidth, viewHeight, title, v.GetProperty("paused").GetBoolean(), v.GetProperty("ended").GetBoolean(),
-        Num(v, "time"), Num(v, "duration"), v.GetProperty("call").GetBoolean());
+        Num(v, "time"), Num(v, "duration"), v.GetProperty("muted").GetBoolean(), v.GetProperty("call").GetBoolean());
 
     // Cherche la vidéo : dans la page, sinon dans ses cadres (lecteur intégré venu d'un autre site). Une fois trouvée,
     // on ne regarde plus que là où elle est.
     // « known » : le cadre où la vidéo a déjà été trouvée (null : dans la page). « search » : premier relevé, on cherche partout.
     private async Task<(PipState State, CoreWebView2Frame? Frame)?> ProbePipAsync(string id, CoreWebView2 core, CoreWebView2Frame? known, bool search)
     {
-        if (known is null && await EvalAsync(core.ExecuteScriptAsync, VideoProbe) is { } own)
+        // Une nouvelle ouverture suit uniquement une vidéo en lecture, jamais une ancienne marque restée en pause.
+        var probe = search ? VideoProbe.Replace("const tracked = document.querySelector('video[data-nav-pip]');", "const tracked = null;") : VideoProbe;
+        if (known is null && await EvalAsync(core.ExecuteScriptAsync, probe) is { } own)
             return (State(own, Num(own, "x") + Num(own, "sx"), Num(own, "y") + Num(own, "sy"), (int)Num(own, "vw"), (int)Num(own, "vh"), own.GetProperty("title").GetString() ?? ""), null);
 
         var candidates = known is not null ? [known] : search ? _childFrames.GetValueOrDefault(id, []).ToList() : [];
         foreach (var frame in candidates)
         {
-            if (await EvalAsync(frame.ExecuteScriptAsync, VideoProbe) is not { } inner) continue;
+            if (await EvalAsync(frame.ExecuteScriptAsync, probe) is not { } inner) continue;
             if (await EvalAsync(core.ExecuteScriptAsync, FramesProbe) is not { } page) return null;
             // Le cadre dans la page : celui qui a la taille de la fenêtre vue par le cadre, de préférence du même site.
             JsonElement? box = null;
@@ -148,11 +159,15 @@ public sealed partial class PageHost
     public async Task<bool> TryEnterPipAsync(string id)
     {
         if (!_views.TryGetValue(id, out var view) || view.CoreWebView2 is not { } core || _sims.ContainsKey(id) || _pip == id) return false;
-        if (await ProbePipAsync(id, core, known: null, search: true) is not var (state, found) || !_views.ContainsKey(id)) return false;
+        var request = ++_pipRequest;
+        if (await ProbePipAsync(id, core, known: null, search: true) is not var (state, found)
+            || request != _pipRequest || _visible.Contains(id)
+            || !_views.TryGetValue(id, out var current) || current != view) return false;
         if (_pip is not null) ExitPip(pause: false);
 
         (_pip, _pipFrame, _pipState, _pipRect, _pipMissing, _pipClosing) = (id, found, state, "", 0, false);
-        _pipAspect = Math.Clamp(state.H / state.W, 0.3, 1.4);
+        DebugLog.Write($"pip.enter {id}");
+        _pipAspect = Math.Clamp(state.H / state.W, 0.2, 3); // les vidéos verticales conservent leurs proportions
         _pipShown = PipWidth;
         _pipChrome = BuildPipChrome(id, core, state.Call);
         foreach (var part in new FrameworkElement[] { view, _pipChrome })
@@ -163,11 +178,12 @@ public sealed partial class PageHost
             Canvas.SetZIndex(part, part == view ? 5 : 6);
         }
         // Il monte du bas de la fenêtre : posé d'abord sous le bord, puis glissé à sa place.
-        _pipDrop = Animated ? _pipShown * _pipAspect + 40 : 0;
+        _pipDrop = Animated ? _pipShown * _pipAspect + PipFooter + 40 : 0;
         PlacePip();
         view.Visibility = Visibility.Visible;
         container.Children.Add(_pipChrome);
         await FramePipAsync(core, state);
+        if (_pip != id) return false;
         _pipTimer ??= CreatePipTimer();
         _pipTimer.Start();
         RuntimeChanged?.Invoke();
@@ -183,18 +199,20 @@ public sealed partial class PageHost
     /// </summary>
     public async void ExitPip(bool pause, bool slide = false)
     {
-        if (_pip is not { } id || _pipClosing) return;
+        if (_pip is not { } id || (_pipClosing && slide)) return;
+        _pipRequest++;
         if (pause) EvalInPip("(v => v && v.pause())(document.querySelector('video[data-nav-pip]'))");
         if (slide && Animated)
         {
             _pipClosing = true;
             var from = _pipDrop;
-            var to = _pipShown * _pipAspect + 40;
+            var to = _pipShown * _pipAspect + PipFooter + 40;
             await TweenAsync(220, t => { _pipDrop = from + (to - from) * t * t; PlacePip(); }, ++_pipMove); // il accélère en partant
             if (_pip != id) return;
         }
         EvalInPip("(v => v && v.removeAttribute('data-nav-pip'))(document.querySelector('video[data-nav-pip]'))");
         (_pip, _pipFrame, _pipState, _pipClosing, _pipDrop) = (null, null, null, false, 0);
+        DebugLog.Write($"pip.exit {id}");
         _pipMove++;
         _pipTimer?.Stop();
         if (_pipChrome is not null) container.Children.Remove(_pipChrome);
@@ -233,11 +251,12 @@ public sealed partial class PageHost
         if (_pip is not { } id || _pipChrome is null || !_views.TryGetValue(id, out var view)) return;
         double width = Math.Round(_pipShown), height = Math.Round(_pipShown * _pipAspect);
         var right = Math.Clamp(settings.PipRight, PipEdge, Math.Max(PipEdge, container.ActualWidth - width - PipEdge));
-        var bottom = Math.Clamp(settings.PipBottom, PipEdge, Math.Max(PipEdge, container.ActualHeight - height - PipEdge));
+        var bottom = Math.Clamp(settings.PipBottom, PipEdge, Math.Max(PipEdge, container.ActualHeight - height - PipFooter - PipEdge));
         // La carte des téléchargements occupe le coin bas droit : le lecteur qui s'y trouve passe au-dessus.
         if (_dockHeight > 0 && right < 380 && bottom < _dockHeight + 2 * PipEdge) bottom = _dockHeight + 2 * PipEdge;
-        foreach (var part in new FrameworkElement[] { view, _pipChrome })
-            (part.Width, part.Height, part.Margin) = (width, height, new Thickness(0, 0, right, bottom - _pipDrop));
+        (view.Width, view.Height, view.Margin) = (width, height, new Thickness(0, 0, right, bottom + PipFooter - _pipDrop));
+        (_pipChrome.Width, _pipChrome.Height, _pipChrome.Margin) = (width, height + PipFooter, new Thickness(0, 0, right, bottom - _pipDrop));
+        if (_pipJumps is not null) _pipJumps.Visibility = width >= 320 ? Visibility.Visible : Visibility.Collapsed;
         view.UpdateLayout();
         CornerClip.Set(view, 16);
     }
@@ -261,9 +280,12 @@ public sealed partial class PageHost
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         timer.Tick += async (_, _) =>
         {
-            if (_pipClosing) return;
+            if (_pipClosing || _pipProbing) return;
             if (_pip is not { } id || Core(id) is not { } core) { ExitPip(pause: false); return; }
-            var state = (await ProbePipAsync(id, core, _pipFrame, search: false))?.State;
+            PipState? state;
+            _pipProbing = true;
+            try { state = (await ProbePipAsync(id, core, _pipFrame, search: false))?.State; }
+            finally { _pipProbing = false; }
             if (_pip != id || _pipClosing) return;
             // Vidéo disparue (page changée, appel terminé) ou lecture finie : le lecteur se referme de lui-même.
             if (state is null || state.Ended)
@@ -282,8 +304,18 @@ public sealed partial class PageHost
     {
         _pipState = s;
         if (_pipPlay is not null) _pipPlay.Glyph = s.Paused ? "" : "";
+        if (_pipMute is not null) _pipMute.Glyph = s.Muted ? "" : "";
         if (_pipTitle is not null) _pipTitle.Text = s.Title;
-        if (_pipProgress is not null) _pipProgress.Width = s.Duration > 0 ? Math.Clamp(s.Time / s.Duration, 0, 1) * _pipShown : 0;
+        if (_pipSeek is not null)
+        {
+            _pipUpdating = true;
+            _pipSeek.IsEnabled = s.Duration > 0;
+            _pipSeek.Maximum = Math.Max(1, s.Duration);
+            _pipSeek.Value = Math.Clamp(s.Time, 0, _pipSeek.Maximum);
+            _pipUpdating = false;
+        }
+        static string Clock(double seconds) => TimeSpan.FromSeconds(Math.Max(0, seconds)).ToString(seconds >= 3600 ? @"h\:mm\:ss" : @"m\:ss");
+        if (_pipTime is not null) _pipTime.Text = s.Duration > 0 ? $"{Clock(s.Time)} / {Clock(s.Duration)}" : Browser.Core.Language.T("En direct", "Live");
         var rect = $"{s.X:0},{s.Y:0},{s.W:0},{s.H:0},{PipWidth:0}";
         if (rect == _pipRect) return;
         _pipRect = rect;
@@ -320,26 +352,23 @@ public sealed partial class PageHost
         const string video = "document.querySelector('video[data-nav-pip]')";
         static string T(string fr, string en) => Browser.Core.Language.T(fr, en);
 
-        Border Pill(string glyph, string tip, Action run, double size = 34)
+        Button Pill(string glyph, string tip, Action run, double size = 32)
         {
-            var pill = new Border
+            var pill = new Button
             {
-                Width = size, Height = size, CornerRadius = new CornerRadius(size / 2), Background = Tone(150, 20),
-                BorderBrush = Tone(40, 255), BorderThickness = new Thickness(1),
-                Child = new FontIcon { Glyph = glyph, FontSize = size * 0.4, Foreground = Tone(255, 255) },
-                BackgroundTransition = new BrushTransition { Duration = TimeSpan.FromMilliseconds(120) },
+                Width = size, Height = size, Padding = new Thickness(0), CornerRadius = new CornerRadius(8), Background = Tone(255, 38),
+                BorderBrush = Tone(40, 255), BorderThickness = new Thickness(1), Foreground = Tone(255, 255),
+                Content = new FontIcon { Glyph = glyph, FontSize = 14, Foreground = Tone(255, 255) },
             };
             ToolTipService.SetToolTip(pill, tip);
-            pill.PointerEntered += (_, _) => pill.Background = Tone(215, 70);
-            pill.PointerExited += (_, _) => pill.Background = Tone(150, 20);
-            pill.PointerPressed += (_, e) => { e.Handled = true; pill.Background = Tone(235, 110); run(); };
-            pill.PointerReleased += (_, _) => pill.Background = Tone(215, 70);
+            AutomationProperties.SetName(pill, tip);
+            pill.Click += (_, _) => run();
             return pill;
         }
-        Border Jump(string text, string tip, int seconds) // saut dans la vidéo : le nombre de secondes en clair
+        Button Jump(string text, string tip, int seconds)
         {
-            var pill = Pill("", tip, () => EvalInPip($"{video}.currentTime += {seconds}"));
-            pill.Child = new TextBlock { Text = text, FontSize = 11.5, FontWeight = FontWeights.SemiBold, Foreground = Tone(255, 255), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            var pill = Pill("", tip, () => EvalInPip($"(v => {{ if(v) v.currentTime = Math.max(0, Math.min(v.duration || Infinity, v.currentTime + {seconds})); }})({video})"));
+            pill.Content = new TextBlock { Text = text, FontSize = 11.5, FontWeight = FontWeights.SemiBold, Foreground = Tone(255, 255), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
             return pill;
         }
         void Key(string key, int code) // raccourci du site, avec Ctrl
@@ -349,8 +378,9 @@ public sealed partial class PageHost
         }
 
         var chrome = new Grid { Background = new SolidColorBrush(Colors.Transparent), CornerRadius = new CornerRadius(16) };
-        var shade = new Grid { Opacity = 0, Background = Tone(96, 0), CornerRadius = new CornerRadius(16) };
+        var shade = new Grid { Opacity = 0, Background = new SolidColorBrush(Colors.Transparent), CornerRadius = new CornerRadius(16), Margin = new Thickness(0, 0, 0, PipFooter) };
         chrome.Children.Add(shade);
+        shade.Children.Add(new Border { Height = 42, VerticalAlignment = VerticalAlignment.Top, Background = Tone(210, 20), CornerRadius = new CornerRadius(16, 16, 0, 0), IsHitTestVisible = false });
         // Fondu des commandes : un élément d'interface ordinaire, animé par le cadre d'interface.
         void Fade(double to)
         {
@@ -369,21 +399,38 @@ public sealed partial class PageHost
             e.Handled = true;
             ResizePip(e.GetCurrentPoint(chrome).Properties.MouseWheelDelta > 0 ? PipStep : 1 / PipStep);
         };
-        chrome.PointerPressed += (_, e) => { if (e.GetCurrentPoint(chrome).Properties.IsLeftButtonPressed) DragPip(); };
+        chrome.PointerPressed += (_, e) => {
+            if (e.OriginalSource is DependencyObject source)
+            {
+                for (var parent = source; parent is not null && parent != chrome; parent = VisualTreeHelper.GetParent(parent))
+                    if (parent is Button or Slider) return;
+            }
+            if (e.GetCurrentPoint(chrome).Properties.IsLeftButtonPressed) DragPip();
+        };
 
         shade.Children.Add(_pipTitle = new TextBlock
         {
             FontSize = 11.5, FontWeight = FontWeights.SemiBold, Foreground = Tone(255, 255), TextTrimming = TextTrimming.CharacterEllipsis,
-            Margin = new Thickness(14, 13, 156, 0), VerticalAlignment = VerticalAlignment.Top, IsHitTestVisible = false,
+            Margin = new Thickness(14, 13, 48, 0), VerticalAlignment = VerticalAlignment.Top, IsHitTestVisible = false,
         });
         var top = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 8, 8, 0) };
-        top.Children.Add(Pill("", T("Réduire le lecteur", "Make the player smaller"), () => ResizePip(1 / PipStep), 30));
-        top.Children.Add(Pill("", T("Agrandir le lecteur", "Make the player larger"), () => ResizePip(PipStep), 30));
-        top.Children.Add(Pill("", T("Revenir à l'onglet", "Back to the tab"), () => PipReturnRequested?.Invoke(id), 30));
         top.Children.Add(Pill("", call ? T("Fermer le lecteur", "Close the player") : T("Fermer et mettre en pause", "Close and pause"), () => ExitPip(pause: !call, slide: true), 30));
         shade.Children.Add(top);
 
-        var middle = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        var footer = new Grid { Height = PipFooter, VerticalAlignment = VerticalAlignment.Bottom, Background = Tone(255, 24), Padding = new Thickness(10, 0, 10, 8), CornerRadius = new CornerRadius(0, 0, 16, 16) };
+        footer.RowDefinitions.Add(new RowDefinition { Height = new GridLength(28) });
+        footer.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        chrome.Children.Add(footer);
+        _pipSeek = new Slider { Minimum = 0, Maximum = 1, IsEnabled = false, Height = 28, Margin = new Thickness(0, -5, 76, 0), Foreground = Tone(255, 255) };
+        AutomationProperties.SetName(_pipSeek, T("Position de lecture", "Playback position"));
+        _pipSeek.ValueChanged += (_, e) => {
+            if (!_pipUpdating && _pipState?.Duration > 0)
+                EvalInPip($"(v => {{ if(v) v.currentTime = {e.NewValue.ToString(System.Globalization.CultureInfo.InvariantCulture)}; }})({video})");
+        };
+        footer.Children.Add(_pipSeek);
+        _pipTime = new TextBlock { FontSize = 10, Foreground = Tone(220, 255), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
+        footer.Children.Add(_pipTime);
+        var middle = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center };
         _pipPlay = null;
         if (call)
         {
@@ -392,24 +439,31 @@ public sealed partial class PageHost
         }
         else
         {
-            middle.Children.Add(Jump("−10", T("Reculer de 10 secondes", "Back 10 seconds"), -10));
             var play = Pill("", T("Lecture ou pause", "Play or pause"), () =>
             {
                 EvalInPip($"(v => v.paused ? v.play() : v.pause())({video})");
                 if (_pipPlay is not null) _pipPlay.Glyph = _pipPlay.Glyph == "" ? "" : ""; // réponse immédiate, confirmée au prochain relevé
-            }, 46);
-            _pipPlay = (FontIcon)play.Child;
+            }, 32);
+            _pipPlay = (FontIcon)play.Content;
             middle.Children.Add(play);
-            middle.Children.Add(Jump("+10", T("Avancer de 10 secondes", "Forward 10 seconds"), 10));
+            var mute = Pill("", T("Couper ou rétablir le son", "Mute or unmute"), () => EvalInPip($"(v => {{ if(v) v.muted = !v.muted; }})({video})"));
+            _pipMute = (FontIcon)mute.Content;
+            middle.Children.Add(mute);
+            _pipJumps = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+            _pipJumps.Children.Add(Jump("−10", T("Reculer de 10 secondes", "Back 10 seconds"), -10));
+            _pipJumps.Children.Add(Jump("+10", T("Avancer de 10 secondes", "Forward 10 seconds"), 10));
+            middle.Children.Add(_pipJumps);
         }
-        shade.Children.Add(middle);
-
-        // Avancement de la lecture : un trait fin en bas, toujours visible.
-        chrome.Children.Add(_pipProgress = new Border
-        {
-            Height = 3, Width = 0, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Bottom,
-            Background = Tone(230, 255), CornerRadius = new CornerRadius(1.5), IsHitTestVisible = false,
-        });
+        Grid.SetRow(middle, 1);
+        footer.Children.Add(middle);
+        var back = Pill("", T("Revenir à l'onglet", "Back to the tab"), () => PipReturnRequested?.Invoke(id));
+        back.Width = 90;
+        back.Content = new TextBlock { Text = T("Revenir ↗", "Back ↗"), FontSize = 12, Foreground = Tone(255, 255) };
+        back.HorizontalAlignment = HorizontalAlignment.Right;
+        back.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetRow(back, 1);
+        footer.Children.Add(back);
+        ToolTipService.SetToolTip(footer, T("Molette : changer la taille · Glisser la vidéo : déplacer", "Scroll: resize · Drag the video: move"));
         return chrome;
     }
 

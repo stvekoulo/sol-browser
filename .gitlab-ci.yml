@@ -1,4 +1,4 @@
-# Tests on merge requests; a tag such as v0.1.0 builds the three Windows architectures, uploads the installers,
+# Tests on merge requests and the default branch; a tag such as v0.1.0 builds the three Windows architectures, uploads the installers,
 # the archives and their checksums to the package registry, and creates the GitLab release that links to them.
 # Sol reads those release links to update itself.
 stages: [test, release]
@@ -27,6 +27,7 @@ test:
   stage: test
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   script:
     - Push-Location ui; npm run build; if ($LASTEXITCODE -ne 0) { throw 'interface build failed' }; Pop-Location
     - dotnet test tests/Browser.Core.Tests -c Release --nologo; if ($LASTEXITCODE -ne 0) { throw 'tests failed' }

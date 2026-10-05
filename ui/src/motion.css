@@ -35,13 +35,13 @@
 /* Carte latérale : elle glisse depuis le bord gauche à l'ouverture, et y retourne à la fermeture.
    Durées reprises par SidebarHost.cs, qui attend la fin du mouvement. */
 @keyframes slide-in {
-  from { opacity: 0; transform: translateX(-36px) scale(0.98); }
+  from { opacity: 0; transform: translateX(-18px); }
 }
 @keyframes slide-out {
-  to { opacity: 0; transform: translateX(-36px) scale(0.98); }
+  to { opacity: 0; transform: translateX(-18px); }
 }
-.sidebar-card.entering { animation: slide-in 320ms var(--ease-out) both; }
-.sidebar-card.leaving { animation: slide-out 260ms var(--ease-out) both; }
+.sidebar-card.entering { animation: slide-in 220ms var(--ease-out) both; }
+.sidebar-card.leaving { animation: slide-out 180ms var(--ease-out) both; }
 /* Pendant ces mouvements, les onglets ne rejouent pas leur propre apparition. */
 .sidebar-card:is(.entering, .leaving) :is(.sidebar-tab, .sidebar-split-group) { transition: none; }
 

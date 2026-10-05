@@ -4,6 +4,14 @@ namespace Browser.Core;
 
 public sealed class Settings
 {
+    private double _pageZoom = 1;
+    /// <summary>Zoom commun aux pages du profil, conservé au redémarrage (50 à 200 %).</summary>
+    public double PageZoom
+    {
+        get => _pageZoom;
+        set => _pageZoom = double.IsFinite(value) ? Math.Clamp(value, 0.5, 2) : 1;
+    }
+
     public string SearchUrlTemplate { get; set; } = "https://www.google.com/search?q={0}";
     public bool BlurEnabled { get; set; } = true;
     /// <summary>Masque les barres de défilement des pages. Désactivé : une barre fine apparaît pendant le défilement.</summary>
@@ -41,7 +49,7 @@ public sealed class Settings
     /// ces deux dernières livrées avec le navigateur, et leurs versions grasses "inter-bold" et "sf-bold".
     /// </summary>
     public string Font { get; set; } = "default";
-    /// <summary>Bloque les requêtes vers les domaines connus de publicité et de pistage.</summary>
+    /// <summary>Active uBlock Origin Lite pour bloquer les publicités et les traqueurs.</summary>
     public bool BlockAds { get; set; } = true;
     /// <summary>Met en veille les onglets inactifs, puis les décharge de la mémoire s'ils le restent longtemps.</summary>
     public bool MemorySaver { get; set; } = true;
@@ -129,25 +137,43 @@ public sealed class SessionGroup
 
 public static class JsonFileStore
 {
-    public static T Load<T>(string path) where T : new()
+    private static readonly JsonSerializerOptions Options = new() { RespectNullableAnnotations = true };
+    public static T Load<T>(string path, bool recoverBackup = true) where T : new()
     {
-        if (!File.Exists(path)) return new T();
-        try
+        foreach (var candidate in recoverBackup ? new[] { path, path + ".bak" } : new[] { path })
         {
-            return JsonSerializer.Deserialize<T>(File.ReadAllText(path)) ?? new T();
+            if (!File.Exists(candidate)) continue;
+            try { return JsonSerializer.Deserialize<T>(File.ReadAllText(candidate), Options) ?? throw new JsonException("Empty JSON document"); }
+            catch (JsonException)
+            {
+                try { File.Move(candidate, candidate + ".corrupt", overwrite: true); }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { System.Diagnostics.Trace.WriteLine(e); }
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { System.Diagnostics.Trace.WriteLine(e); }
         }
-        catch (JsonException)
-        {
-            File.Move(path, path + ".corrupt", overwrite: true);
-            return new T();
-        }
+        return new T();
     }
 
-    public static void Save<T>(string path, T value)
+    public static bool Save<T>(string path, T value)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var tmp = path + ".tmp";
-        File.WriteAllText(tmp, JsonSerializer.Serialize(value));
-        File.Move(tmp, path, overwrite: true);
+        try
+        {
+            path = Path.GetFullPath(path);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            var tmp = path + ".tmp";
+            using (var stream = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                JsonSerializer.Serialize(stream, value, Options);
+                stream.Flush(flushToDisk: true);
+            }
+            if (File.Exists(path)) File.Replace(tmp, path, path + ".bak");
+            else File.Move(tmp, path);
+            return true;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            System.Diagnostics.Trace.WriteLine(e);
+            return false; // garder le fichier précédent si le disque est plein ou le profil verrouillé
+        }
     }
 }

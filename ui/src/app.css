@@ -6,11 +6,12 @@ body {
   letter-spacing: -0.008em;
   color: var(--text);
   background-color: var(--chrome-bg);
-  transition: background-color 220ms var(--ease-out), color 180ms var(--ease-out);
   overflow: hidden;
   user-select: none;
   -webkit-font-smoothing: antialiased;
 }
+
+html.painted body { transition: background-color 220ms var(--ease-out), color 180ms var(--ease-out); }
 
 button {
   font: inherit;

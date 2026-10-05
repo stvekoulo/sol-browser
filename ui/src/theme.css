@@ -17,14 +17,14 @@
      d'un site vidéo…). Sans accent, c'est simplement le fond de la page. */
   /* La couleur brute du site (--site-accent, posée par bridge.ts) est adoucie avant usage : une teinte pastel,
      claire, jamais vive. Sans couleur de site, ces variables n'existent pas et chaque surface garde son repli. */
-  --page-accent: color-mix(in oklab, var(--site-accent) 52%, #ffffff);
-  --chrome-accent: color-mix(in oklab, var(--site-chrome-accent) 52%, #ffffff);
+  --page-accent: color-mix(in oklab, var(--site-accent) 58%, #ffffff);
+  --chrome-accent: color-mix(in oklab, var(--site-chrome-accent) 58%, #ffffff);
 
-  --tint: color-mix(in srgb, var(--page-bg) 78%, var(--page-accent, var(--page-bg)) 22%);
-  --tint-pill: color-mix(in srgb, var(--page-bg) 62%, var(--page-accent, var(--page-bg)) 38%);
+  --tint: color-mix(in srgb, var(--page-bg) 72%, var(--page-accent, var(--page-bg)) 28%);
+  --tint-pill: color-mix(in srgb, var(--page-bg) 56%, var(--page-accent, var(--page-bg)) 44%);
 
   /* Arrière-plan de l'interface (barre du haut, colonne de la carte) : le fond de la page, légèrement teinté. */
-  --chrome-bg: color-mix(in srgb, var(--page-bg) 90%, var(--chrome-accent, var(--page-bg)) 10%);
+  --chrome-bg: color-mix(in srgb, var(--page-bg) 86%, var(--chrome-accent, var(--page-bg)) 14%);
 
   /* Surface de la carte latérale : fusionne la teinte de la page avec un voile givré */
   --bg-sidebar-card: linear-gradient(
@@ -86,12 +86,15 @@
 /* Adaptation automatique lorsque la page active est sombre (ex: YouTube Dark, X, GitHub Dark) */
 :root[data-theme="dark"] {
   color-scheme: dark;
+  --chrome-bg: color-mix(in srgb, var(--page-bg) 88%, var(--chrome-accent, var(--page-bg)) 12%);
+  --tint: color-mix(in srgb, var(--page-bg) 80%, var(--page-accent, var(--page-bg)) 20%);
+  --tint-pill: color-mix(in srgb, var(--page-bg) 68%, var(--page-accent, var(--page-bg)) 32%);
 
   --bg-sidebar-card: linear-gradient(
     165deg,
-    color-mix(in srgb, var(--tint) 82%, #000000 18%) 0%,
-    color-mix(in srgb, var(--tint) 74%, #000000 26%) 55%,
-    color-mix(in srgb, var(--tint) 66%, #000000 34%) 100%
+    color-mix(in srgb, var(--tint) 78%, #000000 22%) 0%,
+    color-mix(in srgb, var(--tint) 70%, #000000 30%) 55%,
+    color-mix(in srgb, var(--tint) 62%, #000000 38%) 100%
   );
   --border-card: rgba(255, 255, 255, 0.12);
   --shadow-card:
@@ -123,8 +126,8 @@
   --accent: color-mix(in oklab, var(--site-accent, #409cff) 82%, #ffffff);
 
   /* En sombre, la couleur du site est adoucie vers un gris moyen plutôt que vers le blanc. */
-  --page-accent: color-mix(in oklab, var(--site-accent) 60%, #2a2a30);
-  --chrome-accent: color-mix(in oklab, var(--site-chrome-accent) 60%, #2a2a30);
+  --page-accent: color-mix(in oklab, var(--site-accent) 56%, #17171b);
+  --chrome-accent: color-mix(in oklab, var(--site-chrome-accent) 56%, #17171b);
 
   --shadow-glass-pill:
     inset 0 1px 0 rgba(255, 255, 255, 0.1),
