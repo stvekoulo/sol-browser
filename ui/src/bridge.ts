@@ -85,13 +85,13 @@ export type HostEvent = {
 // Fonds neutres des thèmes imposés. En thème par défaut, le fond de l'interface est celui de la page.
 // Le sombre est proche du noir des sites sombres : « Sombre » et « Système » rendent comme « Par défaut » sur un tel site.
 const NEUTRAL = { light: 'rgb(243, 243, 246)', dark: 'rgb(9, 9, 11)' };
-export const interfaceScale = () => Number(document.documentElement.style.getPropertyValue('--ui-scale')) || 0.95;
+export const interfaceScale = () => Number(document.documentElement.style.getPropertyValue('--ui-scale')) || 0.92;
 
 function applyTheme(ev: HostEvent) {
   const root = document.documentElement.style;
   if (location.hostname === 'ui.navigateur') {
-    // Facteur appliqué, un peu sous la taille affichée dans les réglages (100 % : 0,95).
-    const scale = ev.uiScale === 0.75 || ev.uiScale === 0.85 ? ev.uiScale : 0.95;
+    // Même facteur que les dimensions natives, fourni par l'hôte.
+    const scale = ev.uiScale === 0.86 || ev.uiScale === 0.89 ? ev.uiScale : 0.92;
     const changed = interfaceScale() !== scale;
     root.setProperty('--ui-scale', String(scale));
     document.body.style.zoom = String(scale);

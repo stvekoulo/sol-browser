@@ -3,18 +3,19 @@ using Browser.Core;
 public class JsonFileStoreTests : IDisposable
 {
     [Theory]
-    [InlineData(1, 1)]
-    [InlineData(0.9, 0.9)]
-    [InlineData(0.8, 0.8)]
-    [InlineData(0.7, 1)]
-    [InlineData(double.NaN, 1)]
-    public void Interface_scale_only_accepts_supported_sizes_and_does_not_change_page_zoom(double scale, double expected)
+    [InlineData(1, 1, 0.92)]
+    [InlineData(0.9, 0.9, 0.89)]
+    [InlineData(0.8, 0.8, 0.86)]
+    [InlineData(0.7, 1, 0.92)]
+    [InlineData(double.NaN, 1, 0.92)]
+    public void Interface_scale_only_accepts_supported_sizes_and_does_not_change_page_zoom(double scale, double expected, double factor)
     {
         var settings = new Settings { PageZoom = 1.5, UiScale = scale };
         var path = File_("scale.json");
         JsonFileStore.Save(path, settings);
         var saved = JsonFileStore.Load<Settings>(path);
         Assert.Equal(expected, saved.UiScale);
+        Assert.Equal(factor, saved.UiFactor);
         Assert.Equal(1.5, saved.PageZoom);
     }
     [Theory]

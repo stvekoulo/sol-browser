@@ -36,7 +36,7 @@ public sealed class DockHost(Grid frame, WebView2 view, UiBridge bridge, Func<Ta
         frame.Height = Math.Clamp(height, 44, 420);
         frame.Visibility = Visibility.Visible;
         frame.UpdateLayout();
-        CornerClip.Set(view, 20 * (float)(UiBridge.Settings?.UiFactor ?? 0.95));
+        CornerClip.Set(view, 20 * (float)(UiBridge.Settings?.UiFactor ?? 0.92));
     }
 
     public void Hide() => frame.Visibility = Visibility.Collapsed;

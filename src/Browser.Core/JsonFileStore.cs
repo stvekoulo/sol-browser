@@ -8,11 +8,11 @@ public sealed class Settings
     /// <summary>Taille de l'interface choisie dans les réglages : 100, 90 ou 80 %.</summary>
     public double UiScale { get => _uiScale; set => _uiScale = value is 1 or 0.9 or 0.8 ? value : 1; }
     /// <summary>
-    /// Facteur réellement appliqué à l'interface. Elle est dessinée un peu trop grande pour un écran d'ordinateur :
-    /// « 100 % » l'affiche à 0,95, « 90 % » à 0,85, « 80 % » à 0,75.
+    /// Facteur réellement appliqué : 100 % à 0,92, 90 % à 0,89, 80 % à 0,86.
+    /// Les tailles sont proches pour garder une interface confortable.
     /// </summary>
     [System.Text.Json.Serialization.JsonIgnore]
-    public double UiFactor => Math.Round(_uiScale - 0.05, 2);
+    public double UiFactor => _uiScale switch { 0.9 => 0.89, 0.8 => 0.86, _ => 0.92 };
     private double _pageZoom = 1;
     /// <summary>Zoom commun aux pages du profil, conservé au redémarrage (50 à 200 %).</summary>
     public double PageZoom

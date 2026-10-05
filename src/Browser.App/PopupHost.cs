@@ -22,7 +22,7 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge)
     public void Rescale()
     {
         if (!IsOpen) return;
-        frame.Width = Math.Clamp(_width * (UiBridge.Settings?.UiFactor ?? 0.95), 128, 900);
+        frame.Width = Math.Clamp(_width * (UiBridge.Settings?.UiFactor ?? 0.92), 128, 900);
     }
 
     /// <summary>Un menu est affiché ou en cours d'affichage.</summary>
@@ -35,7 +35,7 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge)
         _bottom = false;
         _above = above;
         _width = width;
-        frame.Width = Math.Clamp(width * (UiBridge.Settings?.UiFactor ?? 0.95), 128, 900);
+        frame.Width = Math.Clamp(width * (UiBridge.Settings?.UiFactor ?? 0.92), 128, 900);
         (_x, _y) = (x, y);
         _pending = true;
         _focus = focus;
@@ -52,7 +52,7 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge)
     {
         var window = (FrameworkElement)frame.Parent;
         var left = PageLeft?.Invoke() ?? 0;
-        Show(left + Math.Max(0, (window.ActualWidth - left - width * (UiBridge.Settings?.UiFactor ?? 0.95)) / 2), top ?? Math.Max(90, window.ActualHeight / 2 - 150), width, contentJson, focus: true);
+        Show(left + Math.Max(0, (window.ActualWidth - left - width * (UiBridge.Settings?.UiFactor ?? 0.92)) / 2), top ?? Math.Max(90, window.ActualHeight / 2 - 150), width, contentJson, focus: true);
     }
 
     public void Post(string json) => bridge.Post(json);
@@ -85,7 +85,7 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge)
 
         // La vue reste entière dans la fenêtre : elle se décale si elle dépasserait à droite ou en bas.
         var window = (FrameworkElement)frame.Parent;
-        if (_bottom) frame.Width = Math.Max(128, Math.Min(_width * (UiBridge.Settings?.UiFactor ?? 0.95), window.ActualWidth - 2 * Edge));
+        if (_bottom) frame.Width = Math.Max(128, Math.Min(_width * (UiBridge.Settings?.UiFactor ?? 0.92), window.ActualWidth - 2 * Edge));
         // Jamais plus haut que la fenêtre : au-delà, le contenu du panneau défile.
         frame.Height = Math.Clamp(height, 1, Math.Max(160, window.ActualHeight - 2 * Edge - 48));
         var x = Math.Max(Edge, Math.Min(_x, window.ActualWidth - frame.Width - Edge));
@@ -95,7 +95,7 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge)
 
         frame.Visibility = Visibility.Visible;
         frame.UpdateLayout();
-        CornerClip.Set(view, (_bottom ? 32 : Radius) * (float)(UiBridge.Settings?.UiFactor ?? 0.95));
+        CornerClip.Set(view, (_bottom ? 32 : Radius) * (float)(UiBridge.Settings?.UiFactor ?? 0.92));
         if (_pending && _focus) view.Focus(FocusState.Programmatic);
         _pending = false;
     }

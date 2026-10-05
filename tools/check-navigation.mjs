@@ -117,6 +117,23 @@ async function stop() {
 }
 try {
   await launch();
+  if (process.argv.includes('--scale')) {
+    const sidebar = await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#sidebar')),'sidebar'));
+    const page = await pageAt('/a');
+    const pageZoom = await page.evaluate('devicePixelRatio');
+    for (const [index, factor] of [[0,0.92],[1,0.89],[2,0.86],[0,0.92]]) {
+      await command({type:'settings.set',id:'uiScale',index});
+      await waitFor(()=>ui.evaluate(`document.body.style.zoom === '${factor}'`),'toolbar scale');
+      await waitFor(()=>sidebar.evaluate(`document.body.style.zoom === '${factor}'`),'sidebar scale');
+      assert.ok(await sidebar.evaluate(`Array.from(document.querySelectorAll('.sidebar-quick-actions button')).length > 0 && Array.from(document.querySelectorAll('.sidebar-quick-actions button')).every(b=>{const r=b.getBoundingClientRect();return r.top>=0 && r.bottom<=innerHeight && r.right<=innerWidth;})`),'sidebar shortcuts remain visible');
+      assert.equal(await page.evaluate('devicePixelRatio'),pageZoom,'website zoom stays independent');
+      await writeFile(resolve(base,`sidebar-scale-${index}.png`),Buffer.from((await sidebar.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    }
+    console.log('PASS 100/90/80 interface sizes, visible sidebar shortcuts and independent website zoom');
+    await stop();
+    console.log(`Evidence: ${base}`);
+    process.exit(0);
+  }
   if (process.argv.includes('--extensions')) {
     const page = await pageAt('/a');
     const initialWidth = await page.evaluate('innerWidth');
@@ -238,7 +255,7 @@ try {
   const sidebar = await connect(sidebarTarget);
   for (const index of [1,2,0]) {
     await command({type:'settings.set',id:'uiScale',index});
-    await waitFor(()=>sidebar.evaluate(`document.body.style.zoom === '${[.95,.85,.75][index]}'`), 'sidebar interface scale');
+    await waitFor(()=>sidebar.evaluate(`document.body.style.zoom === '${[.92,.89,.86][index]}'`), 'sidebar interface scale');
     await delay(150);
     assert.ok(await sidebar.evaluate('Array.from(document.querySelectorAll(".sidebar-quick-actions button")).every(b => b.getBoundingClientRect().top >= 0 && b.getBoundingClientRect().bottom <= innerHeight)'), 'bottom shortcuts remain visible at every interface scale');
   }
@@ -473,12 +490,12 @@ try {
   const startState = await state();
   assert.equal(startState.tabs.find(t=>t.id===startState.activeId)?.zoom,100);
   await command({type:'settings.set',id:'uiScale',index:2});
-  await waitFor(()=>ui.evaluate('document.body.style.zoom === "0.75"'),'80% interface scale');
-  assert.ok(await designSidebar.evaluate('document.body.style.zoom === "0.75"'));
+  await waitFor(()=>ui.evaluate('document.body.style.zoom === "0.86"'),'80% interface scale');
+  assert.ok(await designSidebar.evaluate('document.body.style.zoom === "0.86"'));
   assert.ok(await startPage.evaluate('!document.body.style.zoom || document.body.style.zoom === "1"'), 'start remains at 100%');
   assert.equal(JSON.parse(await readFile(resolve(profile,'settings.json'),'utf8')).UiScale,0.8);
   await command({type:'settings.set',id:'uiScale',index:0});
-  await waitFor(()=>ui.evaluate('document.body.style.zoom === "0.95"'),'restore interface scale');
+  await waitFor(()=>ui.evaluate('document.body.style.zoom === "0.92"'),'restore interface scale');
   const tabCount = (await state()).tabs.length;
   await command({type:'split.open'});
   await waitFor(async()=> (await state()).tabs.length === tabCount + 1,'new split start tab');
