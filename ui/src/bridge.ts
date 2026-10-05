@@ -91,7 +91,7 @@ function applyTheme(ev: HostEvent) {
     const changed = interfaceScale() !== scale;
     root.setProperty('--ui-scale', String(scale));
     document.body.style.zoom = String(scale);
-    document.body.style.height = `${100 / scale}%`;
+    document.body.style.height = '100%';
     if (changed) window.dispatchEvent(new Event('ui-scale'));
   }
   document.documentElement.dataset.private = String(!!ev.privateMode);

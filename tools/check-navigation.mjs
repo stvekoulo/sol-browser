@@ -129,6 +129,12 @@ try {
   const second = s.activeId;
   const sidebarTarget = await waitFor(async () => (await targets()).find(t => t.url.endsWith('#sidebar')), 'sidebar');
   const sidebar = await connect(sidebarTarget);
+  for (const index of [1,2,0]) {
+    await command({type:'settings.set',id:'uiScale',index});
+    await waitFor(()=>sidebar.evaluate(`document.body.style.zoom === '${[1,.9,.8][index]}'`), 'sidebar interface scale');
+    await delay(150);
+    assert.ok(await sidebar.evaluate('Array.from(document.querySelectorAll(".sidebar-quick-actions button")).every(b => b.getBoundingClientRect().top >= 0 && b.getBoundingClientRect().bottom <= innerHeight)'), 'bottom shortcuts remain visible at every interface scale');
+  }
   await sidebar.evaluate('document.querySelector(".sidebar-url-pill").click()');
   assert.equal(await sidebar.evaluate('document.activeElement?.matches(".sidebar-url-form input")'), true, 'sidebar pill focuses search');
   await sidebar.evaluate(`const field = document.querySelector('.sidebar-url-form input'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(field, ${JSON.stringify(`${origin}/b`)}); field.dispatchEvent(new Event('input', {bubbles:true}));`);
