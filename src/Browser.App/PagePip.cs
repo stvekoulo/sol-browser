@@ -166,6 +166,7 @@ public sealed partial class PageHost
         if (_pip is not null) ExitPip(pause: false);
 
         (_pip, _pipFrame, _pipState, _pipRect, _pipMissing, _pipClosing) = (id, found, state, "", 0, false);
+        _ = PageZoom.TabAsync(core, 1); // le cadrage sur la vidéo se fait dans les dimensions de la page, sans zoom par-dessus
         DebugLog.Write($"pip.enter {id}");
         _pipAspect = Math.Clamp(state.H / state.W, 0.2, 3); // les vidéos verticales conservent leurs proportions
         _pipShown = PipWidth;

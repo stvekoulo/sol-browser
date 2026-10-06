@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using Browser.Core;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -20,7 +21,6 @@ public sealed class ExtensionPopupHost(Window owner)
     private readonly nint _owner = WinRT.Interop.WindowNative.GetWindowHandle(owner);
     private Window? _window;
     private WebView2? _view;
-    private Task? _initialization;
     private (double Right, double Top) _anchor; // sous le bouton, en pixels d'écran
     private bool _ownerClosed;
     private int _run;
@@ -60,36 +60,59 @@ public sealed class ExtensionPopupHost(Window owner)
         var origin = new Point();
         ClientToScreen(_owner, ref origin);
         _anchor = (origin.X + right * Scale, origin.Y + top * Scale);
-        try { await (_initialization ??= InitializeAsync()); }
-        catch { _initialization = null; throw; }
-        if (run != _run || _window is null || _view is null) return;
-        Place(320, 200); // en attendant que la page dise sa taille
-        _view.CoreWebView2.Navigate(url);
-        IsOpen = true;
-        _window.AppWindow.Show();
-        _window.Activate();
-        _view.Focus(FocusState.Programmatic);
-        _ = FollowSizeAsync(run);
-    }
-
-    private async Task InitializeAsync()
-    {
-        _view = new WebView2
+        var window = _window ??= CreateWindow();
+        CloseView();
+        // Une vue neuve à chaque ouverture, fermée ensuite : pour le moteur, cette vue est un onglet comme les autres,
+        // et une vue gardée en réserve resterait « l'onglet courant » des extensions une fois la fenêtre refermée.
+        var view = _view = new WebView2
         {
-            DefaultBackgroundColor = UiBridge.InitialBackground,
+            DefaultBackgroundColor = UiBridge.InitialBackground, // le temps du chargement : clair ou sombre, comme l'interface
             UseSystemFocusVisuals = false,
             FocusVisualPrimaryThickness = new Thickness(0),
             FocusVisualSecondaryThickness = new Thickness(0),
         };
-        _window = new Window { Content = _view, Title = "Sol" };
-        var app = _window.AppWindow;
+        window.Content = view;
+        Place(320, 200); // en attendant que la page dise sa taille
+        window.AppWindow.Show(activateWindow: false); // une vue ne démarre son moteur qu'une fois affichée
+        try
+        {
+            await view.EnsureCoreWebView2Async(await AdBlock.EnvironmentAsync());
+            if (run != _run) return;
+            var core = view.CoreWebView2;
+            core.Settings.IsStatusBarEnabled = false;
+            core.Settings.AreHostObjectsAllowed = false;
+            core.Settings.IsWebMessageEnabled = false;
+            core.Settings.IsZoomControlEnabled = false;
+            // Avant le code de l'extension : sa fenêtre voit les onglets comme dans Chrome (voir ExtensionShim).
+            await core.AddScriptToExecuteOnDocumentCreatedAsync(ExtensionShim.Script);
+            if (run != _run) return;
+            core.NewWindowRequested += (_, e) => { e.Handled = true; Hide(); TabRequested?.Invoke(e.Uri); };
+            core.WindowCloseRequested += (_, _) => Hide(); // l'extension ferme sa fenêtre elle-même, une fois son action faite
+            core.Navigate(url);
+        }
+        catch (Exception e) when (e is InvalidOperationException or COMException or ObjectDisposedException)
+        {
+            if (run != _run) return; // remplacée ou refermée pendant son démarrage
+            Hide();
+            throw;
+        }
+        IsOpen = true;
+        window.Activate();
+        view.Focus(FocusState.Programmatic);
+        _ = FollowSizeAsync(run);
+    }
+
+    private Window CreateWindow()
+    {
+        var window = new Window { Title = "Sol" };
+        var app = window.AppWindow;
         app.IsShownInSwitchers = false;
         if (app.Presenter is OverlappedPresenter presenter)
         {
             (presenter.IsResizable, presenter.IsMaximizable, presenter.IsMinimizable) = (false, false, false);
             presenter.SetBorderAndTitleBar(false, false); // en dernier : les options du presenter peuvent recréer le cadre.
         }
-        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(_window);
+        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
         // WinUI conserve parfois WS_DLGFRAME même sans barre de titre : ce cadre ajoute 3 px blancs par côté.
         SetWindowLong(hwnd, -16, GetWindowLong(hwnd, -16) & ~0x00C40000); // WS_CAPTION | WS_THICKFRAME
         SetWindowPos(hwnd, 0, 0, 0, 0, 0, 0x0037); // recalcul du cadre, sans déplacement, taille ni activation
@@ -101,21 +124,19 @@ public sealed class ExtensionPopupHost(Window owner)
         var noBorder = unchecked((int)0xFFFFFFFE); // DWMWA_COLOR_NONE : coins et ombre natifs, sans contour blanc.
         applied = DwmSetWindowAttribute(hwnd, 34, ref noBorder, sizeof(int)); // DWMWA_BORDER_COLOR (Windows 11)
         if (applied != 0) DebugLog.Write($"fenêtre d'extension : suppression du contour refusée (0x{applied:X8})");
-        _window.Activated += (_, e) => { if (e.WindowActivationState == WindowActivationState.Deactivated) Hide(); }; // clic ailleurs
+        window.Activated += (_, e) => { if (e.WindowActivationState == WindowActivationState.Deactivated) Hide(); }; // clic ailleurs
         app.Closing += (_, e) => { if (!_ownerClosed) { e.Cancel = true; Hide(); } }; // Alt+F4 : elle se cache, elle resservira
-        owner.Closed += (_, _) => { _ownerClosed = true; _window.Close(); };
+        owner.Closed += (_, _) => { _ownerClosed = true; CloseView(); window.Close(); };
+        return window;
+    }
 
-        // Une vue ne démarre son moteur qu'une fois affichée : la fenêtre se montre d'abord, sans prendre le curseur.
-        Place(320, 200);
-        app.Show(activateWindow: false);
-        await _view.EnsureCoreWebView2Async(await AdBlock.EnvironmentAsync());
-        var core = _view.CoreWebView2;
-        core.Settings.IsStatusBarEnabled = false;
-        core.Settings.AreHostObjectsAllowed = false;
-        core.Settings.IsWebMessageEnabled = false;
-        core.Settings.IsZoomControlEnabled = false;
-        core.NewWindowRequested += (_, e) => { e.Handled = true; Hide(); TabRequested?.Invoke(e.Uri); };
-        core.WindowCloseRequested += (_, _) => Hide(); // l'extension ferme sa fenêtre elle-même, une fois son action faite
+    private void CloseView()
+    {
+        if (_view is not { } view) return;
+        _view = null;
+        if (_window is not null) _window.Content = null;
+        try { view.Close(); }
+        catch (Exception e) when (e is InvalidOperationException or COMException) { /* jamais démarrée, ou déjà fermée */ }
     }
 
     // Sous le bouton, bord droit aligné sur lui, sans sortir de l'écran.
@@ -159,10 +180,10 @@ public sealed class ExtensionPopupHost(Window owner)
     public void Hide()
     {
         _run++;
-        if (!IsOpen) return;
+        if (!IsOpen && _view is null) return;
         IsOpen = false;
         _window?.AppWindow.Hide();
-        _view?.CoreWebView2?.Navigate("about:blank"); // la page de l'extension est déchargée : rien ne tourne fenêtre fermée
+        CloseView(); // la page de l'extension est déchargée, et sa vue quitte la liste des onglets du moteur
     }
 
     [StructLayout(LayoutKind.Sequential)] private struct Point { public int X, Y; }

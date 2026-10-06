@@ -15,6 +15,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     private readonly HashSet<string> _visible = new();
     private readonly HashSet<string> _pdf = new();
     private static Task? _blockerReady;
+    private static Task? _zoomReady;
     public bool IsPdf(string id) => _pdf.Contains(id);
     private bool _watchLayout;
     private (string? Primary, string? Secondary, double Ratio) _layout;
@@ -148,10 +149,6 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
             container.SizeChanged += (_, _) => ApplyLayout(_layout.Primary, _layout.Secondary, _layout.Ratio);
         }
         var view = new WebView2 { Visibility = Visibility.Collapsed, Opacity = 0, DefaultBackgroundColor = UiBridge.InitialBackground };
-        view.SizeChanged += (_, _) =>
-        {
-            _ = ApplyZoomAsync(tab.Id);
-        };
         _views[tab.Id] = view;
         view.GotFocus += (_, _) => { if (_visible.Contains(tab.Id) && _views.GetValueOrDefault(tab.Id) == view) PageFocused?.Invoke(tab.Id); };
         container.Children.Add(view);
@@ -160,6 +157,8 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
             await StartEngineAsync(view);
             // La première page attend que le bloqueur soit prêt.
             await (_blockerReady ??= AdBlock.ApplyExtensionAsync(view.CoreWebView2.Profile, settings.BlockAds));
+            // De même pour le zoom du profil : il s'applique dès la première page.
+            await (_zoomReady ??= PageZoom.InstallAsync(view.CoreWebView2.Profile, settings.PageZoom));
         }
         catch (Exception e) when ((e is InvalidOperationException or System.Runtime.InteropServices.COMException)
             && _views.GetValueOrDefault(tab.Id) != view) { return; } // fermé pendant le démarrage
@@ -188,7 +187,6 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         core.SourceChanged += (_, _) =>
         {
             PageChanged?.Invoke(tab.Id, _errorUrl.GetValueOrDefault(tab.Id, core.Source), null);
-            _ = ApplyZoomAsync(tab.Id);
         };
         core.DocumentTitleChanged += (_, _) => PageChanged?.Invoke(tab.Id, null, core.DocumentTitle);
         core.HistoryChanged += (_, _) => RuntimeChanged?.Invoke();
@@ -220,7 +218,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
                     if (e.Response.Headers.GetHeader("Content-Type").Split(';')[0].Trim().Equals("application/pdf", StringComparison.OrdinalIgnoreCase)) _pdf.Add(tab.Id);
                     else _pdf.Remove(tab.Id);
                     core.Settings.IsZoomControlEnabled = IsPdf(tab.Id);
-                    _ = ApplyZoomAsync(tab.Id);
+                    if (IsPdf(tab.Id)) PageZoom.KeepPlain(e.Request.Uri); // un document reste à 100 % : son lecteur a son propre zoom
                     RuntimeChanged?.Invoke();
                 }
             }
@@ -234,7 +232,6 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
                 || _navigation.GetValueOrDefault(tab.Id) != e.NavigationId) return;
             _loading.Remove(tab.Id);
             var downloading = _downloading.Remove(tab.Id);
-            _ = ApplyZoomAsync(tab.Id);
             RuntimeChanged?.Invoke();
             // Une réponse d'erreur du serveur (403, 404, 500…) est quand même sa page à lui : on la laisse affichée. Les
             // vérifications anti-robots, par exemple, répondent 403 puis rechargent la vraie page.
@@ -272,7 +269,8 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         core.Settings.IsStatusBarEnabled = false;
         core.StatusBarTextChanged += (_, _) => StatusChanged?.Invoke(tab.Id, core.StatusBarText);
         core.FaviconChanged += async (_, _) => FaviconChanged?.Invoke(tab.Id, await ReadFaviconAsync(core));
-        await ApplyZoomAsync(tab.Id);
+        // Appareil simulé, lecteur flottant : leur page reste à 100 %, quelle que soit la page chargée ensuite.
+        core.DOMContentLoaded += (_, _) => { if (_mode.ContainsKey(tab.Id) || _pip == tab.Id) _ = PageZoom.TabAsync(core, 1); };
         if (!_views.TryGetValue(tab.Id, out initializing) || initializing != view) return;
         _ready.Add(tab.Id);
         Navigate(tab.Id, _target.GetValueOrDefault(tab.Id, tab.Url));
@@ -658,6 +656,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
             LayoutSims(id);
             RuntimeChanged?.Invoke();
             await ApplySettingsAsync(id, core); // retire le flou du bas des pages
+            await PageZoom.TabAsync(core, 1);   // l'appareil a ses dimensions exactes : sa page n'est pas zoomée
             await EmulateAsync(id, sims[0]);
             core.Reload();
 
@@ -727,6 +726,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
             if (!e.IsNewDocument && main.CoreWebView2 is { } tab && tab.Source != core.Source) Navigate(id, core.Source);
         };
         view.SizeChanged += (_, _) => ClipToDevice(view);
+        core.DOMContentLoaded += (_, _) => _ = PageZoom.TabAsync(core, 1); // comme la vue de l'onglet : page d'appareil, à 100 %
         await core.CallDevToolsProtocolMethodAsync("Emulation.setScrollbarsHidden", """{"hidden":true}""");
         return view;
     }
@@ -912,36 +912,25 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         Discarded?.Invoke(id);
     }
 
-    // Zoom d'une page. Ce type de vue n'expose pas le zoom du moteur : la page est donc mise en page dans une fenêtre
-    // plus petite (ou plus grande), puis rendue à l'échelle sur toute la vue, avec la densité de pixels qu'il faut pour
-    // rester nette. Pour la page, c'est un vrai zoom de navigateur : largeur, hauteur et unités « vh » suivent, et un
-    // élément en plein écran couvre tout. Le réglage du profil suit chaque navigation et la taille de chaque vue.
+    // Zoom des pages : celui du moteur, appliqué par l'extension de Sol (voir PageZoom). Le réglage du profil vaut pour
+    // tous les onglets ; la page de démarrage, les documents, les appareils simulés et le lecteur flottant restent à 100 %.
     public void SetZoom(double zoom)
     {
         settings.PageZoom = zoom;
+        PageZoom.Set(zoom);
         RuntimeChanged?.Invoke();
-        foreach (var id in _views.Keys.ToList()) _ = ApplyZoomAsync(id);
+        // Une page affichée relaie la demande : tous les onglets prennent le nouveau zoom tout de suite.
+        foreach (var id in _visible)
+            if (Core(id) is { } core) _ = PageZoom.RefreshAsync(core);
     }
 
+    // À la sortie d'un appareil simulé ou du lecteur flottant : la page retrouve les métriques de sa vue et le zoom du profil.
     private async Task ApplyZoomAsync(string id)
     {
-        // Un écran simulé et le lecteur flottant règlent eux-mêmes ces métriques : le zoom reprend quand ils se terminent.
         if (!_views.TryGetValue(id, out var view) || view.CoreWebView2 is not { } core || _mode.ContainsKey(id) || _pip == id) return;
-        var zoom = core.Source == Settings.DefaultHomePage || IsPdf(id) ? 1 : settings.PageZoom;
-        try
-        {
-            if (zoom == 1 || view.ActualWidth < 1 || view.ActualHeight < 1)
-            {
-                await core.CallDevToolsProtocolMethodAsync("Emulation.clearDeviceMetricsOverride", "{}");
-                return;
-            }
-            await core.CallDevToolsProtocolMethodAsync("Emulation.setDeviceMetricsOverride", System.Text.Json.JsonSerializer.Serialize(new
-            {
-                width = (int)Math.Round(view.ActualWidth / zoom), height = (int)Math.Round(view.ActualHeight / zoom),
-                deviceScaleFactor = (view.XamlRoot?.RasterizationScale ?? 1) * zoom, mobile = false, scale = zoom,
-            }));
-        }
-        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException or ArgumentException) { /* vue fermée entre-temps */ }
+        try { await core.CallDevToolsProtocolMethodAsync("Emulation.clearDeviceMetricsOverride", "{}"); }
+        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException or ArgumentException) { return; /* vue fermée entre-temps */ }
+        await PageZoom.TabAsync(core, null);
     }
 
     public CoreWebView2? CoreOf(string id) => Core(id);

@@ -125,7 +125,11 @@ public sealed class CaptureService(Window window, Action<string>? post = null)
                 // Le moteur rend chaque surface à la résolution finale : texte et icônes restent nets.
                 var metrics = (await EvalAsync(core, "({w:innerWidth,h:innerHeight,dpr:devicePixelRatio,sx:scrollX,sy:scrollY})"))!.Value;
                 var w = metrics.GetProperty("w").GetDouble(); var h = metrics.GetProperty("h").GetDouble();
-                var result = await core.CallDevToolsProtocolMethodAsync("Page.captureScreenshot", JsonSerializer.Serialize(new { format = "png", captureBeyondViewport = false, clip = new { x = metrics.GetProperty("sx").GetDouble(), y = metrics.GetProperty("sy").GetDouble(), width = w, height = h, scale = targetWidth / (w * metrics.GetProperty("dpr").GetDouble()) } }));
+                var layout = await core.CallDevToolsProtocolMethodAsync("Page.getLayoutMetrics", "{}");
+                using var layoutDoc = JsonDocument.Parse(layout);
+                var zoom = layoutDoc.RootElement.GetProperty("cssVisualViewport").GetProperty("zoom").GetDouble();
+                var clipWidth = Math.Max(1, Math.Floor(w * zoom));
+                var result = await core.CallDevToolsProtocolMethodAsync("Page.captureScreenshot", JsonSerializer.Serialize(new { format = "png", captureBeyondViewport = false, clip = new { x = metrics.GetProperty("sx").GetDouble() * zoom, y = metrics.GetProperty("sy").GetDouble() * zoom, width = clipWidth, height = Math.Max(1, Math.Floor(h * zoom)), scale = targetWidth / (clipWidth * metrics.GetProperty("dpr").GetDouble() / zoom) } }));
                 using var json = JsonDocument.Parse(result);
                 using var image = new InMemoryRandomAccessStream();
                 using (var writer = new DataWriter(image.GetOutputStreamAt(0))) { writer.WriteBytes(Convert.FromBase64String(json.RootElement.GetProperty("data").GetString()!)); await writer.StoreAsync(); }
@@ -195,13 +199,17 @@ public sealed class CaptureService(Window window, Action<string>? post = null)
             var width = mode == "region" ? N(region!.Value, "w") : N(m, mode == "full" ? "w" : "vw");
             var height = mode == "region" ? N(region!.Value, "h") : N(m, mode == "full" ? "h" : "vh");
             var dpr = N(m, "dpr");
-            var scale = Math.Max(1, 3840 / (width * dpr)); // rendu du moteur en 4K, sans redimensionner le PNG après capture
-            var physicalWidth = width * dpr * scale;
+            using var layout = JsonDocument.Parse(await core.CallDevToolsProtocolMethodAsync("Page.getLayoutMetrics", "{}"));
+            var zoom = layout.RootElement.GetProperty("cssVisualViewport").GetProperty("zoom").GetDouble();
+            var clipWidth = Math.Max(1, Math.Floor(width * zoom)); // le moteur arrondit le clip aux pixels entiers
+            var scale = Math.Max(1, 3840 / (clipWidth * dpr / zoom)); // rendu du moteur en 4K, sans redimensionner le PNG après capture
+            var physicalWidth = clipWidth * dpr / zoom * scale;
             var maxHeight = Math.Min(MaxImageHeight, 48_000_000 / physicalWidth); // plafond mémoire pour les pages longues
             var clip = new {
-                x = mode == "full" ? 0 : N(m, "sx") + (mode == "region" ? N(region!.Value, "x") : 0),
-                y = mode == "full" ? 0 : N(m, "sy") + (mode == "region" ? N(region!.Value, "y") : 0),
-                width, height = Math.Min(height, maxHeight / (dpr * scale)), scale,
+                // Le clip CDP utilise les pixels indépendants du périphérique, avant le zoom du moteur.
+                x = (mode == "full" ? 0 : N(m, "sx") + (mode == "region" ? N(region!.Value, "x") : 0)) * zoom,
+                y = (mode == "full" ? 0 : N(m, "sy") + (mode == "region" ? N(region!.Value, "y") : 0)) * zoom,
+                width = clipWidth, height = Math.Max(1, Math.Floor(Math.Min(height, maxHeight / (dpr * scale)) * zoom)), scale,
             };
             var parameters = new Dictionary<string, object?> { ["format"] = format, ["captureBeyondViewport"] = mode != "visible" };
             if (format == "jpeg") parameters["quality"] = 100;

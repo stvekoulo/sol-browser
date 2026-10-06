@@ -216,7 +216,7 @@ try {
     assert.ok(JSON.parse(await readFile(resolve(profile,'settings.json'),'utf8')).PinnedExtensions.includes('pejdijmoenmkgeppbflobdenhhabjlaj'),'pin is persisted in profile settings');
     await command({type:'extension.show',id:'pejdijmoenmkgeppbflobdenhhabjlaj'});
     const extension = await connect(await waitFor(async()=>(await targets()).find(t=>t.url.startsWith('chrome-extension://pejdijmoenmkgeppbflobdenhhabjlaj/') && t.type==='page'), 'iCloud popup'));
-    await waitFor(()=>extension.evaluate('document.readyState === "complete"'),'iCloud popup ready');
+    await waitFor(()=>extension.evaluate('document.readyState === "complete"').catch(()=>false),'iCloud popup ready');
     await waitFor(()=>extension.evaluate('innerWidth >= document.body.getBoundingClientRect().right && innerHeight >= document.body.getBoundingClientRect().bottom'), 'extension content fits its popup');
     for (const [width, height] of [[240,160], [520,320], [280,180]]) {
       await extension.evaluate(`document.body.className=''; document.body.style.cssText='width:${width}px;height:${height}px;min-height:0;margin:0;padding:0'; document.body.innerHTML='<div style="width:100%;height:100%">Popup size check</div>'`);
@@ -307,7 +307,8 @@ try {
   await command({ type: 'split.close' });
   await command({ type: 'nav.go', id: second, input: `${origin}/missing` });
   await pageAt('/missing');
-  assert.match(await other.evaluate('document.body.innerText'), /Server page \/missing/, 'keep the server 404 page');
+  // La liste des cibles annonce l'adresse dès le départ de la navigation : on attend le document lui-même.
+  await waitFor(() => other.evaluate('!!document.body && document.body.innerText.includes("Server page /missing")'), 'keep the server 404 page');
   await command({ type: 'nav.go', id: second, input: `${origin}/slow` });
   await command({ type: 'nav.go', id: second, input: `${origin}/b` });
   await pageAt('/b');
@@ -458,7 +459,7 @@ try {
   console.log('PASS zoom survives restart and resets across all tabs');
   await delay(650);
   const designSidebar = await connect((await targets()).find(t => t.url.endsWith('#sidebar')));
-  await waitFor(() => designSidebar.evaluate('document.querySelectorAll(".sidebar-quick-actions button").length === 3 && document.querySelector(".sidebar-brand img").naturalWidth > 0'), 'sidebar branding and quick actions');
+  await waitFor(() => designSidebar.evaluate('document.querySelectorAll(".sidebar-quick-actions button").length === 4 && document.querySelector(".sidebar-brand img").naturalWidth > 0'), 'sidebar branding and quick actions');
   assert.equal(await ui.evaluate('!!document.querySelector("button[aria-label=Téléchargements],button[aria-label=\\"Favoris et historique\\"]")'), false, 'no duplicate toolbar shortcuts');
   await designSidebar.evaluate('document.querySelector("button[aria-label=Historique]").click()');
   await waitFor(() => popup.evaluate('document.querySelector("[role=tab][aria-selected=true]")?.textContent.includes("Historique")'), 'history shortcut selects history directly');

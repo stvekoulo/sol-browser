@@ -6,6 +6,34 @@ using Browser.Core;
 public class ExtensionPackageTests
 {
     [Fact]
+    public void Background_script_starts_with_the_tab_view_of_a_single_window_browser()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "sol-shim-" + Guid.NewGuid());
+        Directory.CreateDirectory(Path.Combine(folder, "js"));
+        try
+        {
+            var manifest = Path.Combine(folder, "manifest.json");
+            File.WriteAllText(manifest, """{ "manifest_version": 3, "name": "T", "version": "1", "key": "k", "background": { "service_worker": "js/bg.js" } }""");
+            Assert.True(ExtensionShim.Apply(folder));
+            Assert.Equal("importScripts('/sol-tabs.js', \"bg.js\");\n", File.ReadAllText(Path.Combine(folder, "js", "sol-worker.js")));
+            Assert.Contains("\"service_worker\":\"js/sol-worker.js\"", File.ReadAllText(manifest));
+            Assert.Contains("\"key\":\"k\"", File.ReadAllText(manifest));
+            Assert.Equal(ExtensionShim.Script, File.ReadAllText(Path.Combine(folder, "sol-tabs.js")));
+            Assert.False(ExtensionShim.Apply(folder)); // déjà en place : rien à recharger
+            File.WriteAllText(Path.Combine(folder, "sol-tabs.js"), "ancien");
+            Assert.True(ExtensionShim.Apply(folder));  // script d'une version précédente : remplacé
+
+            File.WriteAllText(manifest, """{ "manifest_version": 3, "name": "T", "version": "1", "background": { "service_worker": "bg.js", "type": "module" } }""");
+            Assert.True(ExtensionShim.Apply(folder));
+            Assert.Equal("import '/sol-tabs.js';\nimport \"./bg.js\";\n", File.ReadAllText(Path.Combine(folder, "sol-worker.js")));
+
+            File.WriteAllText(manifest, """{ "manifest_version": 3, "name": "T", "version": "1" }""");
+            Assert.False(ExtensionShim.Apply(folder)); // pas de script de fond
+        }
+        finally { Directory.Delete(folder, true); }
+    }
+
+    [Fact]
     public void Store_update_answer_gives_the_latest_version_of_each_published_extension()
     {
         const string dark = "eimadpbcbfnmbkopoojfekhnkhdbieeh", gone = "pejdijmoenmkgeppbflobdenhhabjlaj";

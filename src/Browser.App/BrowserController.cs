@@ -77,7 +77,7 @@ public sealed class BrowserController
         _pages.PipReturnRequested += id => { Activate(id); Refresh(); };
         _pages.Loaded += id =>
         {
-            if (!_pinsInitialized) { _ = RefreshPinnedExtensionsAsync(); _ = UpdateExtensionsLaterAsync(); }
+            if (!_pinsInitialized) { _ = RefreshPinnedExtensionsAsync(); _ = PrepareExtensionsAsync(); _ = UpdateExtensionsLaterAsync(); }
             _ = LearnShortcutNameAsync(id);
             if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { } tab && IsWeb(tab.Url) && tab.Url != Settings.DefaultHomePage) FetchStartIcon(tab.Url);
         };
@@ -1440,6 +1440,8 @@ public sealed class BrowserController
             if (AppPaths.Private || EngineProfile is not { } profile || !(await profile.GetBrowserExtensionsAsync()).Any(e => e.Id == extension.Id && e.IsEnabled)) return;
             if (extension.Popup is { } popup && ExtensionPopup is { } host) await host.ShowAsync($"chrome-extension://{extension.Id}/{popup.TrimStart('/')}", right, top);
             else if ((extension.Popup ?? extension.Options) is { } page) { Open($"chrome-extension://{extension.Id}/{page.TrimStart('/')}"); Refresh(); }
+            // Ni fenêtre ni réglages : elle agit au clic sur son bouton, ou dans un panneau latéral. Le moteur ne transmet pas ce clic.
+            else Notice(extension.Name, T("Cette extension n’a pas de fenêtre à ouvrir : elle agit au clic sur son bouton ou dans un panneau latéral, ce que le moteur de Sol ne sait pas encore faire. Ses autres fonctions (dans les pages, par clic droit) restent actives.", "This extension has no window to open: it acts when its button is clicked or in a side panel, which Sol's engine cannot do yet. Its other features (in pages, by right-click) remain active."));
         }
         catch (Exception e) when (e is InvalidOperationException or COMException or ArgumentException)
         { Notice(T("Extension indisponible", "Extension unavailable"), e.Message); }
@@ -1520,7 +1522,7 @@ public sealed class BrowserController
         if (AppPaths.Private || EngineProfile is not { } profile) return;
         _pinsInitialized = true;
         var extensions = await profile.GetBrowserExtensionsAsync();
-        _installedExtensions = extensions.Where(e => e.Id != AdBlock.ExtensionId).Select(e => e.Id).ToHashSet();
+        _installedExtensions = extensions.Where(e => e.Id != AdBlock.ExtensionId && e.Id != PageZoom.ExtensionId).Select(e => e.Id).ToHashSet();
         foreach (var gone in _extensionUpdates.Keys.Where(id => !_installedExtensions.Contains(id)).ToList()) _extensionUpdates.Remove(gone);
         _pages.RefreshStore();
         _pinnedExtensions = _settings.PinnedExtensions.Distinct().Where(ExtensionCatalog.IsId)
@@ -1690,6 +1692,31 @@ public sealed class BrowserController
         }
     }
 
+    // Les extensions installées par une version précédente de Sol reçoivent l'amorce (voir ExtensionShim), puis sont rechargées.
+    private async Task PrepareExtensionsAsync()
+    {
+        if (AppPaths.Private || EngineProfile is not { } profile) return;
+        await _extensionChanges.WaitAsync();
+        try
+        {
+            foreach (var extension in await profile.GetBrowserExtensionsAsync())
+            {
+                var folder = ExtensionFolder(extension.Id);
+                if (extension.Id == AdBlock.ExtensionId || !File.Exists(Path.Combine(folder, "manifest.json"))) continue;
+                try
+                {
+                    if (!ExtensionShim.Apply(folder)) continue;
+                    var enabled = extension.IsEnabled;
+                    await (await profile.AddBrowserExtensionAsync(folder)).EnableAsync(enabled);
+                    DebugLog.Write($"extension {extension.Id} : amorce posée, rechargée");
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException or ArgumentException or COMException)
+                { DebugLog.Write($"extension {extension.Id} : amorce impossible : {e.Message}"); }
+            }
+        }
+        finally { _extensionChanges.Release(); }
+    }
+
     private async Task ReloadExtensionAsync(string id)
     {
         if (AppPaths.Private || EngineProfile is not { } profile || !ExtensionCatalog.IsId(id) || id == AdBlock.ExtensionId) return;
@@ -1739,6 +1766,7 @@ public sealed class BrowserController
                 ExtensionCatalog.CopyTo(folder, backup);
             }
             if (!string.Equals(Path.GetFullPath(source), Path.GetFullPath(folder), StringComparison.OrdinalIgnoreCase)) ExtensionCatalog.CopyTo(source, folder);
+            ExtensionShim.Apply(folder); // la vision des onglets d'un navigateur à une fenêtre, avant le code de l'extension
             var installed = await profile.AddBrowserExtensionAsync(folder);
             if (installed.Id != id)
             {
