@@ -217,6 +217,14 @@ try {
     await command({type:'extension.show',id:'pejdijmoenmkgeppbflobdenhhabjlaj'});
     const extension = await connect(await waitFor(async()=>(await targets()).find(t=>t.url.startsWith('chrome-extension://pejdijmoenmkgeppbflobdenhhabjlaj/') && t.type==='page'), 'iCloud popup'));
     await waitFor(()=>extension.evaluate('document.readyState === "complete"'),'iCloud popup ready');
+    await waitFor(()=>extension.evaluate('innerWidth >= document.body.getBoundingClientRect().right && innerHeight >= document.body.getBoundingClientRect().bottom'), 'extension content fits its popup');
+    for (const [width, height] of [[240,160], [520,320], [280,180]]) {
+      await extension.evaluate(`document.body.className=''; document.body.style.cssText='width:${width}px;height:${height}px;min-height:0;margin:0;padding:0'; document.body.innerHTML='<div style="width:100%;height:100%">Popup size check</div>'`);
+      await waitFor(()=>extension.evaluate(`Math.abs(innerWidth-${width}) <= 1 && Math.abs(innerHeight-${height}) <= 1`), `popup resizes to ${width}x${height}`);
+    }
+    console.log('PASS extension popup content fits, grows and shrinks to its own dimensions');
+    await extension.evaluate("document.documentElement.style.cssText='width:460px;height:240px'");
+    await waitFor(()=>extension.evaluate('innerWidth === 460 && innerHeight === 240'), 'extension explicit root dimensions preserved');
     console.log('PASS iCloud popup opens (no passwords inspected; real autofill remains a manual check)');
     await command({type:'extension.reload',id:'pejdijmoenmkgeppbflobdenhhabjlaj'});
     await command({type:'extension.toggle',id:'pejdijmoenmkgeppbflobdenhhabjlaj'});
@@ -277,13 +285,13 @@ try {
   await command({ type: 'split.open', id: first });
   await command({type:'split.resize',ratio:0.2});
   await waitFor(() => ui.evaluate('document.querySelectorAll(".split-addresses .address-pill").length === 2'), 'two independent split addresses');
-  await ui.evaluate(`document.querySelector('.split-proportions').click()`);
+  await sidebar.evaluate(`document.querySelector('.split-proportions').click()`);
   const splitPopup = await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#popup')),'split layout popup'));
   await waitFor(()=>splitPopup.evaluate('document.querySelectorAll(".split-layout-choice").length===3'),'three visual layout choices');
   await writeFile(resolve(base,'split-layout-menu.png'),Buffer.from((await splitPopup.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
   await splitPopup.evaluate('document.querySelectorAll(".split-layout-choice")[2].click()');
   await waitFor(async()=>Math.abs((await state()).split.ratio-2/3)<0.001,'two-thirds preset');
-  await ui.evaluate(`document.querySelector('.split-proportions').click()`);
+  await sidebar.evaluate(`document.querySelector('.split-proportions').click()`);
   await waitFor(()=>splitPopup.evaluate('document.querySelectorAll(".split-layout-choice").length===3'),'layout menu reopened');
   await splitPopup.evaluate('document.querySelectorAll(".split-layout-choice")[1].click()');
   await waitFor(async()=>(await state()).split.ratio===0.5,'equal-width preset');

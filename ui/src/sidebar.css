@@ -257,5 +257,6 @@ html.painted .sidebar-body:not(.floating) { transition: background-color 220ms v
 .sidebar-quick-actions .private-action { margin-right:auto; }
 .sidebar-quick-btn { width:34px; height:34px; display:grid; place-items:center; border-radius:50%; background:var(--bg-glass-pill); color:var(--text-dim); }
 .sidebar-quick-btn:hover { color:var(--text); background:var(--bg-glass-pill-hover); }
+.sidebar-quick-btn.on { color:var(--text); background:var(--bg-active-tab); }
 .private-action { color:var(--private-accent); }
 .sidebar-tab.active, .sidebar-tab.active:hover, .sidebar-split-group .sidebar-tab.active, .pinned-pill.active, .pinned-pill.loaded.active { background:var(--bg-active-tab); box-shadow:var(--shadow-pill-elevated), inset 0 0 0 1px var(--border-active-tab); }

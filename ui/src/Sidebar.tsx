@@ -193,9 +193,11 @@ export default function Sidebar() {
       <div className="sidebar-quick-actions" role="group" aria-label={t('Actions rapides', 'Quick actions')}>
         {[
           { type: 'window.private', label: t('Navigation privée', 'Private browsing'), path: 'M6.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0M14.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0M6.5 8h3' },
+          { type: split.visible ? 'split.close' : 'split.open', label: split.visible ? t('Fermer la vue scindée', 'Close split view') : t('Afficher deux pages côte à côte', 'Show two pages side by side'), path: 'M2 3h12v10H2zM8 3v10' },
+          ...(split.visible ? [{ type: 'split.menu', label: t('Disposition des pages', 'Page layout'), path: 'M2 3h12v10H2zM6 3v10M4 6v4M10 6v4' }] : []),
           { type: 'history.open', label: t('Historique', 'History'), path: 'M2 7a6 6 0 1 1 1.5 5M2 3v4h4M8 4.5V8l2.5 1.5' },
           { type: 'downloads.open', label: t('Téléchargements', 'Downloads'), path: 'M8 2.5v8M4.5 7.5L8 11l3.5-3.5M3 13.5h10' },
-        ].map(action => <button key={action.type} className={`sidebar-quick-btn${action.type === 'window.private' ? ' private-action' : ''}`} aria-label={action.label} title={action.label} onClick={e => {
+        ].map(action => <button key={action.type} className={`sidebar-quick-btn${action.type === 'window.private' ? ' private-action' : ''}${action.type === 'split.menu' ? ' split-proportions' : ''}${action.type === 'split.close' ? ' on' : ''}`} aria-label={action.label} title={action.label} aria-pressed={action.type === 'split.open' || action.type === 'split.close' ? split.visible : undefined} onClick={e => {
           const box = e.currentTarget.getBoundingClientRect();
           // Le panneau s'ouvre au-dessus du bouton : dessous, il n'y a plus de place et il recouvrirait cette rangée.
           send({ type: action.type, x: box.right + OFFSET_X, y: box.top + OFFSET_Y() - 6 });

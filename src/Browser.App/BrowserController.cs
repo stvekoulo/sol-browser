@@ -354,7 +354,7 @@ public sealed class BrowserController
             case "split.resize": _split.Resize(c.Ratio!.Value); HidePopup(); break;
             case "split.menu":
                 if (_split.Contains(_tabs.ActiveId))
-                    _popup.Show(c.X!.Value - Scaled(260), c.Y!.Value, 260, JsonSerializer.Serialize(new { popup = "split-layout", ratio = _split.Ratio }), focus: true);
+                    _popup.Show(c.X!.Value - Scaled(260), c.Y!.Value, 260, JsonSerializer.Serialize(new { popup = "split-layout", ratio = _split.Ratio }), focus: true, above: true);
                 return;
             case "bookmark.add": if (IsWeb(c.Url!)) _db.AddBookmark(c.Url!, c.Title!); break;
             case "bookmark.remove": _db.RemoveBookmark(c.Url!); break;

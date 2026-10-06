@@ -130,20 +130,6 @@ export default function App() {
         >
           <Icon d="M2.5 5.5h2l1-1.5h5l1 1.5h2v7h-11zM8 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4" />
         </button>
-        <button
-          className={`pill-icon-btn${ split.visible ? ' on' : ''}`}
-          aria-label={split.visible ? t('Fermer la vue scindée', 'Close split view') : t('Vue scindée', 'Split view')}
-          aria-pressed={split.visible}
-          title={split.visible ? t('Fermer la vue scindée', 'Close split view') : t('Afficher deux pages côte à côte', 'Show two pages side by side')}
-          onClick={() => send({ type: split.visible ? 'split.close' : 'split.open' })}
-        >
-          <Icon d="M2 3h12v10H2zM8 3v10" />
-        </button>
-
-        {split.visible && <button className="pill-icon-btn split-proportions" aria-label={t('Disposition des pages', 'Page layout')} title={t('Disposition des pages', 'Page layout')}
-          onClick={e => { const box=e.currentTarget.getBoundingClientRect(); send({type:'split.menu',x:box.right,y:box.bottom+6}); }}>
-          <Icon d="M2 3h12v10H2zM6 3v10M4 6v4M10 6v4" />
-        </button>}
         {state.privateMode && (
           <span className="private-chip" title={t('Rien de ce que vous visitez ici n’est gardé : tout est effacé à la fermeture de la fenêtre.', 'Nothing you visit here is kept: everything is erased when the window closes.')}>
             {t('Privé', 'Private')}
@@ -289,11 +275,6 @@ function AddressPill({ tab, focused, grow, shield }: { tab: Tab | undefined; foc
         {tab?.device && (
           <button className="inline-btn" aria-label={t("Pivoter l'appareil", 'Rotate device')} title={t("Pivoter l'appareil", 'Rotate device')} onClick={() => send({ type: 'device.rotate', id: tab.id })}>
             <Icon d="M5 2.5h5.5a1 1 0 0 1 1 1V8M4 6.5h3.5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1zM13.5 6.5l-2 2-2-2" size={14} />
-          </button>
-        )}
-        {tab && tab.zoom !== 100 && (
-          <button className="zoom-chip" aria-label={t(`Zoom ${tab.zoom} %, revenir à 100 %`, `Zoom ${tab.zoom}%, reset to 100%`)} title={t('Revenir à 100 %', 'Reset to 100%')} onClick={() => send({ type: 'zoom.reset', id: tab.id })}>
-            {tab.zoom} %
           </button>
         )}
         {rawUrl && (
