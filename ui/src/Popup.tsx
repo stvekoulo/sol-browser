@@ -8,7 +8,7 @@ import { Icon } from './Icons';
 type Item = { url: string; title: string; kind?: 'search' | 'go' | 'history' | 'site' };
 type Content =
   | { popup: 'suggestions'; items: Item[] }
-  | { popup: 'library'; tab?: 'history' | 'bookmarks' | null; bookmarks: Item[]; history: Item[] }
+  | { popup: 'library'; tab?: 'history' | 'bookmarks' | null; query: string; page: number; pageSize: number; total: number; bookmarks: Item[]; history: Item[] }
   | { popup: 'menu'; items: string[] }
   | { popup: 'split-layout'; ratio: number }
   | { popup: 'downloads'; items: Download[] }
@@ -60,6 +60,8 @@ export default function Popup() {
   const [selected, setSelected] = useState(-1);
   const [settingsSection, setSettingsSection] = useState('general');
   const [libTab, setLibTab] = useState<'bookmarks' | 'history'>('bookmarks');
+  const [libraryQuery, setLibraryQuery] = useState('');
+  const libraryTimer = useRef(0);
   const root = useRef<HTMLDivElement>(null);
   const fresh = useRef(false);
   useLang();
@@ -71,12 +73,16 @@ export default function Popup() {
       if (typeof select === 'number') return setSelected(select);
       // « fresh » précède le contenu d'une nouvelle ouverture : celui-ci jouera son apparition.
       if ((data as { fresh?: boolean }).fresh) return void (fresh.current = true);
-      if (fresh.current) setOpening(n => n + 1);
+      const isFresh = fresh.current;
+      if (isFresh) setOpening(n => n + 1);
       fresh.current = false;
       const next = data as Content;
       setSelected(-1);
-      if (next.popup === 'library')
+      if (next.popup === 'library' && isFresh) {
         setLibTab(next.tab ?? (next.bookmarks.length > 0 ? 'bookmarks' : 'history'));
+        setLibraryQuery('');
+        window.clearTimeout(libraryTimer.current);
+      }
       setContent(next);
     });
     const close = () => send({ type: 'popup.close' });
@@ -93,6 +99,7 @@ export default function Popup() {
     return () => {
       off();
       window.clearTimeout(leaving);
+      window.clearTimeout(libraryTimer.current);
       window.removeEventListener('blur', blurred);
       window.removeEventListener('keydown', key);
     };
@@ -496,7 +503,7 @@ export default function Popup() {
   const items = libTab === 'bookmarks' ? content.bookmarks : content.history;
 
   return (
-    <div key={opening} ref={root} className="popup arriving">
+    <div key={opening} ref={root} className="popup arriving library-popup">
       <div className="popup-segment" role="tablist">
         <button
           role="tab"
@@ -522,14 +529,23 @@ export default function Popup() {
         >
           <Icon d="M8 3.5v4.5l3 1.8M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z" size={13} />
           <span>{t('Historique', 'History')}</span>
-          <span className="popup-seg-count">{content.history.length}</span>
+          <span className="popup-seg-count">{content.total}</span>
         </button>
       </div>
+
+      <input className="library-search" type="search" aria-label={t('Rechercher dans les favoris et l’historique', 'Search bookmarks and history')}
+        placeholder={t('Rechercher un titre ou une adresse…', 'Search a title or address…')} value={libraryQuery}
+        onChange={e => {
+          const query = e.target.value;
+          setLibraryQuery(query);
+          window.clearTimeout(libraryTimer.current);
+          libraryTimer.current = window.setTimeout(() => send({ type: 'library.search', query, index: 0 }), 150);
+        }} />
 
       <div className="popup-list">
         {items.length === 0 ? (
           <div className="empty-pill">
-            {libTab === 'bookmarks'
+            {libraryQuery ? t('Aucun résultat.', 'No results.') : libTab === 'bookmarks'
               ? t("Aucun favori enregistré pour l'instant.", 'No bookmarks yet.')
               : t('Aucune page visitée récemment.', 'No recently visited pages.')}
           </div>
@@ -543,6 +559,13 @@ export default function Popup() {
           ))
         )}
       </div>
+      {libTab === 'history' && content.total > content.pageSize && <div className="library-pages">
+        <button className="pill-action" aria-label={t('Page précédente', 'Previous page')} disabled={content.page === 0}
+          onClick={() => send({ type: 'library.search', query: libraryQuery, index: content.page - 1 })}><Icon d="M10 4L6 8l4 4" size={14} /></button>
+        <span aria-live="polite">{content.page * content.pageSize + 1}–{Math.min((content.page + 1) * content.pageSize, content.total)} / {content.total}</span>
+        <button className="pill-action" aria-label={t('Page suivante', 'Next page')} disabled={(content.page + 1) * content.pageSize >= content.total}
+          onClick={() => send({ type: 'library.search', query: libraryQuery, index: content.page + 1 })}><Icon d="M6 4l4 4-4 4" size={14} /></button>
+      </div>}
     </div>
   );
 }

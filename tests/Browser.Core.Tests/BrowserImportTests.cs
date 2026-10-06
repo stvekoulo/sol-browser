@@ -100,6 +100,22 @@ public class BrowserImportTests : IDisposable
     }
 
     [Fact]
+    public void Older_imported_pages_are_searchable_and_available_after_the_first_history_page()
+    {
+        using var db = new BrowserDb(":memory:");
+        var when = DateTimeOffset.UtcNow.AddDays(-30);
+        db.Import([new Bookmark("https://import.test/favorite", "Imported favorite")],
+            Enumerable.Range(0, 125).Select(i => new ImportedVisit($"https://import.test/{i}", i == 0 ? "Older imported 100% page" : $"Imported {i}", 1, when.AddMinutes(i))));
+        db.RecordVisit("https://sol.test/new", "New page", when.AddDays(30));
+        Assert.Equal(126, db.HistoryCount(""));
+        Assert.Equal(100, db.History("", 100, 0).Count);
+        Assert.Equal(26, db.History("", 100, 100).Count);
+        Assert.Equal("https://import.test/0", Assert.Single(db.History("100%", 100, 0)).Url);
+        Assert.Equal(125, db.HistoryCount("import.test"));
+        Assert.True(db.IsBookmarked("https://import.test/favorite"));
+    }
+
+    [Fact]
     public void Imported_visits_merge_with_the_existing_history()
     {
         using var db = new BrowserDb(Path.Combine(_dir, "sol.db"));

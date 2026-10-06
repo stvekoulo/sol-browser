@@ -20,6 +20,7 @@ public static class CommandParser
         ["settings.open"] = ["x", "y"], ["settings.set"] = ["id", "index"], ["settings.text"] = ["id", "input"], ["dock.size"] = ["width", "height"], ["dock.ready"] = [],
         ["menu.pick"] = ["index"], ["tab.menu"] = ["id", "x", "y"], ["capture.menu"] = [],
         ["library.open"] = ["x", "y"], ["history.open"] = ["x", "y"],
+        ["library.search"] = ["query", "index"],
         ["start.ready"] = [], ["start.navigate"] = ["input"], ["start.group"] = ["id"],
         ["popup.size"] = ["height"], ["popup.close"] = [],
         ["download.cancel"] = ["id"], ["download.open"] = ["id"], ["download.reveal"] = ["id"],

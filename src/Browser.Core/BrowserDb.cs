@@ -29,12 +29,26 @@ public sealed class BrowserDb : IDisposable
     public IReadOnlyList<Visit> RecentHistory(int limit) => Visits(
         "SELECT url, title, count, last FROM visits ORDER BY last DESC LIMIT $limit", ("$limit", limit));
 
+    public IReadOnlyList<Visit> History(string query, int limit, int offset) => Visits("""
+        SELECT url, title, count, last FROM visits
+        WHERE url LIKE $p ESCAPE '\' OR title LIKE $p ESCAPE '\'
+        ORDER BY last DESC, url LIMIT $limit OFFSET $offset
+        """, ("$p", Pattern(query)), ("$limit", limit), ("$offset", offset));
+
+    public int HistoryCount(string query)
+    {
+        using var cmd = Command("""SELECT COUNT(*) FROM visits WHERE url LIKE $p ESCAPE '\' OR title LIKE $p ESCAPE '\'""", ("$p", Pattern(query)));
+        return Convert.ToInt32(cmd.ExecuteScalar());
+    }
+
+    private static string Pattern(string query) => "%" + query.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%";
+
     public IReadOnlyList<Visit> FrequentSites(int limit) => Visits(
         "SELECT url, title, count, last FROM visits ORDER BY count DESC, last DESC LIMIT $limit", ("$limit", limit));
 
     public IReadOnlyList<Visit> Suggest(string query, int limit)
     {
-        var pattern = "%" + query.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%";
+        var pattern = Pattern(query);
         return Visits("""
             SELECT url, title, count, last FROM visits
             WHERE url LIKE $p ESCAPE '\' OR title LIKE $p ESCAPE '\'

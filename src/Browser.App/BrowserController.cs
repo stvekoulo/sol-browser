@@ -138,6 +138,9 @@ public sealed class BrowserController
             case "suggest": Suggest(id, c.Query!, c.X!.Value, c.Y!.Value, c.Width!.Value); return;
             case "library.open": OpenLibrary(c.X!.Value, c.Y!.Value); return;
             case "history.open": OpenLibrary(c.X!.Value, c.Y!.Value, history: true); return;
+            case "library.search":
+                if (_popup.IsOpen && (_panel == "library" || _panelNext == "library")) _popup.Post(LibraryJson(c.Query!, c.Index!.Value));
+                return;
             case "downloads.open": OpenDownloads(c.X!.Value, c.Y!.Value); return;
             case "download.cancel": FindDownload(id)?.Cancel(); return; // le panneau reste ouvert
             case "download.open" or "download.reveal":
@@ -2058,13 +2061,22 @@ public sealed class BrowserController
         if (ClosesPanel("library")) return;
         const double width = 340;
         _suggesting = false;
-        _popup.Show(x - Scaled(width), y, width, JsonSerializer.Serialize(new
+        _popup.Show(x - Scaled(width), y, width, LibraryJson("", 0, history ? "history" : null), focus: true, above: true);
+    }
+
+    private string LibraryJson(string query, int requestedPage, string? tab = null)
+    {
+        const int pageSize = 100;
+        var total = _db.HistoryCount(query);
+        var page = Math.Clamp(requestedPage, 0, Math.Max(0, (total - 1) / pageSize));
+        return JsonSerializer.Serialize(new
         {
             popup = "library",
-            tab = history ? "history" : (string?)null,
-            bookmarks = _db.Bookmarks().Select(b => new { url = b.Url, title = b.Title }),
-            history = _db.RecentHistory(12).Select(v => new { url = v.Url, title = v.Title }),
-        }), focus: true, above: true); // la vue prend le curseur : la perdre la referme ; elle s'ouvre au-dessus du bouton, en bas de la carte
+            tab, query, page, pageSize, total,
+            bookmarks = _db.Bookmarks().Where(b => b.Title.Contains(query, StringComparison.OrdinalIgnoreCase) || b.Url.Contains(query, StringComparison.OrdinalIgnoreCase))
+                .Select(b => new { url = b.Url, title = b.Title }),
+            history = _db.History(query, pageSize, page * pageSize).Select(v => new { url = v.Url, title = v.Title }),
+        });
     }
 
     private void RecordVisit(string id)

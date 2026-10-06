@@ -51,6 +51,15 @@ const port = debugPort.address().port;
 await new Promise(r => debugPort.close(r));
 await writeFile(resolve(profile, 'settings.json'), JSON.stringify({ Onboarded: true, Theme: 'dark', HomePage: `${origin}/a`, BlockAds: false, OnlineSuggestions: false, LiveColor: false }));
 let app, ui;
+if (process.argv.includes('--history')) {
+  const { DatabaseSync } = await import('node:sqlite');
+  const db = new DatabaseSync(resolve(profile, 'browser.db'));
+  db.exec('CREATE TABLE visits (url TEXT PRIMARY KEY, title TEXT NOT NULL, count INTEGER NOT NULL, last INTEGER NOT NULL); CREATE TABLE bookmarks (url TEXT PRIMARY KEY, title TEXT NOT NULL, added INTEGER NOT NULL)');
+  const insert = db.prepare('INSERT INTO visits VALUES (?, ?, 1, ?)');
+  for (let i = 0; i < 125; i++) insert.run(`https://import.test/${i}`, i === 0 ? 'Older imported target' : `Imported ${i}`, Date.now() - 30 * 86400000 + i * 60000);
+  db.prepare('INSERT INTO bookmarks VALUES (?, ?, ?)').run('https://import.test/favorite', 'Older imported target favorite', Date.now());
+  db.close();
+}
 const connections = [];
 const waitFor = async (get, description, timeout = 20000) => {
   const end = Date.now() + timeout;
@@ -117,6 +126,27 @@ async function stop() {
 }
 try {
   await launch();
+  if (process.argv.includes('--history')) {
+    const page = await pageAt('/a');
+    await waitFor(() => page.evaluate('document.readyState === "complete" && document.body.textContent.includes("Server page")'), 'initial visit recorded');
+    const sidebar = await connect((await targets()).find(t => t.url.endsWith('#sidebar')));
+    await waitFor(() => sidebar.evaluate('!!document.querySelector("button[aria-label=Historique]")'), 'history shortcut');
+    await sidebar.evaluate('document.querySelector("button[aria-label=Historique]").click()');
+    const library = await connect((await targets()).find(t => t.url.endsWith('#popup')));
+    await waitFor(() => library.evaluate('document.querySelectorAll(".popup-list .row").length === 100'), 'first 100 history pages');
+    await library.evaluate('document.querySelector("button[aria-label=\\"Page suivante\\"]").click()');
+    await waitFor(() => library.evaluate('document.querySelector(".library-pages")?.textContent.includes("101–126")'), 'older imported history page');
+    assert.ok(await library.evaluate('document.querySelector(".popup-list").textContent.includes("Older imported target")'));
+    await library.evaluate('document.querySelector(".library-search").focus()');
+    await library.call('Input.insertText', { text: 'Older imported target' });
+    await waitFor(() => library.evaluate('document.querySelectorAll(".popup-list .row").length === 1 && !document.querySelector(".library-pages")'), 'search includes old imports');
+    assert.ok(await library.evaluate('document.querySelector("[role=tab][aria-selected=true]").textContent.includes("Historique")'), 'search keeps the history tab selected');
+    await library.evaluate('document.querySelector("[role=tab]").dispatchEvent(new MouseEvent("mousedown", { bubbles:true }))');
+    await waitFor(() => library.evaluate('document.querySelector(".popup-list").textContent.includes("Older imported target favorite")'), 'imported favorite accessible');
+    await writeFile(resolve(base, 'imported-library.png'), Buffer.from((await library.call('Page.captureScreenshot', { format:'png' })).data, 'base64'));
+    console.log('PASS older imported history pagination, search, active tab and bookmarks');
+    await stop();
+  } else {
   if (process.argv.includes('--scale')) {
     const sidebar = await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#sidebar')),'sidebar'));
     const page = await pageAt('/a');
@@ -546,6 +576,7 @@ try {
   assert.equal(await privateStart.evaluate('document.querySelectorAll(".start-history button,.start-frequent button").length'),0);
   console.log('PASS private window purple theme and no visits on private start page');
   await stop();
+  }
   }
 } catch (error) {
   const manager = (await targets()).find(t=>t.url.endsWith('#popup'));
