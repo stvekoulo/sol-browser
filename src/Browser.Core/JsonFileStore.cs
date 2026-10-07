@@ -56,6 +56,7 @@ public sealed class Settings
     public bool StartWallpaper { get; set; }
     /// <summary>Langue de l'interface : "system" (celle de Windows), "fr" ou "en".</summary>
     public string Language { get; set; } = "system";
+    public int Spelling { get; set; } = 3; // 0 : désactivée, 1 : français, 2 : anglais, 3 : les deux
     /// <summary>L'accueil de première ouverture (nom, import, apparence) a été vu.</summary>
     public bool Onboarded { get; set; }
     /// <summary>Nom que l'utilisateur donne au profil par défaut ; vide : « Défaut ».</summary>
@@ -127,6 +128,7 @@ public sealed class SiteShortcut
 
 public sealed class Session
 {
+    public List<string> TranslationOriginals { get; set; } = new();
     public List<string> Urls { get; set; } = new();
     /// <summary>Titre de chaque adresse de <see cref="Urls"/> : affiché tant que la page n'a pas été rechargée.</summary>
     public List<string> Titles { get; set; } = new();

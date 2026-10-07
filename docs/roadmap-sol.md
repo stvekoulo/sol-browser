@@ -1,0 +1,79 @@
+# Sol — workflow des prochaines fonctionnalités
+
+Date : 7 octobre 2026. Statut : direction Sol AI validée ; inventaire commencé, lots 1 à 6 implémentés et testés localement. Le moteur IA et les lots suivants ne sont pas livrés.
+
+## Direction validée et corrections
+
+La direction retenue : enrichir Sol avec des outils utiles et **Sol AI**, une intelligence locale facultative intégrée aux actions de son écosystème. Sol AI n’est pas un chatbot et Sol ne devient pas un « navigateur IA ». Pas de conversation générale ni d’interface distincte : résultats et commandes apparaissent dans les pilules, menus et outils Sol concernés. Aucun modèle chargé en permanence.
+
+Quelques affirmations de la discussion doivent être corrigées avant développement :
+
+- Le parcours Foundry Local Windows actuellement documenté nécessite Windows 11 24H2 et x64 ou ARM64. Conserver la compatibilité Windows 10 et x86 du navigateur. Sur Windows ou matériel incompatibles, les fonctions Sol AI ne sont pas présentées : ni boutons inactifs, ni proposition de téléchargement inutilisable. Sur les appareils compatibles, elles restent facultatives et disponibles après activation. Vérifier OS, architecture, moteur et capacité du modèle avant de les exposer ; CPU/GPU/NPU dépendent du modèle. Aucun moteur de secours pour contourner cette décision produit.
+- La petite taille annoncée d’un runtime n’inclut pas les modèles. Ne promettre ni taille fixe, ni consommation mémoire fixe, ni « zéro RAM ». Mesurer les processus, les caches, la mémoire GPU et le délai de démarrage sur du matériel réel.
+- Le SDK Foundry fonctionne dans le processus qui l’héberge. Pour isoler les erreurs natives et restituer la mémoire à l’arrêt, la proposition pour Sol est un petit processus auxiliaire lancé à la demande, qui héberge ce SDK. Ne pas ajouter de serveur HTTP permanent.
+- Les sessions par onglet doivent utiliser de vrais profils WebView2 sous un dossier de données partagé. Modifier seulement les cookies d’une page ne suffit pas.
+- OCR, lecture vocale, notes, inspection CSS et conversions ne nécessitent pas tous un LLM. Préférer les fonctions Windows ou les bibliothèques déjà présentes.
+- Ctrl+Maj+N ouvre déjà la navigation privée : conserver ce raccourci et choisir un autre raccourci pour les notes.
+- La traduction Google de pages existe déjà. La traduction locale de sélections sera une fonction supplémentaire, distincte et utilisable hors ligne après installation du modèle.
+
+Sources techniques : [Foundry Local Windows](https://learn.microsoft.com/en-us/windows/ai/foundry-local/get-started), [profils WebView2](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/multi-profile-support), [OCR Windows AI et distinction avec l’ancien OCR](https://learn.microsoft.com/windows/ai/apis/text-recognition), [reconnaissance vocale Windows AI](https://learn.microsoft.com/en-us/windows/ai/apis/speech-recognition).
+
+## Règles communes
+
+1. Chaque lot livre une fonction utilisable, avec son interface Sol, ses erreurs et sa désactivation ; pas une simple démonstration.
+2. Conserver les pilules, menus, couleurs dynamiques, thèmes et raccourcis existants. **Sol AI** est le nom public unique. Ses actions sont contextuelles ; pas de chatbot, de panneau de discussion permanent ni de nouvelle esthétique séparée. Les fonctions natives indépendantes de l’IA restent disponibles sur les appareils qui les prennent en charge.
+3. Tester dans Sol compilé depuis le code, aux échelles 100/90/80, au clavier et à la souris, avec affichage côte à côte et profils privés lorsque pertinent.
+4. Aucun téléchargement de modèle sans action explicite. Afficher taille, espace nécessaire, licence, progression et possibilité de suppression.
+5. Les données d’une page sont du contexte non fiable, jamais des instructions autorisant des actions. Aucun envoi de formulaire, achat, rejeu réseau ou remplacement de texte automatique.
+6. Les données privées ne doivent pas entrer dans l’historique, les index persistants, les notes ou les journaux sans choix explicite approprié. Réduire et masquer les secrets dans le contexte technique.
+7. Aucun moteur ou dépendance « pour plus tard ». Ajouter seulement ce dont le lot courant a besoin.
+
+## Lots, ordre et critères de fin
+
+| Lot | Livraison | Dépendances | Critères de validation |
+|---|---|---|---|
+| 0 | Inventaire et essais de faisabilité | Aucune | État des fonctions existantes, référence de performances, matrice Windows/architecture, essai IA isolé, choix motivé du moteur et des modèles. Aucun changement des exigences du navigateur de base. |
+| 1 | Notes / Scratchpad | 0 | Vue Notes dans un onglet Sol : liste chronologique à gauche et document à droite, inspirée d’iCloud Notes et adaptée à Sol. Modal séparé pour ajout rapide. Notes persistantes par profil, sélection avec son URL vers une nouvelle note ou une note existante, recherche, édition, suppression et export. Ctrl+Maj+M (Ctrl+Alt+N conservé) ; note rapide Ctrl+Maj+Q. Privé uniquement en mémoire. |
+| 2 | Mode lecture et extraction commune | 0 | Activation/désactivation dans le même onglet depuis la barre d’adresse, sans recharger l’original. Titre, auteur lorsqu’il existe, texte principal, URL ; taille du texte et thèmes Sol. Essais sur articles simples, SPA et pages non compatibles. Extraction partagée ensuite par l’IA et la lecture vocale. |
+| 3 | Lecture à voix haute | 2 | Écouter/pause/reprendre/arrêt et choix des voix locales installées dans la pilule du lecteur. Français/anglais selon disponibilité, sans voix distante. Arrêt à la sortie du lecteur, navigation (y compris SPA) et fermeture. Message utile si voix absente. Intégration locale via WebView2/voix du système ; contrôle réel de démarrage/pause/reprise/arrêt dans `tools/check-navigation.mjs --reader`. |
+| 4 | Palette de commandes / actions de page | 1–3 | Accès dans Paramètres → Général et Ctrl+Maj+P, pour laisser Ctrl+K aux sites. Liste des raccourcis dans les paramètres ; registre unique pour les touches natives, la liste et les indications de la palette (Ctrl+H historique, Ctrl+J téléchargements, Ctrl+D favori, F9 lecteur, notamment). Recherche sans accents dans les actions disponibles et les onglets (titre/URL), flèches/Entrée/Échap. Notes, lecteur, traduction Google, captures, réseau, historique, favoris, téléchargements, extensions et réglages réutilisent les commandes existantes. Choix liés à l’ouverture courante, thèmes/échelles Sol, hauteur et largeur adaptées à la fenêtre. Validation native `tools/check-navigation.mjs --palette` et `--palette --small` (400 × 400 minimum au lancement). Ajouter les futures actions au fil des lots. |
+| 5 | Inspecteur de design au survol | 0 | Ctrl+Maj+D ou palette de commandes pour activer/désactiver. Alt ou Maj+survol, ou bouton Survol libre sans clavier : police, taille, interligne, couleurs, espacements, dimensions et copie CSS explicite. Pilule Sol, fermeture Échap/× ou navigation, clics ordinaires conservés. Contraste indéterminé pour un fond complexe ou transparent non résolu. Taille indépendante du zoom du site. Contrôle natif `tools/check-navigation.mjs --design`, également en privé (`--private-check`), vue scindée et aux échelles 100/90/80. DOM de la page et Shadow DOM ouvert ; les iframes et Shadow DOM fermés sont inspectés par leur élément conteneur. |
+| 6 | Réseau : rejeu, mocks et capture console | 0 | Panneau existant (Ctrl+Maj+I) : édition URL/méthode/en-têtes/corps, envoi explicite et annulation. Rejeu isolé sans cookies ni identifiants repris du site, sans suivre les redirections ; il ne représente pas le contexte CORS de la page. Une simulation exacte URL/méthode par onglet pour Fetch/XHR : statut, délai, timeout, JSON invalide ou réponse vide. Désactivation explicite ou fermeture des outils, sans persistance. Console limitée à 200 lignes, réseau à 400 entrées, corps bornés et secrets reconnus masqués. Validation native `tools/check-navigation.mjs --network-lot`, également en privé : envoi depuis le formulaire, annulation, redirections, CORS conservé dans les pages, isolation entre onglets et service workers. Les réponses d’un service worker peuvent éviter l’interception (constaté sur le serveur de test). |
+| 7 | Comptes et sessions isolés par onglet | 0 | Conteneurs nommés Admin/User/Invité, badge clair, cookies et stockage isolés. Nouveaux onglets/popups héritent du bon profil. Tester permissions, extensions, téléchargement, PDF, PiP et suppression d’un conteneur. Changer de conteneur recrée la vue si nécessaire. |
+| 8 | Module IA local et gestion des modèles | Choix validé en 0 | Désactivé par défaut ; télécharger/annuler/reprendre lorsque le moteur le permet/supprimer ; lancement à la demande, annulation des requêtes, déchargement puis arrêt après inactivité. Hors ligne vérifié après installation. CPU fonctionnel si compatible, accélération affichée seulement si effective. Défaillance du module sans crash de Sol. |
+| 9 | Actions IA sur page et sélection | 2, 4, 8 | Résumer, expliquer du texte/code/CSS, questions sur la page, reformuler, rédiger une réponse et traduire une sélection localement. Réponse progressive, annulation, références aux passages utilisés ; copier ou remplacer seulement à la demande. La recherche web d’une sélection reste une action normale. |
+| 10 | Assistant de diagnostic réseau et console | 6, 9 | L’utilisateur choisit la requête/erreur et voit le contexte inclus. Explication, cause probable et pistes de correction ; distinction entre constat et hypothèse. Aucun cookie, jeton ou mot de passe transmis au modèle. Aucun rejeu ni changement de code automatique. |
+| 11 | Prévisualisations d’appareils synchronisées | 7 ; 6 utile | Plusieurs dimensions, source active et synchronisation volontaire du défilement, saisie et interactions prises en charge. Protection contre les boucles, DOM différents et sélecteurs introuvables. Ne pas dupliquer les actions avec effets réels ; préciser les limites des événements simulés et des sites. |
+| 12 | OCR et conversions | 0 | OCR local depuis image/capture, copier et exporter le texte. Prototype pour vérifier les exigences Windows et l’identité du package ; le nouvel OCR NPU n’est pas disponible partout. Conversions PNG/JPEG/WebP, puis AVIF seulement avec codec validé. Préserver l’original, transparence et options de qualité. |
+| 12b | Compression PDF | 12 | Choix d’une bibliothèque et de sa licence après essais. Taille avant/après, lisibilité et préservation du texte recherchable/liens vérifiées. Ne pas transformer automatiquement tous les PDF en images. Refuser proprement les fichiers non pris en charge. |
+| 13 | Recherche sémantique locale | 8, 9 | Recherche dans la page et, sur activation, dans l’historique du profil. Modèle d’embeddings validé, index incrémental local, suppression liée aux données source. Exclure le privé ; prendre en compte l’historique importé. |
+| 14 | Suivi de prix | 0 ; 4 pour accès rapide | URL, variante, devise, prix de référence, seuil et dernière vérification. Vérifications et notifications pendant que Sol fonctionne. États distincts pour site inaccessible, connexion requise, prix inconnu et protection anti-bot. Ne pas promettre de suivi lorsque Sol est fermé. |
+| 15 | Modèles personnalisés | 8 | Étudier GGUF via llama.cpp ou ONNX selon le moteur retenu. Ajouter seulement les formats réellement compatibles, avec limites matérielles/licences et validation des fichiers. Aucun support universel annoncé. |
+| 16 | Transcription vocale, étude puis livraison si viable | 0, 8 si nécessaire | Définir la source audio et les capacités matérielles, tester français/anglais et hors ligne. Fonction facultative, activation et arrêt visibles. Ne pas réintroduire l’enregistrement vidéo retiré précédemment. |
+
+Les lots 1 à 7 peuvent être développés sans attendre la livraison complète du modèle IA. Les lots 8 à 10 forment ensuite une chaîne cohérente. Les lots 11 à 16 restent des livraisons distinctes : ne pas les mélanger à une grosse refonte.
+
+## Décisions qui restent ouvertes
+
+- **Modèles Rapide / Équilibré / Qualité** : proposer uniquement les niveaux qui ont été mesurés ; pas trois téléchargements imposés ni de sélection fondée seulement sur la RAM totale.
+- **Visibilité Sol AI** : décision actée. Masquer les actions et réglages Sol AI sur Windows/appareils incompatibles. Ne pas modifier les exigences du navigateur de base. La matrice finale sera fondée sur les capacités effectivement testées, pas uniquement sur le numéro de version Windows.
+- **Cloud facultatif** : mentionné comme perspective dans la discussion. Hors du périmètre local initial ; un lot séparé pourra l’ajouter sur demande, avec fournisseur, coûts et consentement explicités. Aucun fallback cloud silencieux.
+- **Suivi de prix navigateur fermé** : nécessite une tâche/service et une nouvelle décision produit. Ce n’est pas inclus dans le comportement initial.
+- **Fonctions dépendantes du matériel ou d’un codec** : une étude négative doit aboutir à une alternative ou une limitation visible, pas à une fonction factice. La transcription, les modèles personnalisés et la compression PDF demandent ces validations particulières.
+
+## Workflow pour chaque lot
+
+1. Lire le flux existant et fixer le périmètre concret, l’entrée dans l’interface et les cas d’échec.
+2. Réaliser une petite expérience si une capacité externe ou Windows reste incertaine ; décider avant d’intégrer une dépendance.
+3. Implémenter le minimum complet en réutilisant les composants et contrats existants.
+4. Exécuter les contrôles utiles et tester réellement dans Sol : fonctionnement, accessibilité, thèmes, échelles, privé et non-régression concernés.
+5. Présenter le résultat testable, ses limites et les preuves. Laisser le navigateur du code actif pour l’essai utilisateur.
+6. Corriger les retours avant de commencer le lot suivant. Commit/push/tag uniquement lorsque demandés ; annoncer la publication seulement après pipeline de tag réussie et installateurs vérifiés.
+
+Le lot est terminé lorsque sa fonction est utilisable et ses critères satisfaits, pas lorsque le panneau est dessiné ou que le build compile.
+
+## Première tâche proposée
+
+> Réaliser le lot 0 de la feuille de route Sol : inventorier les fonctions existantes et leurs points d’intégration, mesurer le navigateur au repos, puis tester un moteur IA local dans un prototype isolé. Vérifier Windows/architectures, fonctionnement hors ligne, mémoire, délai, annulation et arrêt. Fournir une décision motivée sans modifier les exigences de Sol ni télécharger un gros modèle sans accord. Après cette validation, commencer le lot 1 : notes rapides par profil, intégrées au design Sol.
+
+Cette feuille de route couvre toutes les fonctionnalités citées. Les capacités encore incertaines sont explicitement soumises à un essai de faisabilité ; leur mention ne constitue pas une promesse de compatibilité universelle.

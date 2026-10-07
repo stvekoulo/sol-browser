@@ -13,7 +13,7 @@ namespace Browser.Core;
 public static class Backup
 {
     /// <summary>Les fichiers d'un profil qu'une sauvegarde contient et qu'une restauration a le droit de remplacer.</summary>
-    public static readonly string[] ProfileFiles = ["settings.json", "session.json", "permissions.json", "browser.db"];
+    public static readonly string[] ProfileFiles = ["settings.json", "session.json", "permissions.json", "browser.db", "notes.json"];
     public const string Passwords = "passwords.json";
     public const int MinKeyLength = 8;
 

@@ -15,6 +15,8 @@ export type Tab = {
   canGoForward: boolean;
   bookmarked: boolean;
   storeDetail?: boolean;
+  translated?: boolean;
+  reader?: boolean;
   storeInstalled?: boolean; // fiche du store d'une extension déjà installée
 };
 
@@ -89,7 +91,7 @@ export const interfaceScale = () => Number(document.documentElement.style.getPro
 
 function applyTheme(ev: HostEvent) {
   const root = document.documentElement.style;
-  if (location.hostname === 'ui.navigateur') {
+  if (location.hostname === 'ui.navigateur' || (location.hostname === 'start.sol' && location.hash === '#notes')) {
     // Même facteur que les dimensions natives, fourni par l'hôte.
     const scale = ev.uiScale === 0.86 || ev.uiScale === 0.89 ? ev.uiScale : 0.92;
     const changed = interfaceScale() !== scale;
@@ -142,6 +144,11 @@ export function onMessage(callback: (data: unknown) => void) {
 
 export function onState(callback: (state: State) => void, onEvent?: (event: HostEvent) => void) {
   return onMessage(data => {
+    const event = data as HostEvent;
+    if (event.event === 'invoke-action' && event.data) {
+      Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-action]')).find(button => button.dataset.action === event.data)?.click();
+      return;
+    }
     if (typeof (data as HostEvent).event === 'string') onEvent?.(data as HostEvent);
     else callback(data as State);
   });
@@ -150,6 +157,7 @@ export function onState(callback: (state: State) => void, onEvent?: (event: Host
 // Extrait le nom de domaine épuré (ex. "corn.tech") pour la pilule centrale de la barre du haut.
 export const isStartPage = (url: string) => url === 'https://start.sol/index.html#start';
 export function formatDomain(url: string): string {
+  if (url === 'https://start.sol/index.html#notes') return 'Notes';
   if (!url || url === 'about:blank' || isStartPage(url)) return '';
   try {
     const parsed = new URL(url);

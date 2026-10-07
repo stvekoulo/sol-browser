@@ -31,6 +31,25 @@ public sealed class BrowserController
     private IReadOnlyList<Suggestion> _suggestions = [];
     private string? _suggestTab;
     private bool _suggesting; // la vue posée sur la page affiche des suggestions
+    private (string Id, string Url)? _translationSource;
+    private readonly Dictionary<string, string> _translationOriginals = new();
+    private int _translationRequest;
+    private readonly HashSet<string> _reading = new();
+    private readonly HashSet<string> _readerBusy = new();
+    private string? _readerScript;
+    private string? _readerTheme;
+    private readonly HashSet<string> _designTabs = new();
+    private string? _designScript;
+    private readonly Dictionary<string, Command> _paletteCommands = new();
+    private int _paletteGeneration;
+    private List<object>? _paletteItems;
+    private readonly QuickNotes _notes = new(AppPaths.Private ? null : Path.Combine(AppPaths.DataDir, "notes.json"));
+    private QuickNote _noteDraft = new("", "", "", "", DateTimeOffset.UtcNow);
+    private string? _noteError;
+    private QuickNote? _noteSelection;
+    private bool _notesPopup;
+    private bool NoteDraftChanged => (_noteDraft.Text.Length > 0 || _noteDraft.Title.Length > 0)
+        && !_notes.Items.Any(n => n.Id == _noteDraft.Id && n.Text == _noteDraft.Text && n.Title == _noteDraft.Title);
 
     private readonly DockHost _dock;
 
@@ -49,7 +68,14 @@ public sealed class BrowserController
         _db = new BrowserDb(AppPaths.Database);
         _capture = new CaptureService(window, json => CapturePanel?.Post(json));
 
-        _pages.PageChanged += (id, url, title) => { _tabs.Update(id, url, title); Refresh(); };
+        _pages.PageChanged += (id, url, title) =>
+        {
+            if (url is not null && _reading.Remove(id)) _ = EndReaderOnNavigationAsync(id);
+            if (url is not null && _designTabs.Remove(id)) _ = EndDesignOnNavigationAsync(id);
+            if (url is not null && !PageTranslation.IsGooglePage(url) && _translationOriginals.GetValueOrDefault(id) != url)
+                _translationOriginals.Remove(id);
+            _tabs.Update(id, url, title); Refresh();
+        };
         _pages.RuntimeChanged += Refresh;
         _pages.NewTabRequested += url => { Open(url); Refresh(); };
         _pages.Loaded += RecordVisit;
@@ -70,8 +96,24 @@ public sealed class BrowserController
             else if (_tabs.Groups.Any(g => g.Id == command.Id) && _tabs.Tabs.FirstOrDefault(t => t.GroupId == command.Id) is { } tab)
             { Activate(tab.Id); Refresh(); }
         };
+        _pages.NotesRequested += (id, command) =>
+        {
+            if (_closingWindow) return;
+            if (command.Type == "notes.ready") { _bridge.BroadcastTheme(); _pages.PostStart(id, NotesJson()); }
+            else Execute(command);
+        };
         _pages.PageFocused += id => { if (!_closingWindow && _tabs.ActiveId != id) { Activate(id); Refresh(); } };
-        _bridge.ThemePublished += json => { if (!_closingWindow) foreach (var tab in _tabs.Tabs.Where(t => t.Url == Settings.DefaultHomePage)) _pages.PostStart(tab.Id, json); };
+        _bridge.ThemePublished += json =>
+        {
+            if (_closingWindow) return;
+            _readerTheme = json;
+            foreach (var readerId in _reading.ToArray()) _ = UpdateReaderThemeAsync(readerId);
+            foreach (var designId in _designTabs.ToArray()) _ = UpdateDesignThemeAsync(designId);
+            using var theme = JsonDocument.Parse(json);
+            _pages.SpellingAccent = theme.RootElement.TryGetProperty("accent", out var accent) && accent.ValueKind == JsonValueKind.String
+                ? accent.GetString()! : "#6495ed";
+            foreach (var tab in _tabs.Tabs.Where(t => t.Url is Settings.DefaultHomePage or QuickNotes.PageUrl)) _pages.PostStart(tab.Id, json);
+        };
         _pages.Discarded += id => { _restored.Add(id); _network.Forget(id); Refresh(); }; // son rechargement ne sera pas une nouvelle visite
         _pages.KeepAwake = id => _split.Contains(id) || _downloads.Any(d => d.TabId == id && d.Op.State == Microsoft.Web.WebView2.Core.CoreWebView2DownloadState.InProgress);
         _pages.PipReturnRequested += id => { Activate(id); Refresh(); };
@@ -79,7 +121,7 @@ public sealed class BrowserController
         {
             if (!_pinsInitialized) { _ = RefreshPinnedExtensionsAsync(); _ = PrepareExtensionsAsync(); _ = UpdateExtensionsLaterAsync(); }
             _ = LearnShortcutNameAsync(id);
-            if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { } tab && IsWeb(tab.Url) && tab.Url != Settings.DefaultHomePage) FetchStartIcon(tab.Url);
+            if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { } tab && IsWeb(tab.Url) && tab.Url is not (Settings.DefaultHomePage or QuickNotes.PageUrl)) FetchStartIcon(tab.Url);
         };
         _pages.FaviconChanged += (id, data) =>
         {
@@ -97,7 +139,7 @@ public sealed class BrowserController
         _pages.DownloadStarting += OnDownloadStarting;
         _pages.PermissionRequested += OnPermissionRequested;
         _pages.Navigating += core => { if (_asking is { } pending && pending.Core == core) HidePopup(); };
-        _window.AppWindow.Changed += (_, e) => { if (e.DidPresenterChange || e.DidSizeChange) Refresh(); };
+        _window.AppWindow.Changed += (_, e) => { if (e.DidPresenterChange || e.DidSizeChange) { _popup.Rescale(); if (_paletteItems is not null) _popup.Post(PaletteJson()); Refresh(); } };
         // Mise à jour de Sol : l'encart en bas à droite et les réglages suivent le téléchargement, puis proposent de redémarrer.
         Program.UpdateChanged += () => _window.DispatcherQueue.TryEnqueue(() =>
         {
@@ -107,6 +149,7 @@ public sealed class BrowserController
         _window.Closed += (_, _) =>
         {
             _closingWindow = true;
+            _pages.StopSpelling();
             _capture.CancelSelection();
             _startPreviewCancel.Cancel();
             _sessionSave.Stop();
@@ -134,6 +177,66 @@ public sealed class BrowserController
         if (c.Type is not ("popup.size" or "dock.size" or "split.resize")) DebugLog.Write($"commande {c.Type} {c.Id} {c.Index}");
         switch (c.Type)
         {
+            case "palette.open": OpenPalette(); return;
+            case "palette.pick":
+                if (_paletteCommands.TryGetValue(id, out var chosen))
+                { HidePopup(); Execute(chosen); }
+                return;
+            case "reader.toggle": _ = ToggleReaderAsync(id); break;
+            case "design.toggle": _ = ToggleDesignAsync(id); return;
+            case "reader.listen" or "reader.stop": _ = ReaderSpeechAsync(id, c.Type == "reader.stop"); return;
+            case "bookmark.toggle":
+                if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { } mark && IsWeb(mark.Url) && !mark.Url.StartsWith("https://start.sol/", StringComparison.OrdinalIgnoreCase))
+                { if (_db.IsBookmarked(mark.Url)) _db.RemoveBookmark(mark.Url); else _db.AddBookmark(mark.Url, mark.Title); }
+                break;
+            case "notes.manage":
+                HidePopup();
+                if (_tabs.Tabs.FirstOrDefault(t => t.Url == QuickNotes.PageUrl) is { } notesTab) Activate(notesTab.Id);
+                else Open(QuickNotes.PageUrl);
+                Refresh(); return;
+            case "notes.visit":
+                if (_notes.Items.FirstOrDefault(n => n.Id == id)?.Url is { Length: > 0 } noteUrl && Uri.TryCreate(noteUrl, UriKind.Absolute, out var noteUri) && noteUri.Scheme is "https" or "http" && noteUri.UserInfo.Length == 0)
+                { Open(noteUrl); Refresh(); } return;
+            case "notes.open": OpenNotes(c.X ?? 450, c.Y ?? 60); return;
+            case "notes.draft":
+                if (c.Title!.Length <= 120 && c.Input!.Length <= 50_000 && c.Id == _noteDraft.Id)
+                    _noteDraft = _noteDraft with { Title = c.Title, Text = c.Input };
+                return;
+            case "notes.edit":
+                if (NoteDraftChanged)
+                { _noteError = T("Enregistrez ou abandonnez le brouillon avant de changer de note.", "Save or discard your draft before changing notes."); PublishNotes(); return; }
+                _noteDraft = _notes.Items.FirstOrDefault(n => n.Id == id) ?? new("", "", "", "", DateTimeOffset.UtcNow);
+                _noteError = null; PublishNotes(); return;
+            case "notes.discard":
+                _noteDraft = new("", "", "", "", DateTimeOffset.UtcNow); _noteError = null; PublishNotes(); return;
+            case "notes.save":
+                if (_notes.Save(_noteDraft.Id, _noteDraft.Title, _noteDraft.Text, _noteDraft.Url))
+                { _noteDraft = _notesPopup ? new("", "", "", "", DateTimeOffset.UtcNow) : _notes.Items[0]; _noteError = null; }
+                else _noteError = T("La note n’a pas été enregistrée. Vérifiez son contenu et l’espace disque.", "The note could not be saved. Check its content and disk space.");
+                PublishNotes(); return;
+            case "notes.delete":
+                if (!_notes.Delete(id)) _noteError = T("Impossible de supprimer cette note.", "Could not delete this note.");
+                else { _noteError = null; if (_noteDraft.Id == id) _noteDraft = new("", "", "", "", DateTimeOffset.UtcNow); }
+                PublishNotes(); return;
+            case "notes.export": _ = ExportNotesAsync(); return;
+            case "notes.select":
+                if (_noteSelection is not { } passage) return;
+                if (id.Length == 0)
+                {
+                    if (NoteDraftChanged)
+                    { Notice(T("Un brouillon est en cours", "A draft is open"), T("Enregistrez votre brouillon dans les notes rapides avant de créer une nouvelle note.", "Save your quick notes draft before creating a new note.")); return; }
+                    _noteDraft = passage; _noteSelection = null;
+                }
+                else if (_notes.Items.FirstOrDefault(n => n.Id == id) is { } destination)
+                {
+                    var added = destination.Text + "\n\n" + passage.Text + (passage.Url.Length > 0 ? "\nSource : " + passage.Url : "");
+                    if (!_notes.Save(id, destination.Title, added, destination.Url))
+                    { Notice(T("Ajout impossible", "Could not add passage"), T("La note est trop longue ou le disque est indisponible. Son contenu est conservé.", "The note is too long or the disk is unavailable. Its content is kept.")); return; }
+                    if (_noteDraft.Id == id) _noteDraft = _noteDraft with { Text = _noteDraft.Text + "\n\n" + passage.Text + (passage.Url.Length > 0 ? "\nSource : " + passage.Url : ""), Updated = DateTimeOffset.UtcNow };
+                    _noteSelection = null;
+                }
+                else return;
+                _noteError = null; OpenNotes(450, 60); return;
             // Vue posée sur la page : ces commandes ne changent pas l'état des onglets.
             case "suggest": Suggest(id, c.Query!, c.X!.Value, c.Y!.Value, c.Width!.Value); return;
             case "library.open": OpenLibrary(c.X!.Value, c.Y!.Value); return;
@@ -168,7 +271,38 @@ public sealed class BrowserController
                 return;
             case "menu.pick": PickMenuItem(c.Index!.Value); return;
             case "settings.open": OpenSettings(c.X!.Value, c.Y!.Value); return;
+            case "spelling.languages":
+                _ = Windows.System.Launcher.LaunchUriAsync(new Uri("ms-settings:regionlanguage"));
+                return;
+            case "translation.open":
+                _ = OpenTranslationAsync(id, c.X!.Value, c.Y!.Value);
+                return;
+            case "translation.run":
+                if (_translationSource is { } requested && requested.Id == id
+                    && _tabs.Tabs.FirstOrDefault(t => t.Id == id) is { } sourceTab
+                    && (sourceTab.Url == requested.Url || PageTranslation.IsGooglePage(sourceTab.Url) && PageTranslation.IsGooglePage(requested.Url))
+                    && PageTranslation.GoogleUrl(PageTranslation.IsGooglePage(sourceTab.Url) ? _translationOriginals.GetValueOrDefault(id, sourceTab.Url) : sourceTab.Url, c.Query!) is { } translatedUrl)
+                {
+                    if (!PageTranslation.IsGooglePage(sourceTab.Url)) _translationOriginals[id] = sourceTab.Url;
+                    HidePopup(); _pages.Navigate(id, translatedUrl); Refresh();
+                }
+                return;
+            case "translation.original":
+                if (_translationSource is { } page && page.Id == id && _translationOriginals.TryGetValue(id, out var originalUrl)
+                    && _tabs.Tabs.FirstOrDefault(t => t.Id == id) is { } originalTab
+                    && (originalTab.Url == page.Url || PageTranslation.IsGooglePage(originalTab.Url)))
+                { HidePopup(); _pages.Navigate(id, originalUrl); Refresh(); }
+                return;
             case "settings.set":
+                if (id == "spelling")
+                {
+                    if (c.Index is not (0 or 1 or 2 or 3)) return;
+                    _settings.Spelling = c.Index.Value;
+                    JsonFileStore.Save(AppPaths.Settings, _settings);
+                    _pages.ApplySettings();
+                    if (_settingsOpen) _popup.Post(SettingsJson());
+                    return;
+                }
                 if (id == "uiScale")
                 {
                     if (c.Index is not (0 or 1 or 2)) return;
@@ -177,6 +311,7 @@ public sealed class BrowserController
                     InterfaceScaleChanged?.Invoke();
                     _bridge.BroadcastTheme();
                     _popup.Rescale();
+                    if (_paletteItems is not null) _popup.Post(PaletteJson());
                     if (_settingsOpen) _popup.Post(SettingsJson());
                     return;
                 }
@@ -200,6 +335,11 @@ public sealed class BrowserController
             // Le panneau vient d'être créé : il reçoit les couleurs de la page (envoyées avant qu'il n'écoute), puis sa liste.
             case "network.ready": _bridge.BroadcastTheme(); _network.Post(); return;
             case "network.clear": if (_network.Shown is { } listed) _network.Clear(listed); return;
+            case "network.replay": if (_network.Shown == id) _ = _network.ReplayAsync(id, c.Input!); return;
+            case "network.cancel": if (_network.Shown == id) _network.CancelReplay(id); return;
+            case "network.mock" or "network.unmock":
+                if (_network.Shown == id && _pages.CoreOf(id) is { } mockCore) _ = _network.MockAsync(id, mockCore, c.Type == "network.mock" ? c.Input : null);
+                return;
             case "network.detail":
                 if (_network.Shown is { } inspected && _pages.CoreOf(inspected) is { } inspectedCore) _ = _network.PostDetailAsync(inspected, inspectedCore, id);
                 return;
@@ -550,6 +690,13 @@ public sealed class BrowserController
         uiScale = _settings.UiScale,
         theme = Math.Max(0, Array.IndexOf(Themes, _settings.Theme)),
         language = Math.Max(0, Array.IndexOf(Languages, _settings.Language)),
+        spelling = _settings.Spelling,
+        spellingLanguages = _pages.SpellingLanguages,
+        shortcuts = BrowserShortcuts.All.GroupBy(s => s.Action).Select(g => new
+        {
+            action = g.Key, title = T(g.First().French, g.First().English),
+            keys = string.Join(" / ", g.Select(s => s.Text(Language.Current == "en")).Distinct()),
+        }),
         home = _settings.HomePage == Settings.DefaultHomePage ? "" : _settings.HomePage,
         font = Math.Max(0, Array.IndexOf(Fonts, _settings.Font)),
         // Version installée ; null : extension absente, ou coupée (ses pages de réglages ne s'ouvrent pas tant qu'elle l'est).
@@ -780,6 +927,11 @@ public sealed class BrowserController
 
     private void HidePopup()
     {
+        _paletteCommands.Clear();
+        _paletteItems = null;
+        _notesPopup = false;
+        _translationRequest++;
+        _translationSource = null;
         if (_pendingExtension is { } staged)
         {
             _pendingExtension = null;
@@ -817,6 +969,16 @@ public sealed class BrowserController
         var index = _tabs.Tabs.ToList().FindIndex(t => t.Id == active);
         switch (action)
         {
+            case "history.open" or "downloads.open" or "settings.open" or "profile.menu" or "translation.open" or "extensions.open":
+                _bridge.Post(JsonSerializer.Serialize(new { @event = "invoke-action", data = action == "extensions.open" ? "extensions.menu" : action }));
+                break;
+            case "library.open":
+                Execute(new Command(action, Id: active, X: (_window.Content as FrameworkElement)?.ActualWidth / 2 ?? 450, Y: 70));
+                break;
+            case string slot when slot.StartsWith("tab.", StringComparison.Ordinal) && int.TryParse(slot.AsSpan(4), out var number) && number is >= 1 and <= 9:
+                if (_tabs.Tabs.Count > 0 && (number == 9 || number <= _tabs.Tabs.Count))
+                    Execute(new Command("tab.activate", Id: _tabs.Tabs[number == 9 ? _tabs.Tabs.Count - 1 : number - 1].Id));
+                break;
             case "tab.next" or "tab.previous" when _tabs.Tabs.Count > 0:
                 var step = action == "tab.next" ? 1 : _tabs.Tabs.Count - 1;
                 Execute(new Command("tab.activate", Id: _tabs.Tabs[(index + step) % _tabs.Tabs.Count].Id));
@@ -833,7 +995,7 @@ public sealed class BrowserController
     private void Zoom(string? id, string action)
     {
         if (id is null) return;
-        if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is not { } tab || tab.Url == Settings.DefaultHomePage) return;
+        if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is not { } tab || tab.Url is Settings.DefaultHomePage or QuickNotes.PageUrl) return;
         if (_pages.IsPdf(id)) return; // le lecteur PDF possède son zoom ; il ne change pas celui des sites
         var current = _settings.PageZoom;
         var zoom = action switch
@@ -845,6 +1007,7 @@ public sealed class BrowserController
         _pages.SetZoom(zoom); // toutes les pages du profil, présentes et futures
         JsonFileStore.Save(AppPaths.Settings, _settings);
         if (_settingsOpen) _popup.Post(SettingsJson());
+        foreach (var designId in _designTabs.ToArray()) _ = UpdateDesignThemeAsync(designId);
     }
 
     private OverlappedPresenter? Presenter => _window.AppWindow.Presenter as OverlappedPresenter;
@@ -863,6 +1026,7 @@ public sealed class BrowserController
 
     private void Close(string id)
     {
+        _designTabs.Remove(id);
         if (_asking is not null && _tabs.ActiveId == id) HidePopup();
         if (_tabs.ActiveId == id)
         {
@@ -895,6 +1059,7 @@ public sealed class BrowserController
         _restored.Remove(id);
         _pages.Remove(id);
         _favicons.Remove(id);
+        _translationOriginals.Remove(id);
         _split.OnTabClosed(id);
         _network.Forget(id);
         foreach (var shortcut in _shortcutTabs.Where(p => p.Value == id).Select(p => p.Key).ToList()) _shortcutTabs.Remove(shortcut);
@@ -1017,6 +1182,70 @@ public sealed class BrowserController
         (_menu, _menuDismissed) = (items, dismissed);
         _popup.Show(x, y, 260, JsonSerializer.Serialize(new { popup = "menu", items = items.Select(i => i.Label) }), focus: true);
     }
+
+    private void OpenPalette()
+    {
+        HidePopup();
+        var generation = ++_paletteGeneration;
+        var items = new List<object>();
+        var active = _tabs.Tabs.FirstOrDefault(t => t.Id == _tabs.ActiveId);
+        var x = (_window.Content as FrameworkElement)?.ActualWidth / 2 ?? 450;
+        void Add(string title, Command command, string shortcut = "", string hint = "", string group = "actions", string keywords = "")
+        {
+            var key = $"{generation}:{items.Count}";
+            _paletteCommands[key] = command;
+            items.Add(new { id = key, title, hint, shortcut = shortcut.Length > 0 ? shortcut : BrowserShortcuts.TextFor(command.Type, Language.Current == "en"), group, keywords });
+        }
+        Add(T("Nouvel onglet", "New tab"), new("tab.open"), keywords: "onglet tab new nouveau");
+        Add(T("Rouvrir l’onglet fermé", "Reopen closed tab"), new("tab.reopen"), keywords: "reopen rouvrir fermer onglet");
+        Add(T("Navigation privée", "Private browsing"), new("window.private"), keywords: "private incognito privee");
+        Add(T("Ouvrir les notes", "Open notes"), new("notes.manage"), keywords: "notes scratchpad");
+        Add(T("Ajouter une note rapide", "Add a quick note"), new("notes.open"), keywords: "notes create ajouter");
+        Add(T("Historique", "History"), new("history.open", X: x, Y: 70), keywords: "history historique visites");
+        Add(T("Favoris", "Bookmarks"), new("library.open", X: x, Y: 70), keywords: "bookmarks favoris");
+        Add(T("Téléchargements", "Downloads"), new("downloads.open", X: x, Y: 70), keywords: "downloads telechargements");
+        Add(T("Extensions", "Extensions"), new("extensions.open"), keywords: "extensions modules");
+        Add(T("Réglages", "Settings"), new("settings.open", X: x, Y: 70), keywords: "settings parametres preferences");
+        Add(T("Espaces et profils", "Spaces and profiles"), new("profile.menu", X: x, Y: 70), keywords: "profile espace compte");
+        Add(T("Plein écran", "Full screen"), new("window.maximize"), keywords: "fullscreen plein ecran");
+        if (active is not null)
+        {
+            Add(T("Fermer l’onglet", "Close tab"), new("tab.close", Id: active.Id), keywords: "close fermer onglet");
+            Add(T("Recharger la page", "Reload page"), new("nav.reload", Id: active.Id), keywords: "reload refresh actualiser");
+            if (_pages.CanGoBack(active.Id)) Add(T("Page précédente", "Previous page"), new("nav.back", Id: active.Id));
+            if (_pages.CanGoForward(active.Id)) Add(T("Page suivante", "Next page"), new("nav.forward", Id: active.Id));
+            Add(T("Afficher côte à côte", "Show side by side"), new("split.open", Id: active.Id), keywords: "split cote a cote partager");
+            if (_split.Contains(active.Id)) Add(T("Quitter la vue côte à côte", "Exit side by side"), new("split.close"), keywords: "split close fermer");
+            if (_pages.CoreOf(active.Id) is not null)
+            {
+                Add(T("Capture d’écran", "Screenshot"), new("capture.menu"), keywords: "capture screenshot image");
+                Add(T("Inspecteur réseau", "Network inspector"), new("network.toggle"), keywords: "network reseau requetes");
+            }
+            if (IsWebAddress(active.Url) && !active.Url.StartsWith("https://start.sol/", StringComparison.OrdinalIgnoreCase) && !_pages.IsPdf(active.Id))
+            {
+                Add(_reading.Contains(active.Id) ? T("Quitter le mode lecteur", "Exit reader mode") : T("Mode lecteur", "Reader mode"), new("reader.toggle", Id: active.Id), keywords: "reader lecture lire ecouter voix");
+                Add(T("Traduire la page", "Translate page"), new("translation.open", Id: active.Id, X: x, Y: 70), keywords: "translate traduction francais anglais");
+                Add(T("Inspecteur de design", "Design inspector"), new("design.toggle", Id: active.Id), keywords: "design css police couleur inspecter survol");
+                Add(T("Lecture à voix haute", "Read aloud"), new("reader.listen", Id: active.Id), keywords: "speech ecouter voix pause reprendre");
+                if (_reading.Contains(active.Id)) Add(T("Arrêter la lecture vocale", "Stop reading aloud"), new("reader.stop", Id: active.Id));
+                Add(_db.IsBookmarked(active.Url) ? T("Retirer des favoris", "Remove bookmark") : T("Ajouter aux favoris", "Add bookmark"), new("bookmark.toggle", Id: active.Id), keywords: "bookmark favoris");
+            }
+        }
+        for (var i = 0; i < _tabs.Tabs.Count; i++)
+        {
+            var tab = _tabs.Tabs[i];
+            var slot = i < 8 ? i + 1 : i == _tabs.Tabs.Count - 1 ? 9 : 0;
+            Add(tab.Title, new("tab.activate", Id: tab.Id), shortcut: BrowserShortcuts.TextFor($"tab.{slot}", Language.Current == "en"), hint: tab.Url, group: "tabs", keywords: "onglet tab");
+        }
+        _paletteItems = items;
+        _popup.ShowCentered(500, PaletteJson(), top: 80);
+    }
+
+    private string PaletteJson() => JsonSerializer.Serialize(new
+    {
+        popup = "palette", items = _paletteItems,
+        listHeight = Math.Clamp((((_window.Content as FrameworkElement)?.ActualHeight ?? 640) - 120) / _settings.UiFactor - 130, 60, 340),
+    });
 
     private void PickMenuItem(int index)
     {
@@ -1295,6 +1524,99 @@ public sealed class BrowserController
     {
         HidePopup();
         _popup.ShowCentered(340, JsonSerializer.Serialize(new { popup = "notice", title, hint }));
+    }
+
+    private async Task ToggleDesignAsync(string id)
+    {
+        if (_pages.CoreOf(id) is not { } core || !IsWebAddress(core.Source) || core.Source.StartsWith("https://start.sol/") || _pages.IsPdf(id)) return;
+        HidePopup();
+        var source = core.Source;
+        try
+        {
+            _designScript ??= File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "design.js"));
+            var result = await core.ExecuteScriptAsync("(() => { const designOptions=" + JsonSerializer.Serialize(new { en = Language.Current == "en" }) + ";return (\n" + _designScript + "\n);})()");
+            if (core.Source != source) return;
+            if (result == "true") { _designTabs.Add(id); await UpdateDesignThemeAsync(id); }
+            else _designTabs.Remove(id);
+        }
+        catch (Exception e) when (e is IOException or InvalidOperationException or COMException)
+        { Notice(T("Inspection indisponible", "Inspection unavailable"), T("Réessayez après le chargement de la page.", "Try again after the page has loaded.")); }
+    }
+
+    private async Task UpdateDesignThemeAsync(string id)
+    {
+        if (_readerTheme is null || _pages.CoreOf(id) is not { } core) return;
+        try
+        {
+            await core.ExecuteScriptAsync("document.getElementById('sol-design-view')?.solTheme?.(" + _readerTheme + "," + JsonSerializer.Serialize(_settings.UiFactor / _settings.PageZoom) + ")");
+        }
+        catch (Exception e) when (e is InvalidOperationException or COMException) { /* document replaced */ }
+    }
+
+    private async Task EndDesignOnNavigationAsync(string id)
+    {
+        if (_pages.CoreOf(id) is not { } core) return;
+        try { await core.ExecuteScriptAsync("(() => {const h=document.getElementById('sol-design-view');if(h?.solSource!==location.href)h?.solClose?.();})()"); }
+        catch (Exception e) when (e is InvalidOperationException or COMException) { /* document replaced */ }
+    }
+
+    private async Task ToggleReaderAsync(string id)
+    {
+        if (!_readerBusy.Add(id)) return;
+        try
+        {
+            if (_pages.CoreOf(id) is not { } core || !IsWebAddress(core.Source) || core.Source.StartsWith("https://start.sol/") || _pages.IsPdf(id)) return;
+            var source = core.Source;
+            _readerScript ??= File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "Readability.js"))
+                + "\nreturn (\n" + File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "reader.js")) + "\n);";
+            var options = JsonSerializer.Serialize(new { en = Language.Current == "en" });
+            var result = await core.ExecuteScriptAsync("(() => { const readerOptions = " + options + ";" + _readerScript + "; })()");
+            if (core.Source != source) return;
+            if (result == "true") _reading.Add(id);
+            else _reading.Remove(id);
+            if (result is not ("true" or "false")) Notice(T("Mode lecteur indisponible", "Reader mode unavailable"), T("Cette page ne contient pas d’article lisible, ou son contenu est trop volumineux.", "This page has no readable article, or its content is too large."));
+            Refresh();
+            if (result == "true") await UpdateReaderThemeAsync(id);
+        }
+        catch (Exception e) when (e is IOException or InvalidOperationException or COMException)
+        { Notice(T("Lecture impossible", "Could not open reader"), T("Réessayez après le chargement de la page.", "Try again after the page has loaded.")); }
+        finally { _readerBusy.Remove(id); }
+    }
+
+    private async Task UpdateReaderThemeAsync(string id)
+    {
+        if (_readerTheme is null || _pages.CoreOf(id) is not { } core) return;
+        try
+        {
+            await core.ExecuteScriptAsync("(() => { const t=" + _readerTheme + "; const h=document.getElementById('sol-reader-view'); if(!h)return; const dark=t.mode==='dark'||(t.mode==='system'?t.systemDark:t.mode==='light'?false:t.dark); h.style.setProperty('--bg',dark?'#121214':'#eef0e2');h.style.setProperty('--fg',dark?'#ececef':'#171719');if(t.accent)h.style.setProperty('--accent',t.accent);h.style.colorScheme=dark?'dark':'light'; })()");
+        }
+        catch (Exception e) when (e is InvalidOperationException or COMException) { /* navigation replaced the document */ }
+    }
+
+    private async Task ReaderSpeechAsync(string id, bool stop)
+    {
+        if (_pages.CoreOf(id) is not { } core) return;
+        var source = core.Source;
+        if (!_reading.Contains(id) && !stop) await ToggleReaderAsync(id);
+        if (!_reading.Contains(id) || core.Source != source) return;
+        HidePopup();
+        try
+        {
+            await core.CallDevToolsProtocolMethodAsync("Runtime.evaluate", JsonSerializer.Serialize(new
+            {
+                expression = $"document.getElementById('sol-reader-view')?.{(stop ? "solStop" : "solListen")}?.()",
+                userGesture = !stop, awaitPromise = true,
+            }));
+        }
+        catch (Exception e) when (e is InvalidOperationException or COMException)
+        { Notice(T("Lecture indisponible", "Reading unavailable"), T("Réessayez après le chargement de la page.", "Try again after the page has loaded.")); }
+    }
+
+    private async Task EndReaderOnNavigationAsync(string id)
+    {
+        if (_pages.CoreOf(id) is not { } core) return;
+        try { await core.ExecuteScriptAsync("(() => {const h=document.getElementById('sol-reader-view');if(h?.solArticle && h.solArticle.url!==location.href){h.solRestore();h.remove();}})()"); }
+        catch (Exception e) when (e is InvalidOperationException or COMException) { /* the old document is gone */ }
     }
 
     private static bool IsWebAddress(string url) =>
@@ -1935,7 +2257,7 @@ public sealed class BrowserController
     [
         "back", "forward", "reload", "cut", "copy", "paste", "selectAll",
         "copyLinkLocation", "saveLinkAs", "copyImage", "copyImageLocation", "saveImageAs",
-        "saveAs", "print", "viewPageSource", "inspectElement",
+        "saveAs", "print", "viewPageSource", "inspectElement", "spellCheck",
     ];
 
     private static string DeviceLabel(string name) => name switch
@@ -2001,6 +2323,8 @@ public sealed class BrowserController
     {
         if (_tools.IsOpen)
         {
+            foreach (var mockId in _network.ActiveMocks)
+                if (_pages.CoreOf(mockId) is { } core) _ = _network.MockAsync(mockId,core,null);
             _tools.Hide();
             _network.Shown = null;
         }
@@ -2021,37 +2345,131 @@ public sealed class BrowserController
         _network.Post();
     }
 
-    private void OpenContextMenu(string tabId, double x, double y, Microsoft.Web.WebView2.Core.CoreWebView2ContextMenuRequestedEventArgs e)
+    private async void OpenContextMenu(string tabId, double x, double y, Microsoft.Web.WebView2.Core.CoreWebView2ContextMenuRequestedEventArgs e)
     {
-        var items = new List<(string Label, Action? Run)>();
-        var link = e.ContextMenuTarget.HasLinkUri ? e.ContextMenuTarget.LinkUri : null;
-        if (link is not null && IsWeb(link))
-        {
-            items.Add((T("Ouvrir le lien dans un nouvel onglet", "Open link in a new tab"), () => Open(link)));
-            items.Add((T("Ouvrir le lien en vue scindée", "Open link in split view"), () => Split(Open(link, activate: false).Id)));
-            items.Add(("", null));
-        }
-        foreach (var item in e.MenuItems)
-        {
-            if (item.Kind == Microsoft.Web.WebView2.Core.CoreWebView2ContextMenuItemKind.Separator)
-            {
-                if (items.Count > 0 && items[^1].Label != "") items.Add(("", null));
-            }
-            else if (item.Kind == Microsoft.Web.WebView2.Core.CoreWebView2ContextMenuItemKind.Command && item.IsEnabled && NativeCommands.Contains(item.Name))
-            {
-                var commandId = item.CommandId;
-                items.Add((item.Label.Replace("&", ""), () => e.SelectedCommandId = commandId));
-            }
-        }
-        if (items.Count > 0 && items[^1].Label != "") items.Add(("", null));
-        items.Add((T("Capturer une zone", "Capture an area"), () => Capture("region")));
-        items.AddRange(DeviceEntries(tabId, x, y));
-        items.Add((_tools.IsOpen ? T("Masquer l'inspecteur réseau", "Hide network inspector") : T("Inspecter le réseau", "Inspect network"), () => _afterMenu = ToggleNetwork));
-
-        // Le moteur attend notre réponse : il est toujours libéré à la fermeture du menu, avec ou sans choix.
         e.Handled = true;
         var deferral = e.GetDeferral();
-        ShowMenu(x, y, items, deferral.Complete);
+        try
+        {
+            var items = new List<(string Label, Action? Run)>();
+            var correction = e.ContextMenuTarget.IsEditable && e.ContextMenuTarget.FrameUri == _pages.CoreOf(tabId)?.Source
+                ? await _pages.SpellingSuggestions(tabId) : (Word: "", Suggestions: Array.Empty<string>());
+            foreach (var suggestion in correction.Suggestions)
+            {
+                var replacement = suggestion;
+                items.Add((replacement, () => _pages.CorrectSpelling(tabId, correction.Word, replacement)));
+            }
+            if (items.Count > 0) items.Add(("", null));
+            var link = e.ContextMenuTarget.HasLinkUri ? e.ContextMenuTarget.LinkUri : null;
+            if (e.ContextMenuTarget.HasSelection && e.ContextMenuTarget.SelectionText is { Length: > 0 and <= 50_000 } selection)
+            {
+                var source = _tabs.Tabs.FirstOrDefault(t => t.Id == tabId);
+                items.Add((T("Ajouter à une note…", "Add to a note…"), () => _afterMenu = () =>
+                {
+                    var url = source?.Url ?? "";
+                    if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") || uri.UserInfo.Length > 0 || url.Length > 4096) url = "";
+                    _noteSelection = new("", (source?.Title ?? "")[..Math.Min(source?.Title.Length ?? 0, 120)], selection, url, DateTimeOffset.UtcNow);
+                    HidePopup();
+                    _popup.Show(x, y, 360, JsonSerializer.Serialize(new { popup = "notes-select",
+                        items = _notes.Items.Select(n => new { id = n.Id, title = n.Title.Length > 0 ? n.Title : n.Text[..Math.Min(80, n.Text.Length)] }) }), focus: true);
+                }));
+            }
+            if (link is not null && IsWeb(link))
+            {
+                items.Add((T("Ouvrir le lien dans un nouvel onglet", "Open link in a new tab"), () => Open(link)));
+                items.Add((T("Ouvrir le lien en vue scindée", "Open link in split view"), () => Split(Open(link, activate: false).Id)));
+                items.Add(("", null));
+            }
+            foreach (var item in e.MenuItems)
+            {
+                if (item.Kind == Microsoft.Web.WebView2.Core.CoreWebView2ContextMenuItemKind.Separator)
+                {
+                    if (items.Count > 0 && items[^1].Label != "") items.Add(("", null));
+                }
+                else if (item.Kind == Microsoft.Web.WebView2.Core.CoreWebView2ContextMenuItemKind.Command && item.IsEnabled && NativeCommands.Contains(item.Name) && !string.IsNullOrWhiteSpace(item.Label))
+                {
+                    var commandId = item.CommandId;
+                    items.Add((item.Label.Replace("&", ""), () => e.SelectedCommandId = commandId));
+                }
+            }
+            if (items.Count > 0 && items[^1].Label != "") items.Add(("", null));
+            items.Add((T("Capturer une zone", "Capture an area"), () => Capture("region")));
+            items.AddRange(DeviceEntries(tabId, x, y));
+            items.Add((_tools.IsOpen ? T("Masquer l'inspecteur réseau", "Hide network inspector") : T("Inspecter le réseau", "Inspect network"), () => _afterMenu = ToggleNetwork));
+
+            // Le moteur attend notre réponse : il est toujours libéré à la fermeture du menu, avec ou sans choix.
+            ShowMenu(x, y, items, deferral.Complete);
+        }
+        catch (Exception error) when (error is COMException or InvalidOperationException)
+        { deferral.Complete(); }
+    }
+
+    private async Task OpenTranslationAsync(string id, double x, double y)
+    {
+        if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is not { } tab || tab.Url == Settings.DefaultHomePage || !IsWeb(tab.Url)) return;
+        HidePopup();
+        var request = _translationRequest;
+        var url = tab.Url;
+        string? pageLanguage = null;
+        try
+        {
+            if (_pages.CoreOf(id) is { } core)
+            {
+                using var result = JsonDocument.Parse(await core.ExecuteScriptAsync("""
+                    (() => {
+                      const translated = location.hostname === 'translate.google.com' || location.hostname.endsWith('.translate.goog');
+                      const query = new URLSearchParams(location.search);
+                      return (translated && (query.get('_x_tr_tl') || query.get('tl'))) || document.documentElement.lang ||
+                        document.body?.getAttribute('lang') || document.querySelector('meta[http-equiv="content-language" i]')?.content || '';
+                    })()
+                    """));
+                if (result.RootElement.ValueKind == JsonValueKind.String) pageLanguage = result.RootElement.GetString();
+            }
+        }
+        catch (Exception e) when (e is COMException or InvalidOperationException or JsonException) { /* langue inconnue : celle de Sol */ }
+        if (_closingWindow || request != _translationRequest || _tabs.ActiveId != id || _tabs.Tabs.FirstOrDefault(t => t.Id == id)?.Url != url) return;
+        _translationSource = (id, url);
+        var original = PageTranslation.IsGooglePage(url) ? _translationOriginals.GetValueOrDefault(id) : null;
+        var target = PageTranslation.TargetLanguage(pageLanguage, Language.Current);
+        _popup.Show(x - Scaled(360), y, 360, JsonSerializer.Serialize(new
+        {
+            popup = "translation", id, target, original = original is not null,
+            available = PageTranslation.GoogleUrl(original ?? url, target) is not null,
+        }), focus: true);
+    }
+
+    private string NotesJson() => JsonSerializer.Serialize(new { popup = "notes", items = _notes.Items,
+        draft = _noteDraft, error = _noteError, privateMode = AppPaths.Private }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+
+    private void OpenNotes(double x, double y)
+    {
+        HidePopup();
+        _notesPopup = true;
+        _popup.ShowCentered(430, NotesJson());
+    }
+
+    private void PublishNotes()
+    {
+        var json = NotesJson();
+        if (_notesPopup) _popup.Post(json);
+        foreach (var tab in _tabs.Tabs.Where(t => t.Url == QuickNotes.PageUrl)) _pages.PostStart(tab.Id, json);
+    }
+
+    private async Task ExportNotesAsync()
+    {
+        var text = _notes.Export();
+        if (text.Length == 0) return;
+        HidePopup();
+        try
+        {
+            var picker = new Windows.Storage.Pickers.FileSavePicker
+            { SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary, SuggestedFileName = "Sol notes" };
+            picker.FileTypeChoices.Add(T("Texte", "Text"), [".txt"]);
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(_window));
+            if (await picker.PickSaveFileAsync() is { } file) await Windows.Storage.FileIO.WriteTextAsync(file, text);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or COMException)
+        { Notice(T("Export impossible", "Export failed"), T("Les notes sont conservées. Choisissez un autre emplacement.", "Your notes are kept. Choose another location.")); }
     }
 
     private void OpenLibrary(double x, double y, bool history = false)
@@ -2084,7 +2502,7 @@ public sealed class BrowserController
         if (_closingWindow) return;
         if (_restored.Remove(id)) return; // rouvrir une session n'est pas une visite
         if (AppPaths.Private) return;     // navigation privée : aucun historique
-        if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { } tab && IsWeb(tab.Url) && tab.Url != Settings.DefaultHomePage)
+        if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { } tab && IsWeb(tab.Url) && tab.Url is not (Settings.DefaultHomePage or QuickNotes.PageUrl))
             _db.RecordVisit(tab.Url, tab.Title, DateTimeOffset.UtcNow);
     }
 
@@ -2098,6 +2516,9 @@ public sealed class BrowserController
         var tabs = session.Urls.Select((url, i) => Open(url, activate: false, pinned: i < session.PinnedCount, asleep: true)).ToList();
         if (tabs.Count == 0) { Open(_settings.HomePage); return; }
         foreach (var tab in tabs) _restored.Add(tab.Id);
+        for (var i = 0; i < tabs.Count && i < session.TranslationOriginals.Count; i++)
+            if (PageTranslation.GoogleUrl(session.TranslationOriginals[i], "fr") is not null)
+                _translationOriginals[tabs[i].Id] = session.TranslationOriginals[i];
         for (var i = 0; i < tabs.Count && i < session.Titles.Count; i++)
             if (session.Titles[i].Length > 0) _tabs.Update(tabs[i].Id, title: session.Titles[i]);
         // Pages qui étaient ouvertes dans un raccourci : elles y retournent.
@@ -2140,6 +2561,7 @@ public sealed class BrowserController
         JsonFileStore.Save(AppPaths.Session, new Session
         {
             Urls = tabs.Select(t => t.Url).ToList(),
+            TranslationOriginals = tabs.Select(t => _translationOriginals.GetValueOrDefault(t.Id, "")).ToList(),
             Titles = tabs.Select(t => t.Title).ToList(),
             PinnedCount = _tabs.PinnedCount,
             Icons = tabs.Select(t => _favicons.GetValueOrDefault(t.Id) is { Length: <= MaxSessionIcon } icon ? icon : "").ToList(),
@@ -2280,7 +2702,7 @@ public sealed class BrowserController
                 groupId = t.GroupId,
                 asleep = _pages.IsAsleep(t.Id), // déchargé : affiché atténué, il se recharge quand on y revient
                 device = _pages.DeviceOf(t.Id) is { } simulated ? DeviceLabel(simulated) : null, // simulateur : appareil affiché
-                zoom = t.Url == Settings.DefaultHomePage || _pages.IsPdf(t.Id) ? 100 : (int)Math.Round(_settings.PageZoom * 100),
+                zoom = t.Url is Settings.DefaultHomePage or QuickNotes.PageUrl || _pages.IsPdf(t.Id) ? 100 : (int)Math.Round(_settings.PageZoom * 100),
                 loading = _pages.IsLoading(t.Id),
                 canGoBack = _pages.CanGoBack(t.Id),
                 canGoForward = _pages.CanGoForward(t.Id),
@@ -2288,6 +2710,8 @@ public sealed class BrowserController
                 bookmarked = (t.Id == _tabs.ActiveId || (showSplit && _split.Contains(t.Id))) && _db.IsBookmarked(t.Url),
                 storeDetail = _pages.CoreOf(t.Id) is { } storePage && PageHost.IsStoreDetail(storePage.Source),
                 storeInstalled = _pages.CoreOf(t.Id) is { } storeShown && StoreExtension(storeShown.Source) is { } storeId && _installedExtensions.Contains(storeId),
+                translated = _translationOriginals.ContainsKey(t.Id) && PageTranslation.IsGooglePage(t.Url),
+                reader = _reading.Contains(t.Id),
             }),
             groups = _tabs.Groups.Select(g => new { id = g.Id, name = g.Name, color = g.Color, icon = g.Icon, collapsed = g.Collapsed }),
             activeId = _tabs.ActiveId,

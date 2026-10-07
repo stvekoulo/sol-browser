@@ -6,6 +6,7 @@ import Popup from './Popup';
 import Sidebar from './Sidebar';
 import Welcome from './Welcome';
 import Start from './Start';
+import NotesPage from './NotesPage';
 import Capture from './Capture';
 import { painted } from './bridge';
 import '@fontsource-variable/inter'; // police Inter, livrée avec le navigateur (chargée seulement si elle est choisie)
@@ -20,6 +21,7 @@ import './motion.css';
 // Le même bundle sert la barre supérieure, la carte latérale (#sidebar), les menus (#popup) et l'encart (#dock).
 const hash = location.hash;
 if (hash === '#start') document.body.classList.add('start-body');
+if (hash === '#notes') document.body.classList.add('notes-body');
 if (hash === '#popup' || hash === '#dock' || hash === '#capture') document.body.classList.add('popup-body');
 if (hash === '#sidebar') document.body.classList.add('sidebar-body');
 if (hash === '#panel') document.body.classList.add('panel-body');
@@ -37,4 +39,4 @@ const firstPaint = new MutationObserver(() => {
 });
 firstPaint.observe(container, { childList: true });
 const root = createRoot(container);
-root.render(hash === '#capture' ? <Capture /> : hash === '#start' ? <Start /> : hash === '#welcome' ? <Welcome /> : hash === '#panel' ? <Panel /> : hash === '#popup' ? <Popup /> : hash === '#dock' ? <Dock /> : hash === '#sidebar' ? <Sidebar /> : <App />);
+root.render(hash === '#notes' ? <NotesPage /> : hash === '#capture' ? <Capture /> : hash === '#start' ? <Start /> : hash === '#welcome' ? <Welcome /> : hash === '#panel' ? <Panel /> : hash === '#popup' ? <Popup /> : hash === '#dock' ? <Dock /> : hash === '#sidebar' ? <Sidebar /> : <App />);

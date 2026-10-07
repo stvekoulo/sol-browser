@@ -1,6 +1,7 @@
 // Flou progressif en bas de chaque page. Injecté par l'hôte à la création du document.
 // API DOM uniquement (pas d'innerHTML) pour passer sur les sites qui imposent Trusted Types.
 (() => {
+  if (location.href === 'https://start.sol/index.html#notes') return;
   if (window.top !== window || window.__navBlur) return;
   window.__navBlur = true;
   const HEIGHT = 56, STEPS = [1, 2, 3, 5];

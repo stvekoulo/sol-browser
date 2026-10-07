@@ -71,3 +71,20 @@
 .net-pairs > div { display: grid; grid-template-columns: minmax(90px, 32%) minmax(0, 1fr); gap: 10px; }
 .net-pairs dt { color: var(--text-dim); overflow-wrap: anywhere; }
 .net-pairs dd { margin: 0; overflow-wrap: anywhere; }
+.net-bar { flex-wrap:wrap; }
+.net-mock-banner { display:flex; align-items:center; gap:10px; padding:6px 14px; background:var(--bg-pill-solid); font-size:12px; }
+.net-mock-banner span { flex:1; min-width:0; overflow-wrap:anywhere; }
+.net-console,.net-composer { flex:1; min-height:0; overflow:auto; padding:12px 16px; scrollbar-width:thin; }
+.net-console .net-body { margin-bottom:5px; }
+.console-error,.console-warning { color:var(--accent); }
+.net-compose-row { display:flex; flex-wrap:wrap; gap:12px; margin:10px 0; }
+.net-compose-row label { display:flex; flex:1; min-width:120px; flex-direction:column; gap:5px; color:var(--text-dim); }
+.net-compose-row .net-compose-url { flex:4; }
+.net-composer input,.net-composer select,.net-composer textarea { box-sizing:border-box; width:100%; border:1px solid var(--border-card); border-radius:10px; padding:8px; background:var(--bg-tab-hover); color:var(--text); font:12px system-ui; }
+.net-composer textarea { min-height:90px; resize:vertical; font-family:ui-monospace,Consolas,monospace; }
+.net-composer :is(input,select,textarea):focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+.net-compose-actions { display:flex; gap:8px; }
+.net-mock-options { margin:14px 0; border-top:1px solid var(--border); padding-top:10px; }
+.net-mock-options summary { cursor:pointer; font-weight:600; margin-bottom:8px; }
+.net-edit { margin:10px 0; }
+@media(max-width:650px) { .net-row { grid-template-columns:35px 42px minmax(0,1fr); } .net-row .net-type,.net-row .net-num { display:none; } .net-main:has(.net-detail) .net-list { display:none; } .net-detail { width:100%; box-sizing:border-box; } }

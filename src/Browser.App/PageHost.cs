@@ -25,6 +25,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     public event Action<string>? Loaded;                         // id, page chargée avec succès
     public event Action<string>? PageFocused;
     public event Action<string, Command>? StartRequested;
+    public event Action<string, Command>? NotesRequested;
     public event Action<string>? StoreInstallRequested;
     public event Action? StoreManageRequested; // bouton d'une extension déjà installée : ouvrir leur gestion
     /// <summary>Identifiants des extensions installées : les fiches du store affichent leur état.</summary>
@@ -86,7 +87,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     }
     public void PostStart(string id, string json)
     {
-        if (Core(id) is { } core && core.Source == Settings.DefaultHomePage) core.PostWebMessageAsJson(json);
+        if (Core(id) is { } core && core.Source is Settings.DefaultHomePage or QuickNotes.PageUrl) core.PostWebMessageAsJson(json);
     }
     public event Action<CoreWebView2>? Navigating;
     public async Task<string?> PreviewUrlAsync(string url, CancellationToken cancellation)
@@ -170,6 +171,13 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         core.SetVirtualHostNameToFolderMapping("start.sol", Path.Combine(AppContext.BaseDirectory, "ui"), CoreWebView2HostResourceAccessKind.Deny);
         core.WebMessageReceived += (_, e) =>
         {
+            if (e.Source == QuickNotes.PageUrl && core.Source == QuickNotes.PageUrl)
+            {
+                if (CommandParser.Parse(e.TryGetWebMessageAsString()) is { } notes && notes.Type is
+                    "notes.ready" or "notes.open" or "notes.draft" or "notes.save" or "notes.edit" or "notes.discard" or "notes.delete" or "notes.export" or "notes.visit")
+                    NotesRequested?.Invoke(tab.Id, notes);
+                return;
+            }
             if (IsStore(e.Source) && IsStoreDetail(core.Source))
             {
                 if (e.WebMessageAsJson == "\"sol.store.install\"") StoreInstallRequested?.Invoke(core.Source);
@@ -196,7 +204,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
             _pdf.Remove(tab.Id);
             if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var document) && document.AbsolutePath.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)) _pdf.Add(tab.Id);
             core.Settings.IsZoomControlEnabled = IsPdf(tab.Id);
-            core.Settings.IsWebMessageEnabled = e.Uri == Settings.DefaultHomePage || IsStore(e.Uri);
+            core.Settings.IsWebMessageEnabled = e.Uri is Settings.DefaultHomePage or QuickNotes.PageUrl || IsStore(e.Uri);
             Navigating?.Invoke(core);
             DebugLog.Write($"navigation.start {tab.Id} #{e.NavigationId} redirect={e.IsRedirected}");
             if (_navigation.GetValueOrDefault(tab.Id) != e.NavigationId) _downloading.Remove(tab.Id);
@@ -322,6 +330,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
 
     private async Task ApplySettingsAsync(string id, CoreWebView2 core)
     {
+        StartSpelling();
         if (!settings.MemorySaver && core.IsSuspended) core.Resume();
         if (!settings.MemorySaver && _hiddenSince.ContainsKey(id)) _hiddenSince[id] = DateTime.UtcNow;
         var iCloud = (await core.Profile.GetBrowserExtensionsAsync()).Any(e => e.IsEnabled && e.Id is "pejdijmoenmkgeppbflobdenhhabjlaj" or "mfbcdcnpokpoajjciilocoachedjkima");
@@ -450,6 +459,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
 
     public void Remove(string id)
     {
+        _spellingCache.Remove(id);
         _asleep.Remove(id);
         _pdf.Remove(id);
         _ready.Remove(id);

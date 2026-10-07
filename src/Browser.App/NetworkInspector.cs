@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Text;
+using Browser.Core;
 using Microsoft.Web.WebView2.Core;
 
 namespace Browser.App;
@@ -29,6 +31,16 @@ public sealed class NetworkInspector(Action<string> post)
     // requêtes n'arrivent plus et le moteur finit par appeler un objet disparu (plantage constaté en version publiée).
     private readonly Dictionary<string, List<CoreWebView2DevToolsProtocolEventReceiver>> _receivers = new();
     private bool _postPending;
+    private readonly Dictionary<string, List<object>> _console = new();
+    // ponytail: one exact URL mock per tab; use a rule list when simultaneous mocks are needed.
+    private readonly Dictionary<string, NetworkDraft> _mocks = new();
+    private readonly Dictionary<string, CancellationTokenSource> _mockCancel = new(), _replays = new();
+    private readonly Dictionary<string, object> _results = new();
+    private readonly HashSet<string> _canceled = new();
+    private readonly HashSet<string> _mockBusy = new();
+    private readonly Dictionary<string, SemaphoreSlim> _mockLocks = new();
+    public string[] ActiveMocks => _mocks.Keys.Concat(_mockBusy).Distinct().ToArray();
+    private static readonly HttpClient Client = new(new HttpClientHandler { UseCookies = false, AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.All }) { Timeout = TimeSpan.FromSeconds(20) };
 
     /// <summary>Onglet affiché par le panneau ; null : panneau fermé.</summary>
     public string? Shown { get; set; }
@@ -37,6 +49,7 @@ public sealed class NetworkInspector(Action<string> post)
     {
         if (!_listening.Add(tabId)) return;
         var log = _log[tabId] = new List<Entry>();
+        var console = _console[tabId] = new List<object>();
         Entry? Find(JsonElement p) => Text(p, "requestId") is { } id ? log.FindLast(e => e.Id == id) : null;
 
         On(core, "Network.requestWillBeSent", p =>
@@ -48,11 +61,11 @@ public sealed class NetworkInspector(Action<string> post)
                 log.Add(entry = new Entry { Id = id });
                 if (log.Count > MaxEntries) log.RemoveAt(0);
             }
-            (entry.Method, entry.Url, entry.Type) = (Text(request, "method") ?? "", Text(request, "url") ?? "", Text(p, "type") ?? entry.Type);
+            (entry.Method, entry.Url, entry.Type) = (Text(request, "method") ?? "", NetworkTools.SafeUrl(Text(request, "url") ?? ""), Text(p, "type") ?? entry.Type);
             entry.Started = Number(p, "timestamp");
             entry.RequestHeaders = Headers(request);
             var body = Text(request, "postData") ?? "";
-            entry.PostData = body.Length > MaxPostData ? body[..MaxPostData] : body;
+            entry.PostData = NetworkTools.Redact(body.Length > MaxPostData ? body[..MaxPostData] : body);
         });
         On(core, "Network.responseReceived", p =>
         {
@@ -74,7 +87,19 @@ public sealed class NetworkInspector(Action<string> post)
             entry.Failed = p.TryGetProperty("canceled", out var canceled) && canceled.ValueKind == JsonValueKind.True ? "canceled" : Text(p, "errorText") ?? "failed";
             entry.Ms = Math.Max(0, (Number(p, "timestamp") - entry.Started) * 1000);
         });
-        try { await core.CallDevToolsProtocolMethodAsync("Network.enable", "{}"); }
+        On(core, "Runtime.consoleAPICalled", p => {
+            var text = p.TryGetProperty("args", out var args) ? string.Join(" ", args.EnumerateArray().Select(a => a.TryGetProperty("value", out var v) ? v.ToString() : Text(a,"description") ?? Text(a,"type") ?? "")) : "";
+            console.Add(new { level = Text(p,"type") ?? "log", text = NetworkTools.Redact(text) });
+            if (console.Count > 200) console.RemoveAt(0);
+        });
+        On(core, "Runtime.exceptionThrown", p => {
+            if (!p.TryGetProperty("exceptionDetails", out var details)) return;
+            var text = details.TryGetProperty("exception", out var error) ? Text(error,"description") : Text(details,"text");
+            console.Add(new { level = "error", text = NetworkTools.Redact(text ?? "Error") });
+            if (console.Count > 200) console.RemoveAt(0);
+        });
+        On(core, "Fetch.requestPaused", p => { _ = PausedAsync(tabId, core, p.Clone()); });
+        try { await core.CallDevToolsProtocolMethodAsync("Network.enable", "{\"maxTotalBufferSize\":4194304,\"maxResourceBufferSize\":1048576,\"maxPostDataSize\":20000}"); await core.CallDevToolsProtocolMethodAsync("Runtime.enable", "{}"); }
         catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { _listening.Remove(tabId); }
 
         void On(CoreWebView2 target, string name, Action<JsonElement> handle)
@@ -98,6 +123,8 @@ public sealed class NetworkInspector(Action<string> post)
     public void Clear(string tabId)
     {
         _log.GetValueOrDefault(tabId)?.Clear();
+        _console.GetValueOrDefault(tabId)?.Clear();
+        _results.Remove(tabId);
         Post();
     }
 
@@ -107,6 +134,10 @@ public sealed class NetworkInspector(Action<string> post)
         _log.Remove(tabId);
         _listening.Remove(tabId);
         _receivers.Remove(tabId);
+        _console.Remove(tabId); _mocks.Remove(tabId); _results.Remove(tabId);
+        _mockLocks.Remove(tabId);
+        if (_mockCancel.Remove(tabId, out var mock)) { mock.Cancel(); mock.Dispose(); }
+        if (_replays.Remove(tabId, out var replay)) replay.Cancel();
     }
 
     // Les requêtes arrivent par rafales : le panneau est mis à jour quatre fois par seconde au plus.
@@ -125,6 +156,9 @@ public sealed class NetworkInspector(Action<string> post)
         post(JsonSerializer.Serialize(new
         {
             panel = "network",
+            tabId = Shown, console = _console.GetValueOrDefault(Shown, []),
+            mock = _mocks.GetValueOrDefault(Shown) is { } rule ? new { Url = NetworkTools.SafeUrl(rule.Url), rule.Method, rule.Mode, rule.Status, rule.Delay } : null,
+            result = _results.GetValueOrDefault(Shown), busy = _replays.ContainsKey(Shown), mockBusy = _mockBusy.Contains(Shown),
             items = _log.GetValueOrDefault(Shown, []).Select(e => new
             {
                 id = e.Id, method = e.Method, url = e.Url, type = e.Type, status = e.Status, mime = e.Mime, size = e.Size, ms = e.Ms, failed = e.Failed,
@@ -135,6 +169,7 @@ public sealed class NetworkInspector(Action<string> post)
     /// <summary>Détail d'une requête : en-têtes, corps envoyé, et réponse si elle est du texte encore en mémoire.</summary>
     public async Task PostDetailAsync(string tabId, CoreWebView2 core, string requestId)
     {
+        if (Shown != tabId) return;
         if (_log.GetValueOrDefault(tabId)?.FindLast(e => e.Id == requestId) is not { } entry) return;
         string body = "", note = "";
         try
@@ -151,10 +186,11 @@ public sealed class NetworkInspector(Action<string> post)
         {
             note = "unavailable"; // réponse sans corps, ou déjà sortie de la mémoire du moteur
         }
+        if (Shown != tabId) return;
         post(JsonSerializer.Serialize(new
         {
-            panel = "network-detail", id = entry.Id, url = entry.Url, method = entry.Method, status = entry.Status, mime = entry.Mime,
-            failed = entry.Failed, requestHeaders = entry.RequestHeaders, responseHeaders = entry.ResponseHeaders, postData = entry.PostData, body, note,
+            panel = "network-detail", tabId, id = entry.Id, url = entry.Url, method = entry.Method, status = entry.Status, mime = entry.Mime,
+            failed = entry.Failed, requestHeaders = entry.RequestHeaders, responseHeaders = entry.ResponseHeaders, postData = entry.PostData, body = NetworkTools.Redact(body), note,
         }));
     }
 
@@ -168,8 +204,92 @@ public sealed class NetworkInspector(Action<string> post)
     {
         var headers = new Dictionary<string, string>();
         if (e.TryGetProperty("headers", out var all) && all.ValueKind == JsonValueKind.Object)
-            foreach (var header in all.EnumerateObject()) headers[header.Name] = header.Value.ToString();
+            foreach (var header in all.EnumerateObject()) headers[header.Name] = NetworkTools.Secret(header.Name) ? NetworkTools.Mask : NetworkTools.Redact(header.Value.ToString());
         return headers;
+    }
+
+    public async Task ReplayAsync(string tabId, string json)
+    {
+        if (_replays.ContainsKey(tabId)) return;
+        var draft = NetworkTools.Parse(json);
+        if (draft is null) { Result(tabId, new { error = "invalid" }); return; }
+        using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(20)); _replays[tabId] = cancel; _results.Remove(tabId); Post();
+        try
+        {
+            using var request = new HttpRequestMessage(new HttpMethod(draft.Method), draft.Url);
+            if (draft.Body.Length > 0) request.Content = new StringContent(draft.Body, Encoding.UTF8);
+            foreach (var (name,value) in draft.Headers)
+            {
+                if (name.Equals("Content-Type", StringComparison.OrdinalIgnoreCase))
+                { request.Content ??= new StringContent(""); request.Content.Headers.Remove(name); if(!request.Content.Headers.TryAddWithoutValidation(name,value))throw new ArgumentException(); }
+                else if (!request.Headers.TryAddWithoutValidation(name,value)) throw new ArgumentException();
+            }
+            using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancel.Token);
+            using var reader = new StreamReader(await response.Content.ReadAsStreamAsync(cancel.Token));
+            var buffer = new char[MaxBody + 1]; var length = await reader.ReadBlockAsync(buffer.AsMemory(), cancel.Token);
+            var headers = response.Headers.Concat(response.Content.Headers).ToDictionary(h=>h.Key,h=>NetworkTools.Secret(h.Key)?NetworkTools.Mask:NetworkTools.Redact(string.Join(", ",h.Value)));
+            Result(tabId, new { status = (int)response.StatusCode, body = NetworkTools.Redact(new string(buffer,0,Math.Min(length,MaxBody))), headers, truncated = length > MaxBody });
+        }
+        catch (Exception e) when (e is HttpRequestException or OperationCanceledException or ArgumentException or IOException)
+        { Result(tabId, new { error = e is OperationCanceledException ? (_canceled.Contains(tabId) ? "canceled" : "timeout") : "failed", reason = e is HttpRequestException http ? http.HttpRequestError.ToString() : "" }); }
+        finally { if (_replays.GetValueOrDefault(tabId) == cancel) _replays.Remove(tabId); _canceled.Remove(tabId); Post(); }
+    }
+
+    public void CancelReplay(string tabId) { if (_replays.TryGetValue(tabId, out var c)) { _canceled.Add(tabId); c.Cancel(); } }
+    private void Result(string tabId, object result) { if (!_listening.Contains(tabId)) return; _results[tabId] = result; Post(); }
+
+    public async Task MockAsync(string tabId, CoreWebView2 core, string? json)
+    {
+        if (!_mockLocks.TryGetValue(tabId,out var gate)) _mockLocks[tabId]=gate=new(1,1);
+        await gate.WaitAsync();
+        try
+        {
+        if (!_listening.Contains(tabId)) return;
+        _mockBusy.Add(tabId);
+        Post();
+        var draft = json is null ? null : NetworkTools.Parse(json);
+        if (json is not null && draft is null) { _mockBusy.Remove(tabId); Result(tabId, new { error = "invalid" }); return; }
+        _mocks.Remove(tabId);
+        if (_mockCancel.Remove(tabId,out var old)) { old.Cancel(); old.Dispose(); }
+        try
+        {
+            await core.CallDevToolsProtocolMethodAsync("Fetch.disable", "{}");
+            if (draft is not null)
+            {
+                _mocks[tabId] = draft; _mockCancel[tabId] = new();
+                await core.CallDevToolsProtocolMethodAsync("Fetch.enable", JsonSerializer.Serialize(new { patterns = new[] { new { urlPattern = "*", resourceType = "XHR", requestStage = "Request" }, new { urlPattern = "*", resourceType = "Fetch", requestStage = "Request" } } }));
+            }
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException)
+        { _mocks.Remove(tabId); Result(tabId, new { error = "mock-unavailable" }); }
+        finally { _mockBusy.Remove(tabId); }
+        Post();
+        }
+        finally { gate.Release(); }
+    }
+
+    private async Task PausedAsync(string tabId, CoreWebView2 core, JsonElement p)
+    {
+        var id = Text(p,"requestId"); if (id is null) return;
+        try
+        {
+            if (!_mocks.TryGetValue(tabId,out var draft) || !p.TryGetProperty("request",out var request) || Text(request,"url") != draft.Url || Text(request,"method") != draft.Method)
+            { await core.CallDevToolsProtocolMethodAsync("Fetch.continueRequest", JsonSerializer.Serialize(new { requestId=id })); return; }
+            var token = _mockCancel[tabId].Token;
+            try { await Task.Delay(draft.Delay, token); } catch (OperationCanceledException) { return; } // Fetch.disable resumes the request.
+            if (token.IsCancellationRequested) return;
+            if (draft.Mode == "timeout") await core.CallDevToolsProtocolMethodAsync("Fetch.failRequest", JsonSerializer.Serialize(new { requestId=id, errorReason="TimedOut" }));
+            else
+            {
+                var body = draft.Mode == "empty" ? "" : draft.Mode == "invalid" ? "{" : draft.Body;
+                await core.CallDevToolsProtocolMethodAsync("Fetch.fulfillRequest", JsonSerializer.Serialize(new { requestId=id, responseCode=draft.Status, responseHeaders=draft.Headers.Select(h=>new { name=h.Key,value=h.Value }), body=Convert.ToBase64String(Encoding.UTF8.GetBytes(body)) }));
+            }
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException)
+        {
+            try { await core.CallDevToolsProtocolMethodAsync("Fetch.continueRequest", JsonSerializer.Serialize(new { requestId=id })); }
+            catch (Exception retry) when (retry is InvalidOperationException or System.Runtime.InteropServices.COMException) { }
+        }
     }
 }
 

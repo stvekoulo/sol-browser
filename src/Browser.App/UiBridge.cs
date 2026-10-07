@@ -120,9 +120,9 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
     public void BroadcastTheme()
     {
         var on = Settings;
-        if (pages is not null && _activeId is not null && pages.CoreOf(_activeId) is { Source: Settings.DefaultHomePage })
+        if (pages is not null && _activeId is not null && pages.CoreOf(_activeId) is { } ownPage && ownPage.Source is Settings.DefaultHomePage or QuickNotes.PageUrl)
         {
-            var wall = on?.StartWallpaper == true;
+            var wall = ownPage.Source == Settings.DefaultHomePage && on?.StartWallpaper == true;
             var darkStart = wall || on?.Theme == "dark" || (on?.Theme == "system" && IsSystemDark());
             s_lastProbe = (wall ? "rgb(40, 68, 105)" : darkStart ? "rgb(9, 9, 11)" : "rgb(238, 240, 226)", darkStart, null);
         }

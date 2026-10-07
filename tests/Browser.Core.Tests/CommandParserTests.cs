@@ -24,6 +24,15 @@ public class CommandParserTests
     }
 
     [Fact]
+    public void Palette_choices_require_an_identifier()
+    {
+        Assert.Equal(new Command("palette.open"), CommandParser.Parse("""{"type":"palette.open"}"""));
+        Assert.Equal(new Command("palette.pick", Id: "1:2"), CommandParser.Parse("""{"type":"palette.pick","id":"1:2"}"""));
+        Assert.Null(CommandParser.Parse("""{"type":"palette.pick"}"""));
+        Assert.Null(CommandParser.Parse("""{"type":"palette.pick","id":2}"""));
+    }
+
+    [Fact]
     public void Parses_placement_numbers()
     {
         var c = CommandParser.Parse("""{"type":"suggest","id":"t1","query":"web","x":120,"y":84.5,"width":600}""");

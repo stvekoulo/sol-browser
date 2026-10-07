@@ -8,26 +8,7 @@ namespace Browser.App;
 
 public sealed partial class MainWindow : Window
 {
-    // Touche (code virtuel), modificateurs (Alt 1, Ctrl 2, Maj 4), action.
-    private static readonly (uint Key, uint Modifiers, string Action)[] Shortcuts =
-    [
-        (0x54, 2, "tab.open"),        // Ctrl+T
-        (0x57, 2, "tab.close"),       // Ctrl+W
-        (0x54, 2 | 4, "tab.reopen"),  // Ctrl+Maj+T
-        (0x4E, 2 | 4, "window.private"), // Ctrl+Maj+N
-        (0x4C, 2, "address.focus"),   // Ctrl+L
-        (0x52, 2, "nav.reload"),      // Ctrl+R
-        (0x74, 0, "nav.reload"),      // F5
-        (0x09, 2, "tab.next"),        // Ctrl+Tab
-        (0x09, 2 | 4, "tab.previous"),// Ctrl+Maj+Tab
-        (0x25, 1, "nav.back"),        // Alt+Gauche
-        (0x27, 1, "nav.forward"),     // Alt+Droite
-        (0xBB, 2, "zoom.in"),         // Ctrl + (touche =/+)
-        (0x6B, 2, "zoom.in"),         // Ctrl + (pavé numérique)
-        (0xBD, 2, "zoom.out"),        // Ctrl -
-        (0x6D, 2, "zoom.out"),        // Ctrl - (pavé numérique)
-        (0x30, 2, "zoom.reset"),      // Ctrl 0
-    ];
+    private static readonly IReadOnlyList<BrowserShortcut> Shortcuts = BrowserShortcuts.All;
 
     private readonly nint _hwnd;
     private readonly SubclassProc _wndProc; // gardé en champ : le délégué ne doit pas être libéré
@@ -129,6 +110,7 @@ public sealed partial class MainWindow : Window
         var capture = new PopupHost(CaptureFrame, CaptureControls, captureBridge);
         Root.SizeChanged += (_, _) => capture.SetHeight(CaptureFrame.Height);
         popup.PageLeft = () => SidebarColumn.ActualWidth;
+        popup.PageVertical = () => (Pages.TransformToVisual((UIElement)PopupFrame.Parent).TransformPoint(new Windows.Foundation.Point(0, 0)).Y, Pages.ActualHeight);
         var dockBridge = new UiBridge(Dock, "index.html#dock");
         bridge.AttachPopup(dockBridge);
         var uiFolder = Path.Combine(AppContext.BaseDirectory, "ui");
@@ -390,7 +372,7 @@ public sealed partial class MainWindow : Window
     private void SetShortcuts(bool active)
     {
         _shortcutsActive = active;
-        for (var i = 0; i < Shortcuts.Length; i++)
+        for (var i = 0; i < Shortcuts.Count; i++)
         {
             UnregisterHotKey(_hwnd, i);
             if (active && !(_controller?.UseNativeZoom == true && Shortcuts[i].Action.StartsWith("zoom.")))
@@ -400,7 +382,7 @@ public sealed partial class MainWindow : Window
 
     private nint WndProc(nint hwnd, uint msg, nint wParam, nint lParam, nuint id, nuint data)
     {
-        if (msg == 0x0312 /* WM_HOTKEY */ && wParam >= 0 && wParam < Shortcuts.Length)
+        if (msg == 0x0312 /* WM_HOTKEY */ && wParam >= 0 && wParam < Shortcuts.Count)
         {
             var action = Shortcuts[(int)wParam].Action;
             if (action == "address.focus") Ui.Focus(FocusState.Programmatic);

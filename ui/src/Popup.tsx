@@ -4,15 +4,21 @@ import { DownloadCard, type Download } from './Downloads';
 import GroupEditor from './GroupEditor';
 import { t, useLang } from './i18n';
 import { Icon } from './Icons';
+import QuickNotes, { type NotesContent } from './QuickNotes';
 
 type Item = { url: string; title: string; kind?: 'search' | 'go' | 'history' | 'site' };
+type PaletteItem = { id: string; title: string; hint: string; shortcut: string; group: string; keywords: string };
 type Content =
+  | { popup: 'palette'; items: PaletteItem[]; listHeight: number }
+  | NotesContent
+  | { popup: 'notes-select'; items: {id:string; title:string}[] }
+  | { popup: 'translation'; id: string; target: 'fr' | 'en'; available: boolean; original: boolean }
   | { popup: 'suggestions'; items: Item[] }
   | { popup: 'library'; tab?: 'history' | 'bookmarks' | null; query: string; page: number; pageSize: number; total: number; bookmarks: Item[]; history: Item[] }
   | { popup: 'menu'; items: string[] }
   | { popup: 'split-layout'; ratio: number }
   | { popup: 'downloads'; items: Download[] }
-  | { popup: 'settings'; version: string; update: { version: string; percent: number; ready: boolean } | null; check: 'idle' | 'checking' | 'current' | 'failed' | 'portable'; zoom: number; uiScale: number; theme: number; language: number; home: string; font: number; ublock: string | null; engine: number; engines: string[]; sites: { origin: string; host: string; summary: string }[]; permissions: number; siteData: 'idle' | 'clearing' | 'done' | 'failed'; tint: Setting[]; items: Setting[] }
+  | { popup: 'settings'; version: string; update: { version: string; percent: number; ready: boolean } | null; check: 'idle' | 'checking' | 'current' | 'failed' | 'portable'; zoom: number; uiScale: number; shortcuts: {action:string; title:string; keys:string}[]; theme: number; language: number; spelling: number; spellingLanguages: string[]; home: string; font: number; ublock: string | null; engine: number; engines: string[]; sites: { origin: string; host: string; summary: string }[]; permissions: number; siteData: 'idle' | 'clearing' | 'done' | 'failed'; tint: Setting[]; items: Setting[] }
   | { popup: 'profiles'; items: Profile[] }
   | { popup: 'group-edit'; create: boolean; id: string; name: string; color: string; icon: string; presets: string[] }
   | { popup: 'shortcut-edit'; id: string; name: string; url: string }
@@ -54,6 +60,48 @@ function menuIconPath(label: string): string {
 }
 
 const isClosing = (label: string) => /fermer|close/i.test(label);
+
+function CommandPalette({items, listHeight}: {items: PaletteItem[]; listHeight: number}) {
+  const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState(0);
+  const input = useRef<HTMLInputElement>(null);
+  const list = useRef<HTMLDivElement>(null);
+  const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const words = normalize(query).trim().split(/\s+/).filter(Boolean);
+  const results = items.filter(item => words.every(word => normalize(`${item.title} ${item.hint} ${item.keywords}`).includes(word)));
+  const pick = (item: PaletteItem) => send({type:'palette.pick',id:item.id});
+  useEffect(() => { const frame = requestAnimationFrame(() => input.current?.focus()); return () => cancelAnimationFrame(frame); }, []);
+  useEffect(() => { list.current?.querySelector(`[data-palette-index="${selected}"]`)?.scrollIntoView({block:'nearest'}); }, [selected, query, listHeight]);
+  return <>
+    <div className="palette-heading"><span className="popup-header-title">{t('Commandes Sol', 'Sol commands')}</span>
+      <button className="pill-action" aria-label={t('Fermer', 'Close')} onClick={() => send({type:'popup.close'})}>×</button></div>
+    <div className="palette-search"><Icon d="M10.5 10.5l3 3M7 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8" size={16}/>
+      <input ref={input} role="combobox" aria-expanded="true" aria-controls="palette-results" aria-autocomplete="list"
+        aria-activedescendant={results[selected] ? `palette-result-${results[selected].id}` : undefined}
+        aria-label={t('Rechercher une commande ou un onglet', 'Find a command or tab')}
+        placeholder={t('Rechercher une action ou un onglet…', 'Search for an action or tab…')}
+        value={query} autoComplete="off" spellCheck={false}
+        onChange={e => {setQuery(e.target.value);setSelected(0);}}
+        onKeyDown={e => {
+          if (e.nativeEvent.isComposing) return;
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {e.preventDefault();if(results.length)setSelected(i => (i + (e.key==='ArrowDown'?1:results.length-1)) % results.length);}
+          if (e.key === 'Enter') {e.preventDefault();if(results[selected])pick(results[selected]);}
+        }}/></div>
+    <div ref={list} id="palette-results" className="popup-list palette-results" style={{maxHeight:listHeight}} role="listbox" aria-label={t('Actions et onglets', 'Actions and tabs')}>
+      {results.map((item,index) => <div key={item.id} role="presentation">
+        {(index===0 || results[index-1].group!==item.group) && <div className="palette-group" aria-hidden>{item.group==='tabs'?t('Onglets ouverts','Open tabs'):t('Actions','Actions')}</div>}
+        <button id={`palette-result-${item.id}`} data-palette-index={index} role="option" aria-selected={index===selected} tabIndex={-1}
+          className={`row palette-option${index===selected?' selected':''}`} onMouseMove={()=>setSelected(index)} onClick={()=>pick(item)}>
+          <span className="row-badge" aria-hidden><Icon d={item.group==='tabs'?'M3 2.5h7l3 3v8H3zM10 2.5v3h3':menuIconPath(item.title)} size={14}/></span>
+          <span className="palette-label"><span className="row-title">{item.title || formatDomain(item.hint)}</span>{item.hint && <span className="palette-hint">{item.hint}</span>}</span>
+          {item.shortcut && <kbd>{item.shortcut}</kbd>}
+        </button>
+      </div>)}
+      {!results.length && <div className="palette-empty" role="status">{t('Aucune action ou aucun onglet trouvé.', 'No matching action or tab.')}</div>}
+    </div>
+    <div className="palette-footer"><span>↑ ↓ {t('Parcourir','Navigate')}</span><span>↵ {t('Ouvrir','Open')}</span><span>{t('Échap Fermer','Esc Close')}</span></div>
+  </>;
+}
 
 export default function Popup() {
   const [content, setContent] = useState<Content | null>(null);
@@ -119,6 +167,30 @@ export default function Popup() {
   }, [content, libTab, settingsSection]);
 
   if (!content) return null;
+
+  if (content.popup === 'palette')
+    return <div key={opening} ref={root} className="popup arriving palette-popup"><CommandPalette items={content.items} listHeight={content.listHeight} /></div>;
+
+  if (content.popup === 'notes-select')
+    return <div ref={root} className="popup arriving"><div className="popup-header"><span className="popup-header-title">{t('Ajouter le passage à…', 'Add passage to…')}</span></div>
+      <button className="row" onClick={()=>send({type:'notes.select',id:''})}>{t('Une nouvelle note', 'A new note')}</button>
+      <div className="popup-list">{content.items.map(n=><button className="row" key={n.id} onClick={()=>send({type:'notes.select',id:n.id})}>{n.title}</button>)}</div></div>;
+
+  if (content.popup === 'notes')
+    return <div key={opening} ref={root} className="popup arriving notes-popup"><QuickNotes key={`${opening}-${content.draft.id}-${content.draft.updated}`} content={content} /></div>;
+
+  if (content.popup === 'translation')
+    return <div key={opening} ref={root} className="popup arriving translation-popup" aria-label={t('Traduire la page', 'Translate page')}>
+      <div className="translation-heading"><span className="row-title">{t('Traduire la page', 'Translate page')}</span>
+        <button className="pill-action" aria-label={t('Fermer', 'Close')} onClick={() => send({type:'popup.close'})}>×</button></div>
+      <div className="popup-segment" role="group" aria-label={t('Langue de traduction', 'Translation language')}>
+        <button className="popup-seg-btn" disabled={!content.available} onClick={() => send({type:'translation.run', id:content.id, query:content.target})}>
+          {content.target === 'fr' ? t('Traduire en français', 'Translate to French') : t('Traduire en anglais', 'Translate to English')}<span aria-hidden> ↗</span>
+        </button>
+      </div>
+      {content.original && <button className="pill-action" onClick={() => send({type:'translation.original', id:content.id})}>{t('Voir l’original', 'View original')}</button>}
+      <p className="row-hint">{content.available ? t('Google Traduction affiche la page dans cet onglet. Son adresse est transmise à Google.', 'Google Translate displays the page in this tab. Its address is sent to Google.') : t('Cette adresse locale ne peut pas être traduite par Google.', 'This local address cannot be translated by Google.')}</p>
+    </div>;
 
   if (content.popup === 'suggestions')
     return (
@@ -196,6 +268,14 @@ export default function Popup() {
 <nav className="popup-segment settings-nav" aria-label={t('Sections des paramètres', 'Settings sections')}>
 {[['general',t('Général','General')],['appearance',t('Apparence','Appearance')],['privacy',t('Sécurité','Security')],['data',t('Données','Data')],['about','Sol']].map(([key,label])=><button key={key} aria-pressed={settingsSection===key} className={'popup-seg-btn'+(settingsSection===key?' active':'')} onClick={()=>setSettingsSection(key)}>{label}</button>)}
 </nav>
+<div className="theme-row shortcuts-settings" hidden={settingsSection !== 'general'}>
+  <div className="shortcuts-heading"><span className="row-title">{t('Commandes et raccourcis','Commands and shortcuts')}</span>
+    <button className="pill-action" onClick={()=>send({type:'palette.open'})}>{t('Ouvrir les commandes','Open commands')}</button></div>
+  <p className="row-hint">{t('Accédez aux actions de Sol depuis le clavier. La palette s’ouvre avec Ctrl+Maj+P.', 'Access Sol actions from the keyboard. Open the palette with Ctrl+Shift+P.')}</p>
+  <details><summary>{t('Voir les raccourcis clavier','View keyboard shortcuts')}</summary>
+    <div className="shortcuts-list">{content.shortcuts.map(s=><div key={s.action} className="shortcut-setting"><span>{s.title}</span><kbd>{s.keys}</kbd></div>)}</div>
+  </details>
+</div>
 <div className="theme-row" hidden={settingsSection !== 'appearance'}>
 <span className="row-title">{t('Taille de l’interface', 'Interface size')}</span>
 <span className="row-sub">{t('Barres, boutons et menus. Le zoom des sites reste indépendant.', 'Bars, buttons and menus. Website zoom stays independent.')}</span>
@@ -248,6 +328,18 @@ export default function Popup() {
               </button>
             ))}
           </div>
+        </div>
+        <div className="theme-row" hidden={settingsSection !== 'general'}>
+          <span className="row-title">{t('Orthographe', 'Spelling')}</span>
+          <div className="popup-segment" role="radiogroup" aria-label={t('Orthographe', 'Spelling')}>
+            {[t('Désactivée', 'Off'), 'Français', 'English', t('Les deux', 'Both')].map((label, index) =>
+              <button key={label} role="radio" aria-checked={content.spelling === index} className={`popup-seg-btn${content.spelling === index ? ' active' : ''}`}
+                onClick={() => send({type:'settings.set', id:'spelling', index})}>{label}</button>)}
+          </div>
+          <p className="row-hint">{t('Correction locale · dictionnaires Windows : ', 'Local correction · Windows dictionaries: ')}{content.spellingLanguages.map(l => l.startsWith('fr') ? 'Français' : 'English').join(', ') || t('aucun installé', 'none installed')}</p>
+          {['fr', 'en'].some(prefix => !content.spellingLanguages.some(l => l.startsWith(prefix))) &&
+            <p className="row-hint">{t('Une langue absente ne peut pas être corrigée. Ajoutez son option de saisie dans Windows, puis redémarrez Sol.', 'A missing language cannot be checked. Add its typing feature in Windows, then restart Sol.')}</p>}
+          <button className="pill-action" onClick={() => send({type:'spelling.languages'})}>{t('Dictionnaires Windows', 'Windows dictionaries')} ↗</button>
         </div>
         <div className="theme-row" hidden={settingsSection !== 'appearance'}>
           <span className="row-title">{t('Police', 'Font')}</span>
@@ -348,7 +440,7 @@ export default function Popup() {
           <div className="setting-row static" hidden={settingsSection !== 'data'}>
             <span className="setting-text">
               <span className="row-title">{t('Sauvegarde', 'Backup')}</span>
-              <span className="row-sub">{t('Réglages, onglets, favoris, historique et mots de passe dans un fichier chiffré par une clé que vous choisissez.', 'Settings, tabs, bookmarks, history and passwords in a file encrypted with a key you choose.')}</span>
+              <span className="row-sub">{t('Réglages, onglets, favoris, historique, notes et mots de passe dans un fichier chiffré par une clé que vous choisissez.', 'Settings, tabs, bookmarks, history, notes and passwords in a file encrypted with a key you choose.')}</span>
             </span>
             <span className="row-actions">
               <button className="pill-action" onClick={() => send({ type: 'backup.export' })}>{t('Exporter', 'Export')}</button>

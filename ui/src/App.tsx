@@ -116,6 +116,15 @@ export default function App() {
       </div>
 
       <div className="topbar-right pill-surface" onMouseDown={dragWindow}>
+        <button className="pill-icon-btn" aria-label={t('Notes rapides', 'Quick notes')} title={t('Notes rapides', 'Quick notes')}
+          onClick={()=>send({type:'notes.manage'})}>
+          <Icon d="M4 2.5h8v11H4zM6 5h4M6 8h4M6 11h2" />
+        </button>
+        {activeTab && !isStartPage(activeTab.url) && activeTab.url !== 'https://start.sol/index.html#notes' && /^https?:\/\//.test(activeTab.url) &&
+          <button data-action="translation.open" className={`pill-icon-btn${activeTab.translated ? ' translation-active' : ''}`} aria-label={t('Traduire la page', 'Translate page')} aria-pressed={!!activeTab.translated} title={activeTab.translated ? t('Traduction · voir l’original', 'Translation · view original') : t('Traduire la page', 'Translate page')}
+            onClick={e => { const box = e.currentTarget.getBoundingClientRect(); send({ type: 'translation.open', id: activeTab.id, x: box.right, y: box.bottom + 6 }); }}>
+            <Icon d="M2 4h7M5.5 2v2M3 4c.5 3 2 5 5 6M8 4c-.5 3-2 5-5 6M9 13l2.5-7L14 13M10 11h3" />
+          </button>}
         {activeTab?.storeDetail && !state.privateMode &&
           <button className="store-install" onClick={() => send({ type:'extension.current' })}>{activeTab.storeInstalled ? t('Installée', 'Installed') : t('Ajouter à Sol', 'Add to Sol')}</button>}
         {state.extensions?.map(extension => <button key={extension.id} className="pill-icon-btn pinned-extension" aria-label={extension.name} title={extension.name}
@@ -138,6 +147,7 @@ export default function App() {
         <button
           className="pill-icon-btn"
           aria-label={t('Extensions', 'Extensions')}
+          data-action="extensions.menu"
           title={t('Extensions', 'Extensions')}
           onClick={e => {
             const box = e.currentTarget.getBoundingClientRect();
@@ -149,6 +159,7 @@ export default function App() {
         </button>
         <button
           className="pill-icon-btn profile-btn"
+          data-action="profile.menu"
           aria-label={t(`Profil : ${state.profile}`, `Profile: ${state.profile}`)}
           title={t(`Profil : ${state.profile}`, `Profile: ${state.profile}`)}
           onClick={e => {
@@ -161,6 +172,7 @@ export default function App() {
         <button
           className="pill-icon-btn"
           aria-label={t('Réglages', 'Settings')}
+          data-action="settings.open"
           title={t('Réglages', 'Settings')}
           onClick={e => {
             const box = e.currentTarget.getBoundingClientRect();
@@ -262,6 +274,14 @@ function AddressPill({ tab, focused, grow, shield }: { tab: Tab | undefined; foc
       </form>
 
       <div className="address-trail">
+        {tab && /^https?:/.test(rawUrl) && !isStartPage(rawUrl) && rawUrl !== 'https://start.sol/index.html#notes' && (
+          <button className={`inline-btn${tab.reader ? ' on' : ''}`} aria-pressed={!!tab.reader}
+            aria-label={tab.reader ? t('Quitter le mode lecteur', 'Exit reader mode') : t('Mode lecteur', 'Reader mode')}
+            title={tab.reader ? t('Quitter le mode lecteur', 'Exit reader mode') : t('Mode lecteur', 'Reader mode')}
+            onClick={() => send({ type: 'reader.toggle', id: tab.id })}>
+            <Icon d="M2 3h4a3 3 0 0 1 2 1 3 3 0 0 1 2-1h4v10h-4a3 3 0 0 0-2 1 3 3 0 0 0-2-1H2zM8 4v10" size={14} />
+          </button>
+        )}
         {tab?.device && (
           <button
             className="zoom-chip"
