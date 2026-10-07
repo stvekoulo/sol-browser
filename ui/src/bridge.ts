@@ -7,6 +7,8 @@ export type Tab = {
   title: string;
   pinned: boolean;
   groupId: string | null;
+  sessionId: string;
+  sessionName: string;
   asleep?: boolean; // déchargé (fermé dans un groupe, épinglé fermé, ou pas encore rouvert)
   device: string | null; // simulateur : nom de l'appareil affiché
   zoom: number; // en pour cent
@@ -63,6 +65,33 @@ const webview = (window as unknown as { chrome?: { webview?: WebView } }).chrome
 
 export const send = (command: Command) => webview?.postMessage(JSON.stringify(command));
 export const painted = () => webview?.postMessage('"ui.painted"');
+
+// Le nom sort de la petite vue web de la barre : une infobulle Windows ne sera pas coupée à 52 px.
+export function installTooltips() {
+  let timer = 0;
+  let hovered: HTMLElement | null = null;
+  const hide = () => { clearTimeout(timer); hovered = null; send({ type: 'ui.tooltip' }); };
+  document.addEventListener('pointerover', e => {
+    const button = (e.target as Element).closest<HTMLElement>('button, [role="button"], [title]');
+    if (button === hovered) return;
+    hide();
+    if (!button) return;
+    const title = button.getAttribute('title') || button.getAttribute('aria-label');
+    if (!title) return;
+    hovered = button;
+    timer = window.setTimeout(() => {
+      const box = button.getBoundingClientRect();
+      send({ type: 'ui.tooltip', title, x: box.x, y: box.y, width: box.width, height: box.height });
+    }, 500);
+  });
+  document.addEventListener('pointerout', e => {
+    if (hovered && (!(e.relatedTarget instanceof Node) || !hovered.contains(e.relatedTarget))) hide();
+  });
+  document.addEventListener('pointerdown', hide, true);
+  document.addEventListener('wheel', hide, { passive: true });
+  document.addEventListener('keydown', hide);
+  window.addEventListener('blur', hide);
+}
 
 // L'hôte envoie soit l'état complet, soit un événement ponctuel { event: "…" }.
 export type HostEvent = {
@@ -157,6 +186,7 @@ export function onState(callback: (state: State) => void, onEvent?: (event: Host
 // Extrait le nom de domaine épuré (ex. "corn.tech") pour la pilule centrale de la barre du haut.
 export const isStartPage = (url: string) => url === 'https://start.sol/index.html#start';
 export function formatDomain(url: string): string {
+  if (url.startsWith('sol://')) return url;
   if (url === 'https://start.sol/index.html#notes') return 'Notes';
   if (!url || url === 'about:blank' || isStartPage(url)) return '';
   try {
@@ -167,4 +197,8 @@ export function formatDomain(url: string): string {
     // URL non standard : affichage brut
   }
   return url;
+}
+
+export function displayAddress(url: string): string {
+  return url === 'https://start.sol/index.html#notes' ? 'sol://notes' : url;
 }

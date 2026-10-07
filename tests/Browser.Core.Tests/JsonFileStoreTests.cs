@@ -2,6 +2,17 @@ using Browser.Core;
 
 public class JsonFileStoreTests : IDisposable
 {
+    [Fact]
+    public void Full_screen_is_enabled_for_existing_profiles_and_can_be_disabled()
+    {
+        var path = File_("fullscreen.json");
+        File.WriteAllText(path, "{}");
+        var settings = JsonFileStore.Load<Settings>(path);
+        Assert.True(settings.FullScreen);
+        settings.FullScreen = false;
+        Assert.True(JsonFileStore.Save(path, settings));
+        Assert.False(JsonFileStore.Load<Settings>(path).FullScreen);
+    }
     [Theory]
     [InlineData(1, 1, 0.92)]
     [InlineData(0.9, 0.9, 0.89)]

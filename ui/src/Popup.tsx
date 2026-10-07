@@ -20,6 +20,7 @@ type Content =
   | { popup: 'downloads'; items: Download[] }
   | { popup: 'settings'; version: string; update: { version: string; percent: number; ready: boolean } | null; check: 'idle' | 'checking' | 'current' | 'failed' | 'portable'; zoom: number; uiScale: number; shortcuts: {action:string; title:string; keys:string}[]; theme: number; language: number; spelling: number; spellingLanguages: string[]; home: string; font: number; ublock: string | null; engine: number; engines: string[]; sites: { origin: string; host: string; summary: string }[]; permissions: number; siteData: 'idle' | 'clearing' | 'done' | 'failed'; tint: Setting[]; items: Setting[] }
   | { popup: 'profiles'; items: Profile[] }
+  | { popup: 'sessions'; id: string; current: string; deleting: string | null; items: {id:string;name:string;count:number}[] }
   | { popup: 'group-edit'; create: boolean; id: string; name: string; color: string; icon: string; presets: string[] }
   | { popup: 'shortcut-edit'; id: string; name: string; url: string }
   | { popup: 'compare-pick'; id: string; min: number; max: number; devices: { name: string; label: string; size: string; on: boolean }[] }
@@ -27,7 +28,7 @@ type Content =
   | { popup: 'prompt'; title: string; hint: string; placeholder: string; submit: string; value: string; command: string; id: string | null; secret?: boolean }
   | { popup: 'notice'; title: string; hint: string }
   | { popup: 'extension-confirm'; id: string; name: string; version: string; icon: string | null; update: boolean; access: string[] }
-  | { popup: 'extensions'; updates: '' | 'checking' | 'current' | 'updated' | 'failed'; installed: { id: string; name: string; version: string; enabled: boolean; page: boolean; options: boolean; pinned: boolean; icon: string | null; store: boolean; update: string | null }[]; available: { id: string; name: string; version: string; from: string }[] };
+  | { popup: 'extensions'; session: string; updates: '' | 'checking' | 'current' | 'updated' | 'failed'; installed: { id: string; name: string; version: string; enabled: boolean; page: boolean; options: boolean; pinned: boolean; icon: string | null; store: boolean; update: string | null }[]; available: { id: string; name: string; version: string; from: string }[] };
 
 type Profile = { id: string; name: string; current: boolean; renamable: boolean; deletable: boolean };
 
@@ -481,6 +482,7 @@ export default function Popup() {
       </div>
     );
 
+  if (content.popup === 'sessions') return <SessionPicker key={opening} rootRef={root} content={content} />;
   if (content.popup === 'profiles')
     return <ProfileList key={opening} rootRef={root} items={content.items} />;
 
@@ -502,7 +504,7 @@ export default function Popup() {
           <span className="popup-header-title">{t('Extensions', 'Extensions')}</span>
         </div>
         <div className="popup-list">
-          <p className="row-sub extension-note">{t('Les extensions activées s’appliquent aux pages de ce profil. Rechargez la page après un changement. Elles restent désactivées en navigation privée.', 'Enabled extensions apply to pages in this profile. Reload the page after a change. They remain disabled in private browsing.')}</p>
+          <p className="row-sub extension-note">{t('Session : ', 'Session: ')}<strong>{content.session}</strong>. {t('Les extensions activées s’appliquent aux pages de cette session. Rechargez la page après un changement. Elles restent désactivées en navigation privée.', 'Enabled extensions apply to pages in this session. Reload the page after a change. They remain disabled in private browsing.')}</p>
           {content.installed.length === 0 && <p className="row-sub extension-note">{t('Aucune extension ajoutée pour l’instant.', 'No extension added yet.')}</p>}
           {content.installed.map(e => (
             <div key={e.id} className="setting-row static extension-row">
@@ -692,7 +694,7 @@ function SiteData({ status }: { status: 'idle' | 'clearing' | 'done' | 'failed' 
       <span className="row-sub">{status === 'clearing' ? t('Effacement en cours…', 'Clearing…')
         : status === 'done' ? t('Données effacées. Rechargez les pages ouvertes.', 'Data cleared. Reload open pages.')
         : status === 'failed' ? t('Effacement impossible. Réessayez.', 'Could not clear data. Try again.')
-        : t('Déconnecte les comptes de ce profil. Conserve les favoris et mots de passe.', 'Signs out accounts in this profile. Keeps bookmarks and passwords.')}</span>
+        : t('Déconnecte les comptes de la session de l’onglet actif. Conserve les autres sessions, favoris et mots de passe.', 'Signs out accounts in the active tab’s session. Keeps other sessions, bookmarks and passwords.')}</span>
     </span>
     <span className="row-actions">
       {confirm && <button className="pill-action" onClick={() => setConfirm(false)}>{t('Annuler', 'Cancel')}</button>}
@@ -793,6 +795,31 @@ function ProfileList({ rootRef, items }: { rootRef: RefObject<HTMLDivElement | n
 }
 
 // Saisie d'un nom (profil, groupe d'onglets). La réponse part sous la forme de la commande indiquée par l'hôte.
+function SessionPicker({rootRef,content}:{rootRef:RefObject<HTMLDivElement|null>;content:Extract<Content,{popup:'sessions'}>}) {
+  const [confirm,setConfirm]=useState(''),[edit,setEdit]=useState(''),[name,setName]=useState('');
+  const busy=!!content.deleting;
+  return <div ref={rootRef} className="popup arriving sessions-popup">
+    <div className="popup-header"><span className="popup-header-title">{t('Session de ce site','Site session')}</span></div>
+    <p className="row-hint">{t('Votre choix est mémorisé pour ce site. Les autres sites utilisent la session actuelle par défaut. Changer de session recharge la page ; le contenu saisi peut être perdu.','Your choice is remembered for this site. Other sites use the current session by default. Switching reloads the page; unsaved input may be lost.')}</p>
+    <div className="popup-list">
+      {[{id:'',name:t('Session actuelle','Current session'),count:0},...content.items].map(item=><div key={item.id} className="session-entry">
+        <div className="profile-row">
+          <button className="row" disabled={busy} aria-pressed={content.current===item.id} onClick={()=>send({type:'session.set',id:content.id,query:item.id})}>
+            <span className="row-badge" aria-hidden>{item.id?'◉':'○'}</span><span className="row-title">{item.name}</span>
+            {(content.current===item.id||item.count>0)&&<span className="row-pill">{content.current===item.id?t('Actuelle','Current'):t(`${item.count} onglet(s)`,`${item.count} tab(s)`)}</span>}
+          </button>
+          {item.id&&<><button className="profile-edit" disabled={busy} aria-label={t(`Renommer ${item.name}`,`Rename ${item.name}`)} onClick={()=>{setEdit(item.id);setName(item.name);setConfirm('')}}><Icon d="M10.5 3.5l2 2-6.5 6.5-2.5.5.5-2.5z" size={12}/></button>
+            <button className="profile-delete" disabled={busy||item.count>0} title={item.count?t('Fermez les onglets de cette session pour la supprimer.','Close this session’s tabs to delete it.'):t('Supprimer cette session et ses données','Delete this session and its data')} aria-label={t(`Supprimer ${item.name}`,`Delete ${item.name}`)} onClick={()=>{setConfirm(item.id);setEdit('')}}><Icon d="M4.5 4.5l7 7M11.5 4.5l-7 7" size={12}/></button></>}
+        </div>
+        {edit===item.id&&item.id&&<form className="session-edit" onSubmit={e=>{e.preventDefault();if(name.trim())send({type:'session.rename',id:item.id,title:name})}}><input autoFocus aria-label={t('Nom de la session','Session name')} value={name} maxLength={30} onChange={e=>setName(e.target.value)}/><button className="pill-action" disabled={!name.trim()}>{t('Renommer','Rename')}</button><button type="button" className="pill-action" onClick={()=>setEdit('')}>{t('Annuler','Cancel')}</button></form>}
+        {confirm===item.id&&item.id&&<div className="session-confirm"><p className="row-hint">{t('Supprimer définitivement les cookies, connexions, stockage et extensions de cette session ?','Permanently delete this session’s cookies, sign-ins, storage and extensions?')}</p><button className="pill-action danger" disabled={busy} onClick={()=>send({type:'session.delete',id:item.id})}>{busy?t('Suppression…','Deleting…'):t('Supprimer','Delete')}</button><button className="pill-action" disabled={busy} onClick={()=>setConfirm('')}>{t('Annuler','Cancel')}</button></div>}
+      </div>)}
+    </div>
+    <button className="row" disabled={busy||content.items.length>=30} onClick={()=>send({type:'session.new',id:content.id})}><span className="row-badge" aria-hidden>+</span><span className="row-title">{t('Nouvelle session…','New session…')}</span></button>
+    <p className="row-hint">{t('Historique, favoris et notes restent partagés dans ce profil Sol. Les sessions d’une fenêtre privée sont effacées à sa fermeture.','History, bookmarks and notes stay shared in this Sol profile. Private-window sessions are erased when the window closes.')}</p>
+  </div>;
+}
+
 function NameForm({ rootRef, ask }: { rootRef: RefObject<HTMLDivElement | null>; ask: Extract<Content, { popup: 'prompt' }> }) {
   const [name, setName] = useState(ask.value);
   return (

@@ -42,6 +42,7 @@ public static class BrowserShortcuts
         new(0x32,6,"split.open","Afficher côte à côte","Show side by side","2"),
         new(0x31,6,"split.close","Quitter la vue côte à côte","Exit side by side","1"),
         new(0x41,6,"profile.menu","Espaces et profils","Spaces and profiles","A"),
+        new(0x42,6,"session.menu","Session de cet onglet","Tab session","B"),
         new(0x7A,0,"window.maximize","Plein écran","Full screen","F11"),
         new(0x4C,2,"address.focus","Barre d’adresse","Address bar","L"),
         new(0x52,2,"nav.reload","Recharger la page","Reload page","R"),

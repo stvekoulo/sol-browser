@@ -2,13 +2,15 @@
 /* Le cadre de la vue est un rectangle qu'on ne peut ni découper ni rendre transparent (voir PopupHost.cs).
    Ses quatre coins, hors de la carte arrondie, prennent donc la couleur de la page pour se fondre dedans. */
 /* La barre de défilement de la vue se règle sur la racine : celle du corps ne s'y applique pas. */
-html:has(> .popup-body) { scrollbar-width: none; }
+html:has(> .popup-body) { overflow:hidden; }
 .popup-body {
   background: var(--page-real, var(--page-bg));
   /* Un panneau plus haut que la place disponible défile, sans barre visible. */
-  overflow: hidden auto;
-  scrollbar-width: none;
+  overflow: hidden;
 }
+.popup-body #root { overflow:auto; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:var(--border-strong) transparent; }
+.popup-body #root::-webkit-scrollbar { width:5px; }
+.popup-body #root::-webkit-scrollbar-thumb { background:var(--border-strong); border-radius:5px; }
 
 .popup {
   padding: 8px;
@@ -27,9 +29,16 @@ html:has(> .popup-body) { scrollbar-width: none; }
   gap: 3px;
   max-height: 400px;
   overflow-y: auto;
+  overscroll-behavior:contain;
   scrollbar-width: none;
 }
 .settings-popup { padding:14px; gap:10px; }
+.sessions-popup { padding:12px; gap:8px; }
+.sessions-popup .row-hint { margin:0 8px; font-size:11px; line-height:1.5; opacity:.7; }
+.session-edit { display:flex; flex-wrap:wrap; gap:6px; padding:6px; }
+.session-edit input { min-width:0; width:100%; padding:8px 12px; border:1px solid var(--border-card); background:var(--bg-tab-hover); border-radius:16px; color:inherit; font:inherit; }
+.session-confirm { padding:8px; display:flex; flex-wrap:wrap; gap:6px; }
+.session-confirm .row-hint { flex-basis:100%; margin:0 0 4px; }
 .notes-popup { padding:14px; gap:10px; }
 .notes-popup .row-hint { margin:0; font-size:12px; line-height:1.5; opacity:.75; }
 .notes-popup input::placeholder, .notes-popup textarea::placeholder { color:inherit; opacity:.65; }
@@ -50,7 +59,7 @@ html:has(> .popup-body) { scrollbar-width: none; }
 .settings-popup .popup-header { display:flex; align-items:center; justify-content:space-between; padding:0 5px; }
 .settings-close { width:28px; height:28px; display:grid; place-items:center; border-radius:50%; background:var(--bg-glass-pill); }
 .settings-intro { margin:0 5px 3px; color:var(--text-dim); font-size:11px; line-height:1.5; }
-.settings-nav { flex-shrink:0; gap:6px; padding:5px; }
+.settings-nav { flex-shrink:0; flex-wrap:wrap; gap:6px; padding:5px; }
 .settings-nav .popup-seg-btn { flex:1 0 auto; padding:0 10px; }
 .settings-popup .theme-row { padding:12px 8px; border-bottom:1px solid var(--border); }
 .settings-popup .setting-row { padding:12px 8px; }

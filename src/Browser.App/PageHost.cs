@@ -12,10 +12,17 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     private readonly Dictionary<string, string> _blurScriptIds = new(); // vues où le flou est installé
     private readonly HashSet<string> _loading = new();
     private readonly HashSet<string> _ready = new();
+    private readonly HashSet<string> _skipSiteRoute = new();
     private readonly HashSet<string> _visible = new();
     private readonly HashSet<string> _pdf = new();
-    private static Task? _blockerReady;
-    private static Task? _zoomReady;
+    private readonly Dictionary<string, Task> _profileReady = new();
+    // Le moteur perd les cookies de session à la fermeture de la dernière vue du profil.
+    // Les conserver uniquement en mémoire permet de changer d'onglet/session sans déconnecter le compte.
+    private readonly Dictionary<string, IReadOnlyList<CoreWebView2Cookie>> _sessionCookies = new();
+    private readonly Dictionary<string, Task> _closingProfiles = new();
+    public event Action<string>? SessionFailed;
+    public Func<string, string, string?, bool, bool>? RouteNavigation { get; set; }
+    public event Action<string>? NavigationSettled;
     public bool IsPdf(string id) => _pdf.Contains(id);
     private bool _watchLayout;
     private (string? Primary, string? Secondary, double Ratio) _layout;
@@ -28,8 +35,6 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     public event Action<string, Command>? NotesRequested;
     public event Action<string>? StoreInstallRequested;
     public event Action? StoreManageRequested; // bouton d'une extension déjà installée : ouvrir leur gestion
-    /// <summary>Identifiants des extensions installées : les fiches du store affichent leur état.</summary>
-    public Func<IEnumerable<string>> InstalledExtensions { get; set; } = () => [];
 
     public static bool IsStoreDetail(string url)
     {
@@ -75,7 +80,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     private async Task PrepareStoreAsync(CoreWebView2 core)
     {
         if (!IsStore(core.Source)) return;
-        try { await core.ExecuteScriptAsync(StoreScript + $";window.__solStoreInstalled({System.Text.Json.JsonSerializer.Serialize(InstalledExtensions())})"); }
+        try { await core.ExecuteScriptAsync(StoreScript + $";window.__solStoreInstalled({System.Text.Json.JsonSerializer.Serialize((await core.Profile.GetBrowserExtensionsAsync()).Select(e => e.Id))})"); }
         catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { }
     }
 
@@ -116,9 +121,9 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         }
         catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException
             or TimeoutException or OperationCanceledException or System.Text.Json.JsonException) { return null; }
-        finally { container.Children.Remove(preview); preview.Close(); }
+        finally { container.Children.Remove(preview); CloseView(preview); }
     }
-    public event Action<string>? NewTabRequested;
+    public event Action<string, string>? NewTabRequested; // onglet source, adresse
     public event Action<string, double, double, CoreWebView2ContextMenuRequestedEventArgs>? ContextMenuRequested; // id, x, y dans la fenêtre
     public event Action<string, double, double>? DeviceAreaMenuRequested; // id, x, y : clic droit à côté d'un appareil simulé
     public event Action<string, CoreWebView2DownloadStartingEventArgs>? DownloadStarting; // onglet d'origine
@@ -140,7 +145,46 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
 
     // Toutes les vues partagent le même moteur. Une fenêtre privée aussi : elle a son propre dossier de données, effacé
     // à sa fermeture, ce qui laisse le bloqueur de publicités y fonctionner (le mode privé du moteur l'en empêcherait).
-    private static async Task StartEngineAsync(WebView2 view) => await view.EnsureCoreWebView2Async(await AdBlock.EnvironmentAsync());
+    private async Task StartEngineAsync(WebView2 view, string? profileName = null)
+    {
+        var name = profileName ?? "Default";
+        if (_closingProfiles.TryGetValue(name, out var closing))
+        { await closing; if (_closingProfiles.GetValueOrDefault(name) == closing) _closingProfiles.Remove(name); }
+        var environment = await AdBlock.EnvironmentAsync();
+        if (profileName is null) await view.EnsureCoreWebView2Async(environment);
+        else
+        {
+            var options = environment.CreateCoreWebView2ControllerOptions();
+            options.ProfileName = profileName;
+            await view.EnsureCoreWebView2Async(environment, options);
+        }
+        var profile = view.CoreWebView2.Profile;
+        if (_sessionCookies.Remove(profile.ProfileName, out var cookies))
+            foreach (var cookie in cookies) profile.CookieManager.AddOrUpdateCookie(cookie);
+    }
+    private async Task PrepareProfileAsync(CoreWebView2Profile profile)
+    {
+        await AdBlock.ApplyExtensionAsync(profile, settings.BlockAds);
+        await PageZoom.InstallAsync(profile, settings.PageZoom);
+    }
+    public async Task<bool> DeleteSessionAsync(string sessionId)
+    {
+        if (!TabSessions.ValidId(sessionId)) return false;
+        var view = new WebView2 { Opacity = 0, IsHitTestVisible = false, Width = 1, Height = 1 };
+        container.Children.Add(view);
+        try
+        {
+            await StartEngineAsync(view, "sol-" + sessionId);
+            // L'API moteur marque le profil pour suppression après fermeture de ses vues.
+            view.CoreWebView2.Profile.Delete();
+            _profileReady.Remove("sol-" + sessionId);
+            _sessionCookies.Remove("sol-" + sessionId);
+            return true;
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException)
+        { return false; }
+        finally { container.Children.Remove(view); view.Close(); }
+    }
 
     public async void Add(Tab tab)
     {
@@ -155,17 +199,39 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         container.Children.Add(view);
         try
         {
-            await StartEngineAsync(view);
+            await StartEngineAsync(view, tab.SessionId.Length == 0 ? null : "sol-" + tab.SessionId);
             // La première page attend que le bloqueur soit prêt.
-            await (_blockerReady ??= AdBlock.ApplyExtensionAsync(view.CoreWebView2.Profile, settings.BlockAds));
-            // De même pour le zoom du profil : il s'applique dès la première page.
-            await (_zoomReady ??= PageZoom.InstallAsync(view.CoreWebView2.Profile, settings.PageZoom));
+            var profile = view.CoreWebView2.Profile;
+            if (!_profileReady.TryGetValue(profile.ProfileName, out var ready))
+                _profileReady[profile.ProfileName] = ready = PrepareProfileAsync(profile);
+            await ready;
         }
         catch (Exception e) when ((e is InvalidOperationException or System.Runtime.InteropServices.COMException)
             && _views.GetValueOrDefault(tab.Id) != view) { return; } // fermé pendant le démarrage
+        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException)
+        {
+            DebugLog.Write($"session.start.failed {e.GetType().Name} {e.HResult}");
+            Remove(tab.Id); AddAsleep(tab); SessionFailed?.Invoke(tab.Id); return;
+        }
         if (!_views.TryGetValue(tab.Id, out var initializing) || initializing != view) return; // fermé ou rouvert pendant l'initialisation
 
         var core = view.CoreWebView2;
+        var documentUrl = tab.Url;
+        var navigationUrl = tab.Url;
+        var navigationSource = tab.Url;
+        var redirected = false;
+        var routeSite = true;
+        // NavigationStarting peut déjà laisser partir un GET. Intercepter le document avant le réseau
+        // empêche d'envoyer les cookies du compte précédent au site de destination.
+        core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.Document, CoreWebView2WebResourceRequestSourceKinds.Document);
+        core.WebResourceRequested += (_, e) =>
+        {
+            if (_views.GetValueOrDefault(tab.Id) != view || routeSite && e.Request.Method == "GET" && e.Request.Uri == navigationUrl.Split('#', 2)[0]
+                && !redirected && RouteNavigation?.Invoke(tab.Id, navigationUrl, navigationSource, true) == true)
+            {
+                e.Response = core.Environment.CreateWebResourceResponse(null!, 204, "No Content", "");
+            }
+        };
         core.DOMContentLoaded += (_, _) => view.Opacity = 1;
         Harden(core);
         core.SetVirtualHostNameToFolderMapping("start.sol", Path.Combine(AppContext.BaseDirectory, "ui"), CoreWebView2HostResourceAccessKind.Deny);
@@ -201,6 +267,10 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         core.Settings.IsBuiltInErrorPageEnabled = false; // les erreurs de chargement sont affichées par le navigateur
         core.NavigationStarting += (_, e) =>
         {
+            redirected = e.IsRedirected;
+            routeSite = !_skipSiteRoute.Remove(tab.Id);
+            if (!redirected) navigationSource = documentUrl;
+            navigationUrl = e.Uri;
             _pdf.Remove(tab.Id);
             if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var document) && document.AbsolutePath.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)) _pdf.Add(tab.Id);
             core.Settings.IsZoomControlEnabled = IsPdf(tab.Id);
@@ -238,6 +308,8 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
             // Une navigation remplacée ne peut ni arrêter le nouvel indicateur ni remplacer sa page.
             if (!_views.TryGetValue(tab.Id, out var current) || current != view
                 || _navigation.GetValueOrDefault(tab.Id) != e.NavigationId) return;
+            NavigationSettled?.Invoke(tab.Id);
+            if (e.IsSuccess) documentUrl = core.Source;
             _loading.Remove(tab.Id);
             var downloading = _downloading.Remove(tab.Id);
             RuntimeChanged?.Invoke();
@@ -257,7 +329,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
             if (e.ProcessFailedKind == CoreWebView2ProcessFailedKind.RenderProcessExited && _views.GetValueOrDefault(tab.Id) == view)
                 ShowError(tab.Id, core, _errorUrl.GetValueOrDefault(tab.Id, core.Source), "crash");
         };
-        core.NewWindowRequested += (_, e) => { e.Handled = true; NewTabRequested?.Invoke(e.Uri); };
+        core.NewWindowRequested += (_, e) => { e.Handled = true; NewTabRequested?.Invoke(tab.Id, e.Uri); };
         core.ContextMenuRequested += (_, e) =>
         {
             // Position du clic dans la fenêtre, pour y poser notre menu.
@@ -281,7 +353,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         core.DOMContentLoaded += (_, _) => { if (_mode.ContainsKey(tab.Id) || _pip == tab.Id) _ = PageZoom.TabAsync(core, 1); };
         if (!_views.TryGetValue(tab.Id, out initializing) || initializing != view) return;
         _ready.Add(tab.Id);
-        Navigate(tab.Id, _target.GetValueOrDefault(tab.Id, tab.Url));
+        Navigate(tab.Id, _target.GetValueOrDefault(tab.Id, tab.Url), route: false);
         if (_wanted.Remove(tab.Id, out var wanted)) SetDevice(tab.Id, wanted.Name, wanted.Landscape);
     }
 
@@ -444,9 +516,10 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         };
     }
 
-    public async Task<bool> ClearSiteDataAsync()
+    public IEnumerable<CoreWebView2Profile> Profiles => _views.Values.Select(v => v.CoreWebView2?.Profile).OfType<CoreWebView2Profile>().DistinctBy(p => p.ProfileName);
+    public async Task<bool> ClearSiteDataAsync(string id)
     {
-        if (_views.Values.Select(v => v.CoreWebView2).FirstOrDefault(c => c is not null) is not { } core) return false;
+        if (Core(id) is not { } core) return false;
         try
         {
             await core.Profile.ClearBrowsingDataAsync(CoreWebView2BrowsingDataKinds.Cookies |
@@ -463,6 +536,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         _asleep.Remove(id);
         _pdf.Remove(id);
         _ready.Remove(id);
+        _skipSiteRoute.Remove(id);
         _hiddenSince.Remove(id);
         if (_pip == id) ExitPip(pause: false);
         _childFrames.Remove(id);
@@ -473,12 +547,31 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         _navigation.Remove(id);
         _target.Remove(id); _errorUrl.Remove(id); _showingError.Remove(id); _downloading.Remove(id);
         container.Children.Remove(view);
-        view.Close();
+        CloseView(view);
+    }
+    private void CloseView(WebView2 view)
+    {
+        var core = view.CoreWebView2;
+        if (core is null || _views.Values.Any(v => v.CoreWebView2?.Profile.ProfileName == core.Profile.ProfileName))
+        { view.Close(); return; }
+        var name = core.Profile.ProfileName;
+        // Fermer pendant l'installation d'une extension peut laisser son attente liée à une vue détruite.
+        if (_profileReady.TryGetValue(name, out var ready) && !ready.IsCompletedSuccessfully) _profileReady.Remove(name);
+        _closingProfiles[name] = PreserveSessionAsync(view, core, name);
+    }
+    private async Task PreserveSessionAsync(WebView2 view, CoreWebView2 core, string name)
+    {
+        try { _sessionCookies[name] = (await core.Profile.CookieManager.GetCookiesAsync("")).Where(c => c.IsSession).Select(c => core.Profile.CookieManager.CopyCookie(c)).ToArray(); }
+        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException)
+        { DebugLog.Write($"session.cookies.failed {e.GetType().Name} {e.HResult}"); }
+        finally { view.Close(); }
     }
 
-    public void Navigate(string id, string url)
+    public void Navigate(string id, string url, bool route = true)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out _)) return;
+        if (route && RouteNavigation?.Invoke(id, url, null, false) == true) return;
+        if (!route) _skipSiteRoute.Add(id);
         if (_ready.Contains(id) && Core(id) is { } core)
         {
             // Le moteur termine parfois l'ancien chargement avant d'annoncer le suivant (ConnectionAborted).
@@ -715,12 +808,12 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         var view = new WebView2 { Visibility = main.Visibility };
         Grid.SetColumn(view, Grid.GetColumn(main));
         container.Children.Add(view);
-        await StartEngineAsync(view);
+        await StartEngineAsync(view, main.CoreWebView2.Profile.ProfileName);
         var core = view.CoreWebView2;
         Harden(core);
         core.Settings.AreDefaultContextMenusEnabled = false;
         core.Settings.IsStatusBarEnabled = false;
-        core.NewWindowRequested += (_, e) => { e.Handled = true; NewTabRequested?.Invoke(e.Uri); };
+        core.NewWindowRequested += (_, e) => { e.Handled = true; NewTabRequested?.Invoke(id, e.Uri); };
         core.DownloadStarting += (_, e) => e.Cancel = true; // les téléchargements passent par l'onglet
         core.NavigationStarting += (_, e) =>
         {
@@ -915,7 +1008,8 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
 
     private void Discard(string id, CoreWebView2 core)
     {
-        var tab = new Tab(id, core.Source, core.DocumentTitle);
+        var name = core.Profile.ProfileName;
+        var tab = new Tab(id, core.Source, core.DocumentTitle, SessionId: name.StartsWith("sol-") ? name[4..] : "");
         Remove(id);
         _hiddenSince.Remove(id);
         _asleep[id] = tab;
@@ -930,8 +1024,8 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         PageZoom.Set(zoom);
         RuntimeChanged?.Invoke();
         // Une page affichée relaie la demande : tous les onglets prennent le nouveau zoom tout de suite.
-        foreach (var id in _visible)
-            if (Core(id) is { } core) _ = PageZoom.RefreshAsync(core);
+        foreach (var core in _views.Values.Select(v => v.CoreWebView2).OfType<CoreWebView2>().DistinctBy(c => c.Profile.ProfileName))
+            _ = PageZoom.RefreshAsync(core);
     }
 
     // À la sortie d'un appareil simulé ou du lecteur flottant : la page retrouve les métriques de sa vue et le zoom du profil.

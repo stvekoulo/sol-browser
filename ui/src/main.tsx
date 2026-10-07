@@ -8,7 +8,7 @@ import Welcome from './Welcome';
 import Start from './Start';
 import NotesPage from './NotesPage';
 import Capture from './Capture';
-import { painted } from './bridge';
+import { painted, installTooltips } from './bridge';
 import '@fontsource-variable/inter'; // police Inter, livrée avec le navigateur (chargée seulement si elle est choisie)
 import './theme.css';
 import './app.css';
@@ -20,6 +20,7 @@ import './motion.css';
 
 // Le même bundle sert la barre supérieure, la carte latérale (#sidebar), les menus (#popup) et l'encart (#dock).
 const hash = location.hash;
+if (location.hostname === 'ui.navigateur') installTooltips();
 if (hash === '#start') document.body.classList.add('start-body');
 if (hash === '#notes') document.body.classList.add('notes-body');
 if (hash === '#popup' || hash === '#dock' || hash === '#capture') document.body.classList.add('popup-body');

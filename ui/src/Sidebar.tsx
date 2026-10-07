@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { interfaceScale, isStartPage, formatDomain, onState, send, type State, type Tab } from './bridge';
+import { displayAddress, interfaceScale, isStartPage, formatDomain, onState, send, type State, type Tab } from './bridge';
 import { t, useLang } from './i18n';
 import { CopyIcon, Icon, LockIcon } from './Icons';
 import { startSlotDrag, useVerticalDrag } from './useVerticalDrag';
@@ -38,7 +38,7 @@ export default function Sidebar() {
   }, []);
 
   const activeTab = state?.tabs.find(t => t.id === state.activeId);
-  const activeUrl = !activeTab || (activeTab.url === 'about:blank' || isStartPage(activeTab.url)) ? '' : activeTab.url;
+  const activeUrl = !activeTab || (activeTab.url === 'about:blank' || isStartPage(activeTab.url)) ? '' : displayAddress(activeTab.url);
 
   useEffect(() => {
     if (!editingUrl) setUrlText(activeUrl);
@@ -126,6 +126,10 @@ export default function Sidebar() {
         </button>
         <span className="sidebar-brand"><img src={logo} alt="" /><strong>Sol</strong></span>
       </div>
+      {activeTab && <button data-action="session.menu" className="sidebar-session" title={t('Choisir une session · Ctrl+Maj+B', 'Choose a session · Ctrl+Shift+B')} onClick={e => {
+        const box = e.currentTarget.getBoundingClientRect();
+        send({type:'session.menu',id:activeTab.id,x:box.left + OFFSET_X,y:box.bottom + OFFSET_Y() + 6});
+      }}><Icon d="M3 4h10v8H3zM5 2v2m6-2v2M3 7h10" size={13}/><span>{activeTab.sessionId ? `${t('Session','Session')} · ${activeTab.sessionName}` : activeTab.sessionName}</span><Icon d="M5 6l3 3 3-3" size={12}/></button>}
       <div className="sidebar-url-pill" onClick={e => {
         if (!(e.target as Element).closest('button')) inputRef.current?.focus();
       }}>
@@ -383,6 +387,7 @@ function SidebarTabRow({ tab, index, icon, active, grouped = false }: { tab: Tab
         <span className="favicon letter" aria-hidden>{label[0]?.toUpperCase()}</span>
       )}
       <span className="sidebar-tab-title">{label}</span>
+      {tab.sessionId && <span className="sidebar-session-badge" title={t(`Session : ${tab.sessionName}`, `Session: ${tab.sessionName}`)}>{tab.sessionName}</span>}
       <button
         className="sidebar-tab-close"
         aria-label={t(`Fermer ${label}`, `Close ${label}`)}

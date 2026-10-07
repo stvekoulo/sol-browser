@@ -2,6 +2,8 @@ using Browser.Core;
 
 public class AddressInputTests
 {
+    [Fact]
+    public void Notes_address_resolves_to_the_internal_page() => Assert.Equal(QuickNotes.PageUrl, AddressInput.Resolve(" SOL://notes/ ", "https://example.test?q={0}"));
     private const string Search = "https://www.google.com/search?q={0}";
 
     [Theory]

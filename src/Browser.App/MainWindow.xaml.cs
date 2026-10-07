@@ -15,6 +15,7 @@ public sealed partial class MainWindow : Window
     private BrowserController? _controller;
     private UiBridge? _bridge;
     private SidebarHost? _sidebar;
+    private readonly Settings _settings = JsonFileStore.Load<Settings>(AppPaths.Settings);
 
     public MainWindow()
     {
@@ -50,16 +51,26 @@ public sealed partial class MainWindow : Window
             if (n[2] is >= 400 and <= 10000 && n[3] is >= 300 and <= 10000 && Math.Abs(n[0]) < 20000 && Math.Abs(n[1]) < 20000)
                 AppWindow.MoveAndResize(new Windows.Graphics.RectInt32(n[0], n[1], n[2], n[3]));
         }
-        // Sol s'ouvre en plein écran (sans la barre des tâches) ; seule une fenêtre qui en remplace une autre reprend
-        // sa place. Le bouton d'agrandissement de l'interface repasse en fenêtre, et inversement.
-        if (parts is null || args.Contains("--fullscreen")) AppWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
+        // Le réglage de plein écran reste activé pour les profils existants. Sinon, Windows réserve la barre des tâches.
+        if (_settings.FullScreen && (parts is null || args.Contains("--fullscreen"))) AppWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
+        else if (parts is null && AppWindow.Presenter is OverlappedPresenter normal) normal.Maximize();
         else if (args.Contains("--maximized") && AppWindow.Presenter is OverlappedPresenter presenter) presenter.Maximize();
+    }
+
+    public void SetBrowserFullScreen(bool on, bool maximize = false)
+    {
+        AppWindow.SetPresenter(on ? AppWindowPresenterKind.FullScreen : AppWindowPresenterKind.Overlapped);
+        if (!on && AppWindow.Presenter is OverlappedPresenter presenter)
+        {
+            presenter.SetBorderAndTitleBar(true, false);
+            if (maximize) presenter.Maximize();
+        }
     }
 
     // Plein écran demandé par une page (une vidéo) : la fenêtre couvre l'écran et tout le reste de l'interface
     // s'efface. Échap, ou le bouton du lecteur, ramène l'interface telle qu'elle était.
     // ponytail: en vue scindée, les deux pages restent côte à côte ; donner tout l'écran à une seule si le besoin se présente.
-    private (GridLength Top, GridLength Side, GridLength Panel, Visibility Sidebar, AppWindowPresenterKind Window)? _beforeFullScreen;
+    private (GridLength Top, GridLength Side, GridLength Panel, Visibility Sidebar, AppWindowPresenterKind Window, bool Maximized)? _beforeFullScreen;
 
     private void SetFullScreen(bool on)
     {
@@ -67,7 +78,7 @@ public sealed partial class MainWindow : Window
         var none = new GridLength(0);
         if (on)
         {
-            _beforeFullScreen = (Root.RowDefinitions[0].Height, SidebarColumn.Width, PanelRow.Height, Sidebar.Visibility, AppWindow.Presenter.Kind);
+            _beforeFullScreen = (Root.RowDefinitions[0].Height, SidebarColumn.Width, PanelRow.Height, Sidebar.Visibility, AppWindow.Presenter.Kind, (AppWindow.Presenter as OverlappedPresenter)?.State == OverlappedPresenterState.Maximized);
             (Root.RowDefinitions[0].Height, SidebarColumn.Width, PanelRow.Height) = (none, none, none);
             (Ui.Visibility, Sidebar.Visibility, PopupFrame.Visibility) = (Visibility.Collapsed, Visibility.Collapsed, Visibility.Collapsed);
             if (AppWindow.Presenter.Kind != AppWindowPresenterKind.FullScreen) AppWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
@@ -75,7 +86,7 @@ public sealed partial class MainWindow : Window
         else if (_beforeFullScreen is { } before)
         {
             _beforeFullScreen = null;
-            if (before.Window != AppWindowPresenterKind.FullScreen) AppWindow.SetPresenter(before.Window); // déjà en plein écran avant la vidéo : on y reste
+            if (before.Window != AppWindowPresenterKind.FullScreen) SetBrowserFullScreen(false, before.Maximized); // déjà en plein écran avant la vidéo : on y reste
             (Root.RowDefinitions[0].Height, SidebarColumn.Width, PanelRow.Height) = (before.Top, before.Side, before.Panel);
             (Ui.Visibility, Sidebar.Visibility) = (Visibility.Visible, before.Sidebar);
         }
@@ -83,7 +94,7 @@ public sealed partial class MainWindow : Window
 
     private async Task InitAsync()
     {
-        var settings = JsonFileStore.Load<Settings>(AppPaths.Settings);
+        var settings = _settings;
         if (settings.Font == "custom") settings.Font = "sf"; // ancien nom du choix « SF Pro »
         AdBlock.PrepareExtension(); // avant la création du moteur
         var blur = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "blur.js"));
@@ -108,7 +119,7 @@ public sealed partial class MainWindow : Window
         var captureBridge = new UiBridge(CaptureControls, "index.html#capture");
         bridge.AttachPopup(captureBridge);
         var capture = new PopupHost(CaptureFrame, CaptureControls, captureBridge);
-        Root.SizeChanged += (_, _) => capture.SetHeight(CaptureFrame.Height);
+        Root.SizeChanged += (_, _) => { popup.Rescale(); capture.Rescale(); };
         popup.PageLeft = () => SidebarColumn.ActualWidth;
         popup.PageVertical = () => (Pages.TransformToVisual((UIElement)PopupFrame.Parent).TransformPoint(new Windows.Foundation.Point(0, 0)).Y, Pages.ActualHeight);
         var dockBridge = new UiBridge(Dock, "index.html#dock");
@@ -238,6 +249,10 @@ public sealed partial class MainWindow : Window
 
         Root.AddHandler(UIElement.PointerWheelChangedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler((_, e) =>
         {
+            // Les gestes de navigation et de zoom ne concernent que les pages, jamais les panneaux de Sol.
+            var point = e.GetCurrentPoint(Pages).Position;
+            if (PopupFrame.Visibility == Visibility.Visible || CaptureFrame.Visibility == Visibility.Visible ||
+                point.X < 0 || point.Y < 0 || point.X >= Pages.ActualWidth || point.Y >= Pages.ActualHeight) return;
             var p = e.GetCurrentPoint(Root).Properties;
             // Ctrl + molette : zoom de la page.
             if (!p.IsHorizontalMouseWheel && e.KeyModifiers.HasFlag(Windows.System.VirtualKeyModifiers.Control))

@@ -1,6 +1,6 @@
 namespace Browser.Core;
 
-public sealed record Tab(string Id, string Url, string Title, bool Pinned = false, string? GroupId = null);
+public sealed record Tab(string Id, string Url, string Title, bool Pinned = false, string? GroupId = null, string SessionId = "");
 
 /// <summary>
 /// Groupe d'onglets : un nom, une couleur libre (« #rrggbb »), une icône facultative (un emoji), et un état
@@ -44,7 +44,7 @@ public sealed class TabManager
     private readonly List<Tab> _tabs = new();
     private readonly List<TabGroup> _groups = new();
     // ponytail: pile non bornée ; plafonner si la mémoire d'une longue session pose problème
-    private readonly Stack<string> _closed = new();
+    private readonly Stack<Tab> _closed = new();
     private int _nextId = 1, _nextGroupId = 1;
 
     public IReadOnlyList<Tab> Tabs => _tabs;
@@ -53,9 +53,9 @@ public sealed class TabManager
     public int PinnedCount => _tabs.Count(t => t.Pinned);
     public event Action? Changed;
 
-    public Tab Open(string url, bool activate = true, bool pinned = false)
+    public Tab Open(string url, bool activate = true, bool pinned = false, string sessionId = "")
     {
-        var tab = new Tab($"t{_nextId++}", url, url, pinned);
+        var tab = new Tab($"t{_nextId++}", url, url, pinned, SessionId: sessionId);
         _tabs.Insert(pinned ? PinnedCount : _tabs.Count, tab);
         if (activate || ActiveId is null) ActiveId = tab.Id;
         Changed?.Invoke();
@@ -66,7 +66,7 @@ public sealed class TabManager
     {
         var i = IndexOf(id);
         if (i < 0) return false;
-        _closed.Push(_tabs[i].Url);
+        _closed.Push(_tabs[i]);
         _tabs.RemoveAt(i);
         if (ActiveId == id)
             ActiveId = _tabs.Count == 0 ? null : _tabs[Math.Min(i, _tabs.Count - 1)].Id;
@@ -125,7 +125,17 @@ public sealed class TabManager
         return true;
     }
 
-    public Tab? ReopenClosed() => _closed.Count == 0 ? null : Open(_closed.Pop());
+    public Tab? ReopenClosed() => _closed.TryPop(out var tab) ? Open(tab.Url, sessionId: tab.SessionId) : null;
+    public Tab? SetSession(string id, string sessionId)
+    {
+        var i = IndexOf(id); if (i < 0) return null;
+        _tabs[i] = _tabs[i] with { SessionId = sessionId }; Changed?.Invoke(); return _tabs[i];
+    }
+    public void ForgetSession(string sessionId)
+    {
+        var kept = _closed.Where(t => t.SessionId != sessionId).Reverse().ToArray();
+        _closed.Clear(); foreach (var tab in kept) _closed.Push(tab);
+    }
 
     public bool Update(string id, string? url = null, string? title = null)
     {

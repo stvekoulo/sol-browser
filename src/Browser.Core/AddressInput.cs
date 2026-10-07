@@ -8,6 +8,7 @@ public static class AddressInput
 
     public static string Resolve(string input, string searchUrlTemplate)
     {
+        if (input.Trim().TrimEnd('/').Equals("sol://notes", StringComparison.OrdinalIgnoreCase)) return QuickNotes.PageUrl;
         var text = input.Trim();
         if (Schemes.Any(s => text.StartsWith(s, StringComparison.OrdinalIgnoreCase))) return text;
 

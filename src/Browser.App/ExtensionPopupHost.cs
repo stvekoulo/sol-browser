@@ -54,7 +54,7 @@ public sealed class ExtensionPopupHost(Window owner)
     private double Scale => owner.Content?.XamlRoot?.RasterizationScale ?? 1;
 
     /// <param name="right">Bord droit de la fenêtre (celui du bouton), dans la fenêtre du navigateur.</param>
-    public async Task ShowAsync(string url, double right, double top)
+    public async Task ShowAsync(string url, double right, double top, string profileName)
     {
         var run = ++_run;
         var origin = new Point();
@@ -76,7 +76,10 @@ public sealed class ExtensionPopupHost(Window owner)
         window.AppWindow.Show(activateWindow: false); // une vue ne démarre son moteur qu'une fois affichée
         try
         {
-            await view.EnsureCoreWebView2Async(await AdBlock.EnvironmentAsync());
+            var environment = await AdBlock.EnvironmentAsync();
+            var options = environment.CreateCoreWebView2ControllerOptions();
+            options.ProfileName = profileName;
+            await view.EnsureCoreWebView2Async(environment, options);
             if (run != _run) return;
             var core = view.CoreWebView2;
             core.Settings.IsStatusBarEnabled = false;

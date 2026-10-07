@@ -16,6 +16,7 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge)
     private bool _focus;
     private double _x, _y;
     private double _width;
+    private double _height = 1;
     private bool _bottom;
     private bool _above; // posée au-dessus de son point d'ancrage (bouton en bas de la fenêtre), et non dessous
     private bool _center;
@@ -23,7 +24,7 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge)
     public void Rescale()
     {
         if (!IsOpen) return;
-        SetHeight(Math.Max(1, frame.ActualHeight));
+        SetHeight(_height);
     }
 
     /// <summary>Un menu est affiché ou en cours d'affichage.</summary>
@@ -83,6 +84,7 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge)
 
     public void SetHeight(double height)
     {
+        _height = height;
         if (_selecting) { SetSelection(true); return; }
         if (!_pending && frame.Visibility == Visibility.Collapsed) return;
 
@@ -91,7 +93,7 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge)
         var window = (FrameworkElement)frame.Parent;
         frame.Width = Math.Min(Math.Clamp(_width * (UiBridge.Settings?.UiFactor ?? 0.92), 128, 900), Math.Max(1, window.ActualWidth - 2 * Edge));
         // Jamais plus haut que la fenêtre : au-delà, le contenu du panneau défile.
-        frame.Height = Math.Clamp(height, 1, Math.Max(160, window.ActualHeight - 2 * Edge - 48));
+        frame.Height = Math.Clamp(height, 1, Math.Max(1, window.ActualHeight - 2 * Edge - 48));
         var x = Math.Max(Edge, Math.Min(_x, window.ActualWidth - frame.Width - Edge));
         var y = Math.Max(Edge, Math.Min(_above ? _y - frame.Height : _y, window.ActualHeight - frame.Height - Edge));
         if (_center)

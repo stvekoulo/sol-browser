@@ -4,6 +4,7 @@ namespace Browser.Core;
 
 public sealed class Settings
 {
+    public bool FullScreen { get; set; } = true;
     private double _uiScale = 1;
     /// <summary>Taille de l'interface choisie dans les réglages : 100, 90 ou 80 %.</summary>
     public double UiScale { get => _uiScale; set => _uiScale = value is 1 or 0.9 or 0.8 ? value : 1; }
@@ -128,6 +129,7 @@ public sealed class SiteShortcut
 
 public sealed class Session
 {
+    public List<string> SessionIds { get; set; } = new();
     public List<string> TranslationOriginals { get; set; } = new();
     public List<string> Urls { get; set; } = new();
     /// <summary>Titre de chaque adresse de <see cref="Urls"/> : affiché tant que la page n'a pas été rechargée.</summary>

@@ -11,6 +11,9 @@ public static class CommandParser
     private static readonly Dictionary<string, string[]> Required = new()
     {
         ["tab.open"] = [], ["tab.close"] = ["id"], ["tab.activate"] = ["id"],
+        ["session.menu"] = ["id", "x", "y"], ["session.set"] = ["id", "query"],
+        ["session.new"] = [], ["session.create"] = ["title"], ["session.rename"] = ["id", "title"],
+        ["session.delete"] = ["id"],
         ["tab.move"] = ["id", "index"], ["tab.reopen"] = [],
         ["nav.go"] = ["id", "input"], ["nav.back"] = ["id"], ["nav.forward"] = ["id"],
         ["nav.reload"] = ["id"], ["nav.stop"] = ["id"],
@@ -60,7 +63,7 @@ public static class CommandParser
         ["capture.run"] = ["query"], ["capture.region"] = ["x", "y", "width", "height"],
         ["capture.selection"] = ["index"],
         ["backup.export"] = [], ["backup.export.key"] = ["title"], ["backup.import"] = [], ["backup.restore"] = ["title"],
-        ["ui.ready"] = [],
+        ["ui.ready"] = [], ["ui.tooltip"] = [],
     };
 
     public static Command? Parse(string json)

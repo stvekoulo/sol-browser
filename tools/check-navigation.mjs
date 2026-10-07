@@ -12,10 +12,15 @@ const exe = resolve(process.argv[2] ?? 'src/Browser.App/bin/x64/Debug/net10.0-wi
 const base = resolve(`bin/navigation-check-${Date.now()}`);
 const profile = resolve(base, 'profiles/robustness');
 const echoRequests = [];
+const sessionRequests = [];
+const siteRequests = [];
 await mkdir(profile, { recursive: true });
 await mkdir(resolve(base, 'downloads'), { recursive: true });
 await mkdir(resolve(base, 'captures'), { recursive: true });
 const server = createServer((req, res) => {
+  if(process.argv.includes('--site-sessions'))siteRequests.push({host:req.headers.host,url:req.url,cookie:req.headers.cookie});
+  if(req.url==='/site-redirect'){res.writeHead(302,{Location:`http://localhost:${server.address().port}/signed-in`});return res.end();}
+  if(['/document','/download'].includes(req.url))sessionRequests.push({url:req.url,cookie:req.headers.cookie});
   if(req.url==='/sw.js'){res.writeHead(200,{'Content-Type':'application/javascript'});return res.end(`self.addEventListener('install',()=>self.skipWaiting());self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));self.addEventListener('fetch',e=>{if(new URL(e.request.url).pathname==='/api-real')e.respondWith(new Response('{"serviceworker":true}',{headers:{'Content-Type':'application/json'}}))});`)}
   if (req.url === '/echo') {
     let body='';req.on('data',chunk=>body+=chunk);req.on('end',()=>{echoRequests.push({headers:req.headers,method:req.method,body});res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({received:body,password:'fixture-secret'}))});return;
@@ -72,7 +77,7 @@ const waitFor = async (get, description, timeout = 20000) => {
   const end = Date.now() + timeout;
   while (Date.now() < end) {
     try { const value = await get(); if (value) return value; }
-    catch (e) { if (!/Cannot find default execution context|Execution context was destroyed/.test(e.message)) throw e; }
+      catch (e) { if (e.code !== 'EBUSY' && !/Cannot find default execution context|Execution context was destroyed/.test(e.message)) throw e; }
     await delay(100);
   }
   throw new Error(`Timed out: ${description}`);
@@ -143,6 +148,246 @@ async function stop() {
 }
 try {
   await launch(process.argv.includes('--private-check') ? ['--private'] : []);
+  if(process.argv.includes('--site-sessions')) {
+    const activeTab=async()=>{const s=await state();return s.tabs.find(t=>t.id===s.activeId)};
+    const other=`http://localhost:${server.address().port}`;
+    const first=(await state()).activeId;
+    const catalog=JSON.parse(await readFile(resolve(profile,'tab-sessions.json'),'utf8'));
+    const admin=catalog.find(s=>s.Name==='Admin').Id,user=catalog.find(s=>s.Name==='User').Id;
+    const documentAt=async(url,exclude=[])=>{
+      return await waitFor(async()=>{
+        for(const target of (await targets()).filter(t=>t.url===url&&!exclude.includes(t.id))){
+          const page=await connect(target);
+          if(await page.evaluate(`location.href===${JSON.stringify(url)}&&document.readyState==='complete'&&!!window.__navBlurHost&&!!document.querySelector('h1')`))return page;
+        }
+      },'site document '+url);
+    };
+    const switched=async(id,session,url)=>{
+      const old=(await targets()).map(t=>t.id);await command({type:'session.set',id,query:session});
+      return documentAt(url,old);
+    };
+    let page=await documentAt(origin+'/a');
+    page=await switched(first,admin,origin+'/a');await page.evaluate(`document.cookie='account=admin;path=/';localStorage.account='admin'`);
+    await command({type:'tab.open',url:'https://start.sol/index.html#start'});
+    await waitFor(async()=>{const s=await state();return s.tabs.find(t=>t.id===s.activeId)?.url==='https://start.sol/index.html#start'},'new start');
+    assert.equal((await activeTab())?.sessionId,'');
+    // Fermer l'accueil avant ses captures d'aperçus : ce contrôle porte sur les vues des onglets.
+    await command({type:'tab.close',id:(await state()).activeId});
+    await command({type:'tab.open',url:other+'/b'});page=await documentAt(other+'/b');let id=(await state()).activeId;
+    assert.equal((await state()).tabs.find(t=>t.id===id).sessionId,'','unselected site defaults to current session');
+    assert.equal(await page.evaluate('document.cookie'),'','new site does not inherit account');
+    page=await switched(id,user,other+'/b');await page.evaluate(`document.cookie='account=user;path=/';localStorage.account='user'`);
+    assert.equal(await page.evaluate('document.cookie'),'account=user');
+    await command({type:'nav.go',id,input:origin+'/address-return'});page=await documentAt(origin+'/address-return');
+    assert.equal((await state()).tabs.find(t=>t.id===id).sessionId,admin,'address navigation restores this site choice');
+    assert.equal(await page.evaluate('localStorage.account'),'admin');
+    await page.call('Emulation.setFocusEmulationEnabled',{enabled:true});
+    await delay(200);
+    await page.evaluate(`document.querySelector('main').innerHTML='<a href="${other}/clicked#section">Other site</a>'`);
+    const point=await page.evaluate(`(()=>{const r=document.querySelector('a').getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2}})()`);
+    await page.call('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...point});
+    // Le clic ferme cette vue pour changer de profil : son canal CDP peut disparaître avant l'accusé de réception.
+    await page.call('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...point}).catch(e=>{if(e.message!=='CDP timeout: Input.dispatchMouseEvent')throw e});
+    page=await documentAt(other+'/clicked#section');assert.equal((await state()).tabs.find(t=>t.id===id).sessionId,user,'page link with fragment restores destination session');
+    assert.equal(await page.evaluate('localStorage.account'),'user');
+    assert.equal(await page.evaluate('document.cookie'),'account=user','session cookies survive switching away and back');
+    assert.equal(siteRequests.find(r=>r.host===new URL(other).host&&r.url==='/clicked')?.cookie,'account=user','first link request uses destination session');
+    await page.evaluate(`window.open('${origin}/new-window','_blank')`);
+    let child=await documentAt(origin+'/new-window');const childId=(await state()).tabs.find(t=>t.url===origin+'/new-window').id;
+    assert.equal((await state()).tabs.find(t=>t.id===childId).sessionId,admin,'new-window link chooses destination site');
+    await command({type:'tab.activate',id:first});await command({type:'tab.open',url:other+'/remembered'});
+    page=await documentAt(other+'/remembered');assert.equal((await activeTab()).sessionId,user,'new tabs use remembered site');
+    await command({type:'tab.activate',id:childId});await command({type:'nav.go',id:childId,input:origin+'/site-redirect'});
+    child=await documentAt(other+'/signed-in');assert.equal((await state()).tabs.find(t=>t.id===childId).sessionId,admin,'authentication redirects retain initiating session');
+    await command({type:'nav.go',id:childId,input:origin+'/back-to-site'});child=await documentAt(origin+'/back-to-site');
+    await child.evaluate(`document.querySelector('main').insertAdjacentHTML('beforeend','<iframe src="${other}/embedded"></iframe>')`);
+    await waitFor(()=>siteRequests.some(r=>r.host===new URL(other).host&&r.url==='/embedded'),'embedded frame request');
+    await delay(350);assert.equal((await state()).tabs.find(t=>t.id===childId).sessionId,admin,'embedded sites do not switch the parent session');
+    await child.evaluate(`document.querySelector('main').innerHTML='<form method="post" action="${other}/form-result"><input name="value" value="test"></form>';document.querySelector('form').requestSubmit()`);
+    await documentAt(other+'/form-result');assert.equal((await state()).tabs.find(t=>t.id===childId).sessionId,admin,'form posts retain their initiating session');
+    await delay(2300);await stop();await launch();
+    await command({type:'tab.open',url:other+'/restart'});page=await documentAt(other+'/restart');id=(await state()).activeId;
+    assert.equal((await state()).tabs.find(t=>t.id===id).sessionId,user,'site choice persists after restart');
+    page=await switched(id,'',other+'/restart');
+    await command({type:'tab.open',url:other+'/default-again'});await documentAt(other+'/default-again');
+    assert.equal((await activeTab()).sessionId,'','explicit current session removes site override');
+    const requested=(host,url)=>siteRequests.find(r=>r.host===new URL(host).host&&r.url===url);
+    assert.equal(requested(origin,'/address-return').cookie,'account=admin','first destination request sends only its chosen account');
+    assert.equal(requested(other,'/clicked').cookie,'account=user','link destination request sends only its chosen account');
+    assert.equal(requested(origin,'/new-window').cookie,'account=admin');
+    const guest=catalog.find(s=>s.Name==='Invité').Id,rapid=(await state()).activeId;
+    await command({type:'session.set',id:rapid,query:guest});await delay(450);
+    await switched(rapid,'',other+'/default-again');
+    await switched(rapid,guest,other+'/default-again');
+    assert.equal((await activeTab()).sessionId,guest,'session remains usable after closing during initialization');
+    await stop();console.log('PASS per-site session defaults, remembered choices, links/new windows, cookies, redirects, restart and reset');process.exit(0);
+  } else if(process.argv.includes('--usability')) {
+    const popup=await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#popup')),'settings popup'));
+    const settings=async()=>{await command({type:'settings.open',x:900,y:52});await waitFor(()=>popup.evaluate(`!!document.querySelector('.settings-popup')`),'settings shown');await popup.evaluate(`document.querySelector('.settings-nav button').click();document.querySelector('#root').scrollTop=0`);await delay(250)};
+    const resize=async(width,height)=>{
+      const script=`Add-Type -TypeDefinition 'using System;using System.Runtime.InteropServices;public class SizeCheck{[DllImport("user32.dll")]public static extern bool SetWindowPos(IntPtr h,IntPtr a,int x,int y,int w,int z,uint f);}';$p=Get-Process -Id ${app.pid};if(-not [SizeCheck]::SetWindowPos($p.MainWindowHandle,[IntPtr]::Zero,-9000,-9000,${width},${height},0x14)){exit 2}`;
+      const proc=spawn('powershell.exe',['-NoProfile','-NonInteractive','-Command',script],{windowsHide:true,stdio:'ignore'});
+      assert.equal((await once(proc,'exit'))[0],0);await delay(400);
+    };
+    for(const scale of [0,1,2]){
+      await command({type:'settings.set',id:'uiScale',index:scale});await resize(640,440);await settings();
+      const before=await popup.evaluate(`document.querySelector('#root').scrollTop`);
+      await popup.call('Input.dispatchMouseEvent',{type:'mouseWheel',x:180,y:180,deltaX:0,deltaY:300});await delay(250);
+      assert.ok(await popup.evaluate(`document.querySelector('#root').scrollTop>${before}+20`),'settings mouse wheel');
+      await popup.evaluate(`document.querySelector('#root').scrollTop=1e6`);
+      assert.ok(await popup.evaluate(`(()=>{const r=document.querySelector('#root');return r.scrollHeight-r.clientHeight-r.scrollTop<2})()`),'last settings reachable');
+      const short=await popup.evaluate('innerHeight');await resize(1100,950);
+      await waitFor(async()=>(await popup.evaluate('innerHeight'))>short+150,'menu regrows after window resize');
+      await popup.evaluate(`document.querySelector('#root').scrollTop=0`);
+      for(const section of ['Général','Apparence','Sécurité','Données','Sol']){
+        await popup.evaluate(`Array.from(document.querySelectorAll('.settings-nav button')).find(b=>b.textContent===${JSON.stringify(section)}).click()`);await delay(120);
+        assert.ok(await popup.evaluate(`document.querySelector('.settings-nav').scrollWidth<=document.querySelector('.settings-nav').clientWidth+1`),'settings sections fit');
+      }
+      await command({type:'popup.close'});
+    }
+    await resize(400,400);
+    assert.ok(await ui.evaluate(`document.documentElement.scrollWidth<=innerWidth+1`),'small toolbar fits');
+    const closeBox=await ui.evaluate(`document.querySelector('.light.close').getBoundingClientRect().toJSON()`);
+    await ui.call('Input.dispatchMouseEvent',{type:'mouseMoved',x:300,y:10});
+    await ui.call('Input.dispatchMouseEvent',{type:'mouseMoved',x:closeBox.x+closeBox.width/2,y:closeBox.y+closeBox.height/2});await delay(650);
+    await waitFor(async()=>/ui.tooltip shown/.test(await readFile(resolve(profile,'debug.log'),'utf8')),'native tooltip opened');
+    await command({type:'settings.set',id:'fullscreen',index:0});
+    await waitFor(async()=>JSON.parse(await readFile(resolve(profile,'settings.json'),'utf8')).FullScreen===false,'fullscreen preference saved');
+    await command({type:'window.maximize'});await waitFor(async()=>!(await state()).maximized,'normal restore');
+    await command({type:'window.maximize'});await waitFor(async()=>(await state()).maximized,'normal maximize');
+    await stop();await launch();await command({type:'window.maximize'});
+    await waitFor(async()=>(await state()).maximized,'fullscreen preference used after restart');
+    await command({type:'settings.set',id:'fullscreen',index:1});
+    await waitFor(async()=>JSON.parse(await readFile(resolve(profile,'settings.json'),'utf8')).FullScreen===true,'fullscreen reenabled');
+    await stop();console.log('PASS settings mouse wheel, small/resized menus, native tooltips, 100/90/80%, fullscreen setting and restart');process.exit(0);
+  } else if(process.argv.includes('--sessions')) {
+    const popup=await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#popup')),'session popup'));
+    if(process.argv.includes('--private-check'))assert.equal((await state()).privateMode,true);
+    const first=(await state()).activeId;
+    const catalog=JSON.parse(await readFile(resolve(profile,'tab-sessions.json'),'utf8'));
+    const admin=catalog.find(s=>s.Name==='Admin').Id,user=catalog.find(s=>s.Name==='User').Id,guest=catalog.find(s=>s.Name==='Invité').Id;
+    const switchSession=async(id,session,suffix)=>{
+      const old=(await targets()).map(t=>t.id);await command({type:'session.set',id,query:session});
+      const target=await waitFor(async()=>(await targets()).find(t=>t.url===origin+suffix&&!old.includes(t.id)),'new session view');
+      const connection=await connect(target);await waitFor(()=>connection.evaluate(`location.href===${JSON.stringify(origin+suffix)}&&document.readyState==='complete'&&!!document.querySelector('h1')`),'session document');return connection;
+    };
+    let page=await pageAt('/a');await page.evaluate(`document.cookie='account=main;path=/';localStorage.account='main'`);
+    assert.ok((await page.call('Network.getCookies',{urls:[origin]})).cookies.some(c=>c.name==='account'&&c.value==='main'),'main cookie accepted before switch');
+    page=await switchSession(first,admin,'/a');
+    assert.equal(await page.evaluate('document.cookie'),'','admin cookies isolated from main');
+    assert.equal(await page.evaluate('localStorage.account'),undefined,'admin storage isolated from main');
+    await page.evaluate(`document.cookie='account=admin;path=/';localStorage.account='admin'`);
+    await command({type:'tab.open',url:origin+'/admin-child'});await waitFor(async()=>(await state()).tabs.some(t=>t.url===origin+'/admin-child'),'child tab');const child=(await state()).activeId;
+    let childPage=await pageAt('/admin-child');assert.equal((await state()).tabs.find(t=>t.id===child).sessionId,admin,'new tab uses this site choice');
+    assert.equal(await childPage.evaluate('localStorage.account'),'admin');
+    await childPage.evaluate(`window.open('/popup-child','_blank')`);
+    await waitFor(async()=>(await state()).tabs.some(t=>t.url===origin+'/popup-child'),'popup opens in Sol');
+    const popupTab=(await state()).tabs.find(t=>t.url===origin+'/popup-child');assert.equal(popupTab.sessionId,admin,'popup session inherited');
+    await command({type:'tab.activate',id:child});await command({type:'tab.close',id:popupTab.id});
+    await command({type:'tab.open',url:origin+'/user-page'});await waitFor(async()=>(await state()).tabs.some(t=>t.url===origin+'/user-page'),'user tab');const second=(await state()).activeId;
+    await pageAt('/user-page');let userPage=await switchSession(second,user,'/user-page');
+    await waitFor(()=>userPage.evaluate(`document.readyState==='complete'`),'user loaded');
+    assert.equal(await userPage.evaluate('document.cookie'),'','user cookie isolation');assert.equal(await userPage.evaluate('localStorage.account'),undefined);
+    await userPage.evaluate(`document.cookie='account=user;path=/';localStorage.account='user'`);
+    // The same origin must ask independently in each account.
+    for(const [id,connection,session] of [[second,userPage,user],[child,childPage,admin]]) {
+      await command({type:'tab.activate',id});await waitFor(async()=>(await state()).activeId===id,'permission tab active');
+      await connection.evaluate(`window.__geoDenied=false;navigator.geolocation.getCurrentPosition(()=>{},e=>window.__geoDenied=e.code===1)`);
+      await waitFor(()=>popup.evaluate(`document.body.innerText.includes('connaître votre position')`),'session permission prompt');
+      await command({type:'permission.answer',index:0});await waitFor(()=>connection.evaluate('window.__geoDenied'),'session permission denial');
+      const permissions=await waitFor(async()=>{try{return JSON.parse(await readFile(resolve(profile,'session-permissions',session+'.json'),'utf8'))}catch(e){if(e.code==='ENOENT')return null;throw e}},'session permission saved');
+      assert.equal(permissions[`${origin} Geolocation`],false);
+    }
+    // Compare independent native extension storage, using Sol's existing zoom extension.
+    const workers=[];
+    for(const target of (await targets()).filter(t=>t.type==='service_worker'&&t.url.includes('joongffhgagcehjmlaeopoemilgmiabe'))) {
+      const connection=await connect(target),urls=await connection.evaluate('chrome.tabs.query({}).then(t=>t.map(t=>t.url))');
+      workers.push({connection,urls});
+    }
+    const adminWorker=workers.find(w=>w.urls.includes(origin+'/admin-child'))?.connection,userWorker=workers.find(w=>w.urls.includes(origin+'/user-page'))?.connection;
+    assert.ok(adminWorker&&userWorker,'separate extension contexts exist');
+    await adminWorker.evaluate(`chrome.storage.local.set({sessionCheck:'admin'})`);
+    assert.equal(await userWorker.evaluate(`chrome.storage.local.get('sessionCheck').then(x=>x.sessionCheck)`),undefined,'extension storage isolation');
+    await command({type:'device.compare',id:child,query:'iPhone SE|iPad mini'});
+    const mirrored=await waitFor(async()=>{const list=(await targets()).filter(t=>t.url===origin+'/admin-child');return list.length>=2&&list},'session mirror');
+    for(const target of mirrored){const mirror=await connect(target);await waitFor(()=>mirror.evaluate(`localStorage.account==='admin'`),'mirror inherits account');}
+    await command({type:'device.set',id:child,query:''});
+    await command({type:'tab.activate',id:child});childPage=await pageAt('/admin-child');assert.equal(await childPage.evaluate('document.cookie'),'account=admin');
+    await command({type:'split.open',id:second});await delay(200);
+    assert.equal(await userPage.evaluate('localStorage.account'),'user','split sessions remain separate');
+    await command({type:'split.close'});
+    await childPage.evaluate(`(async()=>{const canvas=document.createElement('canvas');canvas.width=160;canvas.height=280;const ctx=canvas.getContext('2d');function draw(){ctx.fillStyle='green';ctx.fillRect(0,0,160,280);window.__videoDraw=requestAnimationFrame(draw)}draw();const video=document.createElement('video');video.muted=true;video.srcObject=canvas.captureStream(20);document.body.append(video);await video.play()})()`);
+    await command({type:'tab.activate',id:second});
+    await waitFor(async()=>(await readFile(resolve(profile,'debug.log'),'utf8')).includes(`pip.enter ${child}`),'session PiP');
+    assert.equal(await childPage.evaluate('localStorage.account'),'admin','PiP keeps source session');
+    await command({type:'tab.activate',id:child});await waitFor(async()=>(await readFile(resolve(profile,'debug.log'),'utf8')).includes(`pip.exit ${child}`),'session PiP returns');
+    await childPage.evaluate(`document.querySelector('video').pause();cancelAnimationFrame(window.__videoDraw)`);
+    await command({type:'tab.activate',id:second});await command({type:'tab.close',id:child});await command({type:'tab.reopen'});
+    await waitFor(async()=>(await state()).tabs.some(t=>t.id!==child&&t.url===origin+'/admin-child'),'tab reopened');
+    const reopened=(await state()).tabs.find(t=>t.url===origin+'/admin-child').id;await waitFor(async()=>(await state()).tabs.find(t=>t.id===reopened)?.sessionId===admin,'closed tab session preserved');
+    childPage=await pageAt('/admin-child');assert.equal(await childPage.evaluate('document.cookie'),'account=admin');
+    await command({type:'nav.go',id:reopened,input:origin+'/document'});
+    await waitFor(()=>sessionRequests.some(r=>r.url==='/document'),'PDF request');assert.equal(sessionRequests.find(r=>r.url==='/document').cookie,'account=admin','PDF uses session');
+    await command({type:'nav.go',id:reopened,input:origin+'/download'});
+    await waitFor(()=>sessionRequests.some(r=>r.url==='/download'),'download request');assert.equal(sessionRequests.find(r=>r.url==='/download').cookie,'account=admin','download uses session');
+    await waitFor(async()=>(await readdir(resolve(base,'downloads'))).length>0,'download completes');
+    await waitFor(async()=>(await state()).downloads.active===0,'download finished before session switch');
+    await command({type:'nav.go',id:reopened,input:origin+'/admin-child'});childPage=await pageAt('/admin-child');
+    childPage=await switchSession(reopened,'','/admin-child');
+    await waitFor(()=>childPage.evaluate(`document.readyState==='complete'`),'main recreated');assert.equal(await childPage.evaluate('localStorage.account'),'main','main profile storage retained');assert.equal(await childPage.evaluate('document.cookie'),'account=main','change recreates view with main data');
+    childPage=await switchSession(reopened,admin,'/admin-child');
+    await waitFor(()=>childPage.evaluate(`document.readyState==='complete'`),'admin restored');assert.equal(await childPage.evaluate('localStorage.account'),'admin');
+    await command({type:'tab.activate',id:second});await waitFor(async()=>(await state()).tabs.find(t=>t.id===reopened)?.asleep,'session memory discard',25000);
+    assert.equal((await state()).tabs.find(t=>t.id===reopened).sessionId,admin,'discard keeps session identity');
+    await command({type:'tab.activate',id:reopened});childPage=await pageAt('/admin-child');
+    assert.equal(await childPage.evaluate('document.cookie'),'account=admin','wake preserves session cookies');
+    await command({type:'tab.activate',id:second});userPage=await pageAt('/user-page');
+    await command({type:'settings.open',x:900,y:58});await waitFor(()=>popup.evaluate(`!!document.querySelector('.settings-nav')`),'settings opened for session data clear');
+    await command({type:'site-data.clear'});await waitFor(()=>userPage.evaluate(`document.cookie===''`),'session cookies cleared');
+    await command({type:'nav.reload',id:second});
+    await waitFor(()=>userPage.evaluate(`document.cookie===''&&localStorage.account===undefined`),'active session cleared');
+    assert.equal(await childPage.evaluate('localStorage.account'),'admin','other session data preserved');
+    await command({type:'popup.close'});
+    await command({type:'tab.activate',id:reopened});
+    await popup.evaluate(`window.__sessionOpenCount=0;chrome.webview.addEventListener('message',e=>{if(e.data.popup==='sessions')window.__sessionOpenCount++})`);
+    await hotkey('session.menu');await waitFor(()=>popup.evaluate(`!!document.querySelector('.sessions-popup')`),'session shortcut');
+    const opened=await popup.evaluate('window.__sessionOpenCount');await hotkey('session.menu');await delay(400);
+    assert.equal(await popup.evaluate('window.__sessionOpenCount'),opened,'second click closes instead of reopening');
+    await hotkey('session.menu');await waitFor(()=>popup.evaluate(`window.__sessionOpenCount===${opened+1}`),'closed session menu can reopen');
+    for(const theme of [1,2])for(const scale of [0,1,2]){
+      await command({type:'popup.close'});await command({type:'settings.set',id:'theme',index:theme});await command({type:'settings.set',id:'uiScale',index:scale});await hotkey('session.menu');
+      await waitFor(()=>popup.evaluate(`!!document.querySelector('.sessions-popup')`),'session UI');
+      assert.ok(await popup.evaluate(`document.documentElement.scrollWidth<=innerWidth`),'session menu fits');
+    }
+    await delay(350);await popup.call('Page.captureScreenshot',{format:'png'}).then(r=>writeFile(resolve(base,'sessions.png'),Buffer.from(r.data,'base64')));
+    await command({type:'session.delete',id:admin});assert.ok(JSON.parse(await readFile(resolve(profile,'tab-sessions.json'),'utf8')).some(s=>s.Id===admin),'used session cannot be deleted');
+    childPage=await switchSession(reopened,guest,'/admin-child');await childPage.evaluate(`localStorage.account='guest';document.cookie='account=guest;path=/'`);
+    childPage=await switchSession(reopened,admin,'/admin-child');assert.equal(await childPage.evaluate('localStorage.account'),'admin');
+    await command({type:'session.delete',id:guest});await waitFor(async()=>!JSON.parse(await readFile(resolve(profile,'tab-sessions.json'),'utf8')).some(s=>s.Id===guest),'unused profile deleted');
+    await command({type:'popup.close'});await command({type:'session.create',id:reopened,title:'Test account'});
+    await waitFor(async()=>(await state()).tabs.find(t=>t.id===reopened).sessionName==='Test account','custom session selected');
+    const custom=(await state()).tabs.find(t=>t.id===reopened).sessionId;
+    await command({type:'session.rename',id:custom,title:'Compte perso'});await waitFor(async()=>(await state()).tabs.find(t=>t.id===reopened).sessionName==='Compte perso','session renamed');
+    await command({type:'notes.manage'});await waitFor(async()=>{const s=await state();return s.tabs.find(t=>t.id===s.activeId)?.url==='https://start.sol/index.html#notes'},'notes opened');
+    await waitFor(()=>ui.evaluate(`document.querySelector('input[aria-label="Adresse ou recherche"]')?.value==='sol://notes'`),'notes address alias');
+    await ui.evaluate(`document.querySelector('input[aria-label="Adresse ou recherche"]').focus()`);
+    assert.equal(await ui.evaluate(`document.querySelector('input[aria-label="Adresse ou recherche"]').value`),'sol://notes','editing notes address preserves alias');
+    await ui.evaluate(`document.querySelector('input[aria-label="Adresse ou recherche"]').closest('form').requestSubmit()`);
+    const sidebar=await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#sidebar')),'notes sidebar'));
+    assert.ok(await sidebar.evaluate(`!!document.querySelector('input[value="sol://notes"]')`),'notes sidebar alias');
+    await command({type:'tab.activate',id:reopened});
+    if(!process.argv.includes('--private-check')){
+      await stop();await launch();await waitFor(async()=>(await state()).tabs.some(t=>t.sessionId===custom),'session restored');
+      assert.ok((await state()).tabs.some(t=>t.sessionId===admin),'sleeping tabs retain session');
+      const engine=resolve(profile,'webview2/EBWebView'),deleted='WV2Profile_sol-'+guest;
+      const registered=JSON.parse(await readFile(resolve(engine,'Local State'),'utf8')).profile.info_cache;
+      assert.ok(!Object.hasOwn(registered,deleted),'deleted session unregistered by engine');
+      const remaining=await readdir(resolve(engine,deleted)).catch(e=>{if(e.code==='ENOENT')return [];throw e});
+      // WebView2 peut recréer ses journaux d'extensions après suppression : vérifier les données de navigation.
+      assert.ok(!remaining.some(name=>['Network','Cookies','Local Storage','IndexedDB','Web Data','Login Data'].includes(name)),'deleted cookies, storage and passwords removed by engine');
+    }
+    await stop();console.log('PASS session isolation, inheritance, popups, split, mirror, permissions, extension storage, PiP, reopen, PDF/download, switch, custom names, deletion, scales, notes address and persistence');process.exit(0);
+  }
   if(process.argv.includes('--network-lot')) {
     if(process.argv.includes('--private-check'))assert.equal((await state()).privateMode,true);
     const page=await pageAt('/a'),id=(await state()).activeId;
@@ -1125,6 +1370,7 @@ try {
   }
   }
 } catch (error) {
+  if(process.argv.includes('--site-sessions')&&ui){console.error('SITE STATE',JSON.stringify((await state()).tabs.map(({id,url,sessionId,loading,asleep})=>({id,url,sessionId,loading,asleep}))));console.error('SITE REQUESTS',JSON.stringify(siteRequests.filter(r=>r.url==='/clicked')))}
   const manager = (await targets()).find(t=>t.url.endsWith('#popup'));
   if (manager) console.error('MANAGER',await (await connect(manager)).evaluate('JSON.stringify(window.__extensions,(key,value)=>key === "icon" ? undefined : value)'));
   if (ui) console.error(await ui.evaluate('JSON.stringify({ready:document.readyState,listening:window.__checkListening,lastEvent:window.__checkLastMessage?.event,text:document.body?.innerText.slice(0,300)})').catch(() => 'UI unavailable'));

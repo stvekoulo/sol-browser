@@ -9,7 +9,7 @@ namespace Browser.App;
 /// <summary>Exécute les commandes de l'interface sur Browser.Core et les vues de pages, puis renvoie l'état.</summary>
 public sealed class BrowserController
 {
-    private readonly Window _window;
+    private readonly MainWindow _window;
     private readonly PageHost _pages;
     private readonly UiBridge _bridge;
     private readonly PopupHost _popup;
@@ -58,7 +58,7 @@ public sealed class BrowserController
 
     private readonly WelcomeHost _welcome;
 
-    public BrowserController(Window window, PageHost pages, UiBridge bridge, PopupHost popup, DockHost dock, PanelHost panel, WelcomeHost welcome, Settings settings)
+    public BrowserController(MainWindow window, PageHost pages, UiBridge bridge, PopupHost popup, DockHost dock, PanelHost panel, WelcomeHost welcome, Settings settings)
     {
         _welcome = welcome;
         (_window, _pages, _bridge, _popup, _dock, _tools, _settings) = (window, pages, bridge, popup, dock, panel, settings);
@@ -77,11 +77,14 @@ public sealed class BrowserController
             _tabs.Update(id, url, title); Refresh();
         };
         _pages.RuntimeChanged += Refresh;
-        _pages.NewTabRequested += url => { Open(url); Refresh(); };
+        _sessions.Seed();
+        _pages.RouteNavigation = RouteSiteNavigation;
+        _pages.NavigationSettled += ApplySiteNavigation;
+        _pages.NewTabRequested += (source, url) => { OpenLink(source, url); Refresh(); };
+        _pages.SessionFailed += id => Notice(T("Session indisponible", "Session unavailable"), T("Sol n’a pas pu ouvrir cette session. Réessayez en activant l’onglet ; aucune autre session n’a été utilisée.", "Sol could not open this session. Activate the tab to retry; no other session was used."));
         _pages.Loaded += RecordVisit;
         _pages.StoreInstallRequested += url => _ = InstallStoreExtensionAsync(url);
         _pages.StoreManageRequested += () => _ = OpenExtensionsAsync();
-        _pages.InstalledExtensions = () => _installedExtensions;
         _pages.StartRequested += (id, command) =>
         {
             if (_closingWindow) return;
@@ -284,7 +287,7 @@ public sealed class BrowserController
                     && PageTranslation.GoogleUrl(PageTranslation.IsGooglePage(sourceTab.Url) ? _translationOriginals.GetValueOrDefault(id, sourceTab.Url) : sourceTab.Url, c.Query!) is { } translatedUrl)
                 {
                     if (!PageTranslation.IsGooglePage(sourceTab.Url)) _translationOriginals[id] = sourceTab.Url;
-                    HidePopup(); _pages.Navigate(id, translatedUrl); Refresh();
+                    HidePopup(); _pages.Navigate(id, translatedUrl, route: false); Refresh();
                 }
                 return;
             case "translation.original":
@@ -405,6 +408,16 @@ public sealed class BrowserController
             case "device.rotate": _pages.RotateDevice(id); return;
             case "device.set": _pages.SetDevice(id, c.Query!.Length == 0 ? null : c.Query); HidePopup(); return;
             case "tab.menu": OpenTabMenu(id, c.X!.Value, c.Y!.Value); return;
+            case "session.menu": OpenSessionMenu(id, c.X!.Value, c.Y!.Value); return;
+            case "session.set": ChangeSession(id, c.Query!); return;
+            case "session.new": AskName(T("Nouvelle session", "New session"), T("Cookies, connexions et stockage de site séparés. Historique, favoris et notes restent ceux du profil Sol.", "Separate cookies, sign-ins and site storage. History, bookmarks and notes belong to the Sol profile."), T("Nom de la session", "Session name"), T("Créer", "Create"), "", "session.create", id); return;
+            case "session.create":
+                if (_sessions.Create(c.Title!) is { } created && (id.Length > 0 ? id : _tabs.ActiveId) is { } current) ChangeSession(current, created);
+                else Notice(T("Session non créée", "Session not created"), T("Utilisez un nom et au maximum 30 sessions.", "Use a name and at most 30 sessions."));
+                return;
+            case "session.rename":
+                _sessions.Rename(id, c.Title!); HidePopup(); Refresh(); return;
+            case "session.delete": _ = DeleteSessionAsync(id); return;
             case "permission.answer": AnswerPermission(c.Index != 0); return;
             case "permissions.forget": _permissions.Forget(id); if (_settingsOpen) _popup.Post(SettingsJson()); return;
             case "permissions.clear": _permissions.Clear(); if (_settingsOpen) _popup.Post(SettingsJson()); return;
@@ -507,7 +520,13 @@ public sealed class BrowserController
                 else ShowWindow(WinRT.Interop.WindowNative.GetWindowHandle(_window), 6); // plein écran : réduction demandée à Windows
                 break;
             case "window.maximize": // plein écran ou fenêtre
-                _window.AppWindow.SetPresenter(IsFullScreen ? AppWindowPresenterKind.Overlapped : AppWindowPresenterKind.FullScreen);
+                if (_settings.FullScreen)
+                    _window.SetBrowserFullScreen(!IsFullScreen);
+                else if (Presenter is { } normal)
+                {
+                    if (normal.State == OverlappedPresenterState.Maximized) normal.Restore();
+                    else normal.Maximize();
+                }
                 break;
         }
         HidePopup();
@@ -611,7 +630,11 @@ public sealed class BrowserController
 
     // Demandes d'accès des sites. Une réponse est retenue pour ce site et ce type d'accès ; fermer la question
     // sans répondre refuse pour cette fois seulement.
-    private readonly PermissionStore _permissions = new(AppPaths.Permissions);
+    private readonly PermissionStore _defaultPermissions = new(AppPaths.Permissions);
+    private readonly Dictionary<string, PermissionStore> _sessionPermissions = new();
+    private PermissionStore _permissions => _tabs.Tabs.FirstOrDefault(t => t.Id == _tabs.ActiveId)?.SessionId is { Length: > 0 } session
+        ? _sessionPermissions.TryGetValue(session, out var store) ? store : _sessionPermissions[session] = new(Path.Combine(AppPaths.DataDir, "session-permissions", session + ".json"))
+        : _defaultPermissions;
     private (Microsoft.Web.WebView2.Core.CoreWebView2PermissionRequestedEventArgs Args, Windows.Foundation.Deferral Deferral, string Origin, Microsoft.Web.WebView2.Core.CoreWebView2 Core, string? PageOrigin)? _asking;
 
     private static string PermissionLabel(Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind kind) => kind switch
@@ -672,7 +695,7 @@ public sealed class BrowserController
         if (_siteData == "clearing") return;
         _siteData = "clearing";
         _popup.Post(SettingsJson());
-        _siteData = await _pages.ClearSiteDataAsync() ? "done" : "failed";
+        _siteData = _tabs.ActiveId is { } active && await _pages.ClearSiteDataAsync(active) ? "done" : "failed";
         if (_settingsOpen && !_closingWindow) _popup.Post(SettingsJson());
     }
 
@@ -723,6 +746,7 @@ public sealed class BrowserController
         },
         items = new[]
         {
+            new { key = "fullscreen", label = T("Plein écran du navigateur", "Browser full screen"), hint = T("Désactivez pour garder la barre des tâches et une fenêtre redimensionnable", "Turn off to keep the taskbar and a resizable window"), on = _settings.FullScreen },
             new { key = "startWallpaper", label = T("Image d'arrière-plan du nouvel onglet", "New tab background image"), hint = T("Affiche l'image de fond sur la page d'accueil ; sinon, suit le thème du navigateur", "Shows the background image on the start page; otherwise follows the browser theme"), on = _settings.StartWallpaper },
             new { key = "blocker", label = T("Bloquer les publicités et les traqueurs", "Block ads and trackers"), hint = AdBlock.ExtensionId is null ? T("uBlock Origin Lite est absent : rien n'est bloqué", "uBlock Origin Lite is missing: nothing is blocked") : T("Avec uBlock Origin Lite, intégré au navigateur", "With uBlock Origin Lite, built into the browser"), on = _settings.BlockAds },
             new { key = "pip", label = T("Lecteur flottant", "Floating player"), hint = T("En quittant un onglet où une vidéo joue, elle reste à l'écran", "Leaving a tab with a playing video keeps it on screen"), on = _settings.AutoPip },
@@ -884,9 +908,13 @@ public sealed class BrowserController
     {
         switch (key)
         {
+            case "fullscreen":
+                _settings.FullScreen = on;
+                _window.SetBrowserFullScreen(on, maximize: !on);
+                break;
             case "blocker":
                 _settings.BlockAds = on;
-                if (_tabs.ActiveId is { } shown && _pages.CoreOf(shown) is { } shownCore) _ = AdBlock.ApplyExtensionAsync(shownCore.Profile, on);
+                foreach (var profile in _pages.Profiles) _ = AdBlock.ApplyExtensionAsync(profile, on);
                 break;
             case "pip": _settings.AutoPip = on; if (!on) _pages.ExitPip(pause: false); break;
             case "memory": _settings.MemorySaver = on; break;
@@ -930,6 +958,7 @@ public sealed class BrowserController
         _paletteCommands.Clear();
         _paletteItems = null;
         _notesPopup = false;
+        _sessionMenuTab = null;
         _translationRequest++;
         _translationSource = null;
         if (_pendingExtension is { } staged)
@@ -969,7 +998,7 @@ public sealed class BrowserController
         var index = _tabs.Tabs.ToList().FindIndex(t => t.Id == active);
         switch (action)
         {
-            case "history.open" or "downloads.open" or "settings.open" or "profile.menu" or "translation.open" or "extensions.open":
+            case "history.open" or "downloads.open" or "settings.open" or "profile.menu" or "session.menu" or "translation.open" or "extensions.open":
                 _bridge.Post(JsonSerializer.Serialize(new { @event = "invoke-action", data = action == "extensions.open" ? "extensions.menu" : action }));
                 break;
             case "library.open":
@@ -1016,9 +1045,99 @@ public sealed class BrowserController
     private static bool IsWeb(string url) =>
         url.StartsWith("https://", StringComparison.Ordinal) || url.StartsWith("http://", StringComparison.Ordinal);
 
-    private Tab Open(string url, bool activate = true, bool pinned = false, bool asleep = false)
+    private readonly TabSessions _sessions = new(Path.Combine(AppPaths.DataDir, "tab-sessions.json"));
+    private string? _deletingSession;
+    private string? _sessionMenuTab;
+    private readonly Dictionary<string, string> _sessionTargets = new();
+    private string SessionsJson(string tabId) => JsonSerializer.Serialize(new
     {
-        var tab = _tabs.Open(url, activate, pinned);
+        popup = "sessions", id = tabId,
+        current = _tabs.Tabs.FirstOrDefault(t => t.Id == tabId)?.SessionId ?? "",
+        items = _sessions.Items.Select(s => new { id = s.Id, name = s.Name, count = _tabs.Tabs.Count(t => t.SessionId == s.Id) }),
+        deleting = _deletingSession,
+    });
+    private void OpenSessionMenu(string tabId, double x, double y)
+    {
+        if (!_tabs.Tabs.Any(t => t.Id == tabId)) return;
+        if (ClosesPanel("session-" + tabId)) return;
+        HidePopup(); _sessionMenuTab = tabId;
+        _popup.Show(x, y, 350, SessionsJson(tabId), focus: true);
+    }
+    private bool RouteSiteNavigation(string tabId, string url, string? sourceUrl, bool waitForResponse)
+    {
+        _sessionTargets.Remove(tabId);
+        if (_tabs.Tabs.FirstOrDefault(t => t.Id == tabId) is not { } tab || TabSessions.SameSite(sourceUrl ?? tab.Url, url)
+            || TabSessions.SiteOf(url) is null && url != Settings.DefaultHomePage) return false;
+        var session = _sessions.ForSite(url);
+        if (tab.SessionId == session) return false;
+        _sessionTargets[tabId] = url;
+        // Attendre que le moteur ait accepté la réponse bloquée avant de fermer sa vue.
+        if (waitForResponse) return true;
+        ApplySiteNavigation(tabId);
+        return true;
+    }
+    private void ApplySiteNavigation(string tabId)
+    {
+        if (!_sessionTargets.TryGetValue(tabId, out var url)) return;
+        var core = _pages.CoreOf(tabId);
+        _window.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            if (_closingWindow || _sessionTargets.GetValueOrDefault(tabId) != url || _pages.CoreOf(tabId) != core) return;
+            _sessionTargets.Remove(tabId);
+            ChangeSession(tabId, _sessions.ForSite(url), url);
+        });
+    }
+    private Tab OpenLink(string source, string url, bool activate = true)
+    {
+        var tab = _tabs.Tabs.FirstOrDefault(t => t.Id == source);
+        return Open(url, activate: activate, sessionId: tab is not null && TabSessions.SameSite(tab.Url, url) ? tab.SessionId : null);
+    }
+    private void ChangeSession(string tabId, string sessionId, string? url = null)
+    {
+        if (_tabs.Tabs.FirstOrDefault(t => t.Id == tabId) is not { } tab || sessionId == _deletingSession
+            || sessionId.Length > 0 && _sessions.Resolve(sessionId).Length == 0) return;
+        if (tab.SessionId == sessionId) { if (url is null) _sessions.SetSite(tab.Url, sessionId); HidePopup(); return; }
+        if (_downloads.Any(d => d.TabId == tabId && d.Op.State == Microsoft.Web.WebView2.Core.CoreWebView2DownloadState.InProgress))
+        { Notice(T("Téléchargement en cours", "Download in progress"), T("Attendez sa fin avant de changer la session de cet onglet.", "Wait for it to finish before changing this tab's session.")); return; }
+        if (url is null) _sessions.SetSite(tab.Url, sessionId);
+        _sessionTargets.Remove(tabId);
+        HidePopup(); ExtensionPopup?.Hide();
+        _network.Forget(tabId); if (_network.Shown == tabId) _network.Shown = null;
+        _designTabs.Remove(tabId); _translationOriginals.Remove(tabId);
+        var asleep = _pages.IsAsleep(tabId);
+        _pages.Remove(tabId);
+        if (url is not null) _tabs.Update(tabId, url, url);
+        if (_tabs.SetSession(tabId, sessionId) is { } changed)
+        { if (asleep) _pages.AddAsleep(changed); else _pages.Add(changed); }
+        _pinnedExtensions = []; _pinsInitialized = false; _pinProfileName = null;
+        Refresh();
+    }
+    private async Task DeleteSessionAsync(string sessionId)
+    {
+        if (_deletingSession is not null || _sessions.Resolve(sessionId).Length == 0 || _tabs.Tabs.Any(t => t.SessionId == sessionId)) return;
+        _deletingSession = sessionId;
+        if (_sessionMenuTab is { } before) _popup.Post(SessionsJson(before));
+        var deleted = await _pages.DeleteSessionAsync(sessionId);
+        if (deleted)
+        {
+            _sessions.Delete(sessionId); _tabs.ForgetSession(sessionId);
+            var permissions = Path.Combine(AppPaths.DataDir, "session-permissions", sessionId + ".json");
+            _sessionPermissions.Remove(sessionId);
+            try { File.Delete(permissions); File.Delete(permissions + ".bak"); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        }
+        _deletingSession = null;
+        if (!deleted) Notice(T("Suppression impossible", "Cannot delete session"), T("Le moteur n’a pas pu supprimer la session. Réessayez après le redémarrage de Sol.", "The engine could not delete the session. Retry after restarting Sol."));
+        else if (_sessionMenuTab is { } current) _popup.Post(SessionsJson(current));
+        Refresh();
+    }
+    private Tab Open(string url, bool activate = true, bool pinned = false, bool asleep = false, string? sessionId = null)
+    {
+        var session = sessionId ?? (url.StartsWith("chrome-extension://", StringComparison.Ordinal)
+            ? _tabs.Tabs.FirstOrDefault(t => t.Id == _tabs.ActiveId)?.SessionId ?? "" : _sessions.ForSite(url));
+        // Une identité manquante ne doit jamais charger un site avec les connexions de la session principale.
+        if (session.Length > 0 && (_sessions.Resolve(session).Length == 0 || session == _deletingSession))
+        { url = Settings.DefaultHomePage; session = ""; }
+        var tab = _tabs.Open(url, activate, pinned, _sessions.Resolve(session));
         if (asleep) _pages.AddAsleep(tab);
         else _pages.Add(tab);
         return tab;
@@ -1207,6 +1326,7 @@ public sealed class BrowserController
         Add(T("Extensions", "Extensions"), new("extensions.open"), keywords: "extensions modules");
         Add(T("Réglages", "Settings"), new("settings.open", X: x, Y: 70), keywords: "settings parametres preferences");
         Add(T("Espaces et profils", "Spaces and profiles"), new("profile.menu", X: x, Y: 70), keywords: "profile espace compte");
+        if (active is not null) Add(T("Session de ce site", "Site session"), new("session.menu", Id: active.Id, X: x, Y: 70), keywords: "compte session cookies admin user invite");
         Add(T("Plein écran", "Full screen"), new("window.maximize"), keywords: "fullscreen plein ecran");
         if (active is not null)
         {
@@ -1235,7 +1355,7 @@ public sealed class BrowserController
         {
             var tab = _tabs.Tabs[i];
             var slot = i < 8 ? i + 1 : i == _tabs.Tabs.Count - 1 ? 9 : 0;
-            Add(tab.Title, new("tab.activate", Id: tab.Id), shortcut: BrowserShortcuts.TextFor($"tab.{slot}", Language.Current == "en"), hint: tab.Url, group: "tabs", keywords: "onglet tab");
+            Add(tab.Title, new("tab.activate", Id: tab.Id), shortcut: BrowserShortcuts.TextFor($"tab.{slot}", Language.Current == "en"), hint: tab.Url == QuickNotes.PageUrl ? "sol://notes" : tab.Url, group: "tabs", keywords: "onglet tab");
         }
         _paletteItems = items;
         _popup.ShowCentered(500, PaletteJson(), top: 80);
@@ -1268,6 +1388,7 @@ public sealed class BrowserController
         var block = ids.Length > 1;
         ShowMenu(x, y,
         [
+            (T("Session de ce site…", "Site session…"), () => _afterMenu = () => OpenSessionMenu(id, x, y)),
             (tab.Pinned ? (block ? T("Détacher les deux pages", "Unpin both pages") : T("Détacher l'onglet", "Unpin tab")) : (block ? T("Épingler les deux pages", "Pin both pages") : T("Épingler l'onglet", "Pin tab")), () =>
             {
                 foreach (var tabId in ids) _tabs.SetPinned(tabId, !tab.Pinned);
@@ -1763,7 +1884,7 @@ public sealed class BrowserController
         try
         {
             if (AppPaths.Private || EngineProfile is not { } profile || !(await profile.GetBrowserExtensionsAsync()).Any(e => e.Id == extension.Id && e.IsEnabled)) return;
-            if (extension.Popup is { } popup && ExtensionPopup is { } host) await host.ShowAsync($"chrome-extension://{extension.Id}/{popup.TrimStart('/')}", right, top);
+            if (extension.Popup is { } popup && ExtensionPopup is { } host) await host.ShowAsync($"chrome-extension://{extension.Id}/{popup.TrimStart('/')}", right, top, profile.ProfileName);
             else if ((extension.Popup ?? extension.Options) is { } page) { Open($"chrome-extension://{extension.Id}/{page.TrimStart('/')}"); Refresh(); }
             // Ni fenêtre ni réglages : elle agit au clic sur son bouton, ou dans un panneau latéral. Le moteur ne transmet pas ce clic.
             else Notice(extension.Name, T("Cette extension n’a pas de fenêtre à ouvrir : elle agit au clic sur son bouton ou dans un panneau latéral, ce que le moteur de Sol ne sait pas encore faire. Ses autres fonctions (dans les pages, par clic droit) restent actives.", "This extension has no window to open: it acts when its button is clicked or in a side panel, which Sol's engine cannot do yet. Its other features (in pages, by right-click) remain active."));
@@ -1790,6 +1911,7 @@ public sealed class BrowserController
     private Dictionary<string, ExtensionInfo> _extensionOffers = new();
     private List<object> _pinnedExtensions = [];
     private bool _pinsInitialized;
+    private string? _pinProfileName;
     private static string ExtensionsDir => Path.Combine(AppPaths.DataDir, "extensions");
     private static string ExtensionFolder(string id)
     {
@@ -1821,6 +1943,7 @@ public sealed class BrowserController
         return JsonSerializer.Serialize(new
         {
             popup = "extensions",
+            session = _tabs.Tabs.FirstOrDefault(t => t.Id == _tabs.ActiveId)?.SessionId is { Length: > 0 } session ? _sessions.Name(session) : T("Principale", "Main"),
             updates = _extensionCheck,
             installed,
             available = _extensionOffers.Values.OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase).Select(e => new { id = e.Id, name = e.Name, version = e.Version, from = e.From }),
@@ -1829,9 +1952,10 @@ public sealed class BrowserController
 
     private async Task OpenExtensionsAsync()
     {
-        if (AppPaths.Private) return;
+        if (AppPaths.Private || EngineProfile is not { } profile) return;
         HidePopup();
         var json = await ExtensionsJsonAsync();
+        if (_closingWindow || EngineProfile?.ProfileName != profile.ProfileName) return;
         _extensionsOpen = true;
         _popup.ShowCentered(560, json, top: 80);
     }
@@ -1846,7 +1970,9 @@ public sealed class BrowserController
     {
         if (AppPaths.Private || EngineProfile is not { } profile) return;
         _pinsInitialized = true;
+        _pinProfileName = profile.ProfileName;
         var extensions = await profile.GetBrowserExtensionsAsync();
+        if (EngineProfile?.ProfileName != profile.ProfileName) return;
         _installedExtensions = extensions.Where(e => e.Id != AdBlock.ExtensionId && e.Id != PageZoom.ExtensionId).Select(e => e.Id).ToHashSet();
         foreach (var gone in _extensionUpdates.Keys.Where(id => !_installedExtensions.Contains(id)).ToList()) _extensionUpdates.Remove(gone);
         _pages.RefreshStore();
@@ -1914,13 +2040,14 @@ public sealed class BrowserController
     // Sert aussi à une mise à jour qui demande de nouveaux accès.
     private async Task OfferStoreExtensionAsync(string id)
     {
-        if (_installingExtension || AppPaths.Private) return;
+        if (_installingExtension || AppPaths.Private || EngineProfile is not { } profile) return;
         _installingExtension = true;
         var staging = Path.Combine(ExtensionsDir, "store-" + Guid.NewGuid().ToString("N"));
         try
         {
             Notice(T("Téléchargement de l’extension", "Downloading extension"), T("Le paquet signé est récupéré depuis le Chrome Web Store…", "Fetching the signed package from the Chrome Web Store…"));
             var offered = await DownloadStoreExtensionAsync(id, staging);
+            if (_closingWindow || EngineProfile?.ProfileName != profile.ProfileName) return;
             HidePopup();
             _pendingExtension = offered;
             _popup.ShowCentered(440, JsonSerializer.Serialize(new
@@ -1992,6 +2119,7 @@ public sealed class BrowserController
                     try
                     {
                         var next = await DownloadStoreExtensionAsync(current.Id, staging);
+                        if (_closingWindow || EngineProfile?.ProfileName != profile.ProfileName) { await ShowAsync(""); return; }
                         var before = ExtensionPermissions.Describe(current.Permissions, french: true);
                         if (ExtensionPermissions.Describe(next.Permissions, french: true).Except(before).Any()) _extensionUpdates[current.Id] = next.Version;
                         else if (await InstallExtensionAsync(staging, current.Id, quiet: true)) { _extensionUpdates.Remove(current.Id); updated++; }
@@ -2154,10 +2282,8 @@ public sealed class BrowserController
             if (remove)
             {
                 await extension.RemoveAsync();
-                _settings.PinnedExtensions.Remove(id);
-                JsonFileStore.Save(AppPaths.Settings, _settings);
-                try { if (Directory.Exists(Path.Combine(ExtensionsDir, id))) Directory.Delete(Path.Combine(ExtensionsDir, id), recursive: true); }
-                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { /* utilisée par un autre profil ouvert : le dossier reste */ }
+                // ponytail: fichiers et préférence d'épinglage partagés ; conserver le code pour les autres sessions.
+                // Nettoyer les fichiers seulement après vérification de tous les profils moteur si l'espace devient un problème.
             }
             else await extension.EnableAsync(!extension.IsEnabled);
             ExtensionPopup?.Hide();
@@ -2376,8 +2502,8 @@ public sealed class BrowserController
             }
             if (link is not null && IsWeb(link))
             {
-                items.Add((T("Ouvrir le lien dans un nouvel onglet", "Open link in a new tab"), () => Open(link)));
-                items.Add((T("Ouvrir le lien en vue scindée", "Open link in split view"), () => Split(Open(link, activate: false).Id)));
+                items.Add((T("Ouvrir le lien dans un nouvel onglet", "Open link in a new tab"), () => OpenLink(tabId, link)));
+                items.Add((T("Ouvrir le lien en vue scindée", "Open link in split view"), () => Split(OpenLink(tabId, link, activate: false).Id)));
                 items.Add(("", null));
             }
             foreach (var item in e.MenuItems)
@@ -2513,7 +2639,8 @@ public sealed class BrowserController
         try
         {
         var session = JsonFileStore.Load<Session>(AppPaths.Session);
-        var tabs = session.Urls.Select((url, i) => Open(url, activate: false, pinned: i < session.PinnedCount, asleep: true)).ToList();
+        var tabs = session.Urls.Select((url, i) => Open(url, activate: false, pinned: i < session.PinnedCount, asleep: true,
+            sessionId: i < session.SessionIds.Count ? session.SessionIds[i] : "")).ToList();
         if (tabs.Count == 0) { Open(_settings.HomePage); return; }
         foreach (var tab in tabs) _restored.Add(tab.Id);
         for (var i = 0; i < tabs.Count && i < session.TranslationOriginals.Count; i++)
@@ -2561,6 +2688,7 @@ public sealed class BrowserController
         JsonFileStore.Save(AppPaths.Session, new Session
         {
             Urls = tabs.Select(t => t.Url).ToList(),
+            SessionIds = tabs.Select(t => t.SessionId).ToList(),
             TranslationOriginals = tabs.Select(t => _translationOriginals.GetValueOrDefault(t.Id, "")).ToList(),
             Titles = tabs.Select(t => t.Title).ToList(),
             PinnedCount = _tabs.PinnedCount,
@@ -2673,6 +2801,12 @@ public sealed class BrowserController
     private void Refresh()
     {
         if (_closingWindow || _restoringSession) return;
+        var activeProfile = EngineProfile?.ProfileName;
+        if (_pinProfileName != activeProfile)
+        {
+            ExtensionPopup?.Hide(); _pinnedExtensions = []; _pinsInitialized = false; _pinProfileName = activeProfile;
+            if (activeProfile is not null) _ = RefreshPinnedExtensionsAsync();
+        }
         if (_nativeZoom != UseNativeZoom) { _nativeZoom = UseNativeZoom; NativeZoomChanged?.Invoke(); }
         var starts = _tabs.Tabs.Where(t => t.Url == Settings.DefaultHomePage && !_pages.IsAsleep(t.Id)).ToList();
         if (starts.Count > 0) { var json = StartJson(); foreach (var tab in starts) _pages.PostStart(tab.Id, json); }
@@ -2699,6 +2833,7 @@ public sealed class BrowserController
             tabs = _tabs.Tabs.Select(t => new
             {
                 id = t.Id, url = t.Url, title = t.Title, pinned = t.Pinned,
+                sessionId = t.SessionId, sessionName = t.SessionId.Length == 0 ? T("Session actuelle", "Current session") : _sessions.Name(t.SessionId),
                 groupId = t.GroupId,
                 asleep = _pages.IsAsleep(t.Id), // déchargé : affiché atténué, il se recharge quand on y revient
                 device = _pages.DeviceOf(t.Id) is { } simulated ? DeviceLabel(simulated) : null, // simulateur : appareil affiché

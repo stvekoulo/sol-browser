@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
-import { isStartPage, formatDomain, onMessage, onState, send, type State, type Tab } from './bridge';
+import { displayAddress, isStartPage, formatDomain, onMessage, onState, send, type State, type Tab } from './bridge';
 import { t, useLang } from './i18n';
 import { Icon, ShieldIcon, SidebarIcon } from './Icons';
 
@@ -189,7 +189,7 @@ export default function App() {
 
 // Pilule d'adresse centrale : affiche le domaine centré au repos, et l'URL complète à l'édition.
 function AddressPill({ tab, focused, grow, shield }: { tab: Tab | undefined; focused: boolean; grow: number; shield: boolean }) {
-  const rawUrl = !tab || (tab.url === 'about:blank' || isStartPage(tab.url)) ? '' : tab.url;
+  const rawUrl = !tab || (tab.url === 'about:blank' || isStartPage(tab.url)) ? '' : displayAddress(tab.url);
   const domain = formatDomain(rawUrl);
   const [text, setText] = useState(rawUrl);
   const [editing, setEditing] = useState(false);
