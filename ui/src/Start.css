@@ -320,6 +320,9 @@
   font-weight: 600;
   font-size: 13px;
 }
+.start-history-letter img { width: 24px; height: 24px; object-fit: contain; }
+[data-theme='dark'] .start-history-letter img.tone-dark,
+[data-theme='light'] .start-history-letter img.tone-light { filter: invert(1) hue-rotate(180deg); }
 
 .start-empty {
   margin: 0;

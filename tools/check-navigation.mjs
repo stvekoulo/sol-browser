@@ -65,7 +65,7 @@ debugPort.listen(0, '127.0.0.1');
 await once(debugPort, 'listening');
 const port = debugPort.address().port;
 await new Promise(r => debugPort.close(r));
-await writeFile(resolve(profile, 'settings.json'), JSON.stringify({ Onboarded: true, Theme: 'dark', HomePage: `${origin}/a`, BlockAds: false, OnlineSuggestions: false, LiveColor: false }));
+await writeFile(resolve(profile, 'settings.json'), JSON.stringify({ Onboarded: true, Theme: 'dark', HomePage: `${origin}/a`, OnlineSuggestions: false, LiveColor: false, ...(process.argv.includes('--start-refresh') ? {Shortcuts:[],StartWallpaper:false} : {}), ...(process.argv.includes('--ai-hidden') ? {SolAiEnabled:true,Shortcuts:[]} : {}) }));
 if(process.argv.includes('--site-reset'))await writeFile(resolve(profile,'permissions.json'),JSON.stringify({[origin+' Camera']:true,[`http://localhost:${server.address().port} Camera`]:true}));
 let app, ui;
 if (process.argv.includes('--history')) {
@@ -82,14 +82,15 @@ const waitFor = async (get, description, timeout = 20000) => {
   const end = Date.now() + timeout;
   while (Date.now() < end) {
     try { const value = await get(); if (value) return value; }
-      catch (e) { if (e.code !== 'EBUSY' && !/Cannot find default execution context|Execution context was destroyed/.test(e.message)) throw e; }
+      catch (e) { if (e.code !== 'EBUSY' && !/Cannot find default execution context|Execution context was destroyed|CDP target unavailable/.test(e.message)) throw e; }
     await delay(100);
   }
   throw new Error(`Timed out: ${description}`);
 };
 async function connect(target) {
   const ws = new WebSocket(target.webSocketDebuggerUrl);
-  await once(ws, 'open');
+  try { await once(ws, 'open', {signal:AbortSignal.timeout(5000)}); }
+  catch { ws.close(); throw new Error('CDP target unavailable'); }
   let seq = 0;
   const pending = new Map();
   ws.addEventListener('message', e => {
@@ -140,10 +141,12 @@ async function launch(extra = []) {
   }, 'browser state', 40000);
 }
 async function pageAt(path) {
-  const target = await waitFor(async () => (await targets()).find(t => t.url === `${origin}${path}`), `page ${path}`);
-  const page = await connect(target);
-  await waitFor(() => page.evaluate(`document.readyState === "complete" && location.href === ${JSON.stringify(`${origin}${path}`)}`), 'requested document ready');
-  return page;
+  return waitFor(async () => {
+    const target=(await targets()).find(t => t.url === `${origin}${path}`);
+    if (!target) return;
+    const page=await connect(target);
+    if (await page.evaluate(`document.readyState === "complete" && location.href === ${JSON.stringify(`${origin}${path}`)}`)) return page;
+  }, `page ${path}`);
 }
 async function stop() {
   if (!app || app.exitCode !== null) return;
@@ -153,7 +156,45 @@ async function stop() {
 }
 try {
   await launch(process.argv.includes('--private-check') ? ['--private'] : []);
-  if(process.argv.includes('--ai-warm')) {
+  if(process.argv.includes('--ai-hidden')) {
+    await pageAt('/a');
+    assert.equal(JSON.parse(await readFile(resolve(profile,'settings.json'),'utf8')).SolAiEnabled,false,'upgrade disables old AI preference');
+    assert.ok((await state()).tabs.every(t=>!t.ai),'AI page actions hidden');
+    await command({type:'ai.enable',index:1});await delay(200);
+    assert.equal(JSON.parse(await readFile(resolve(profile,'settings.json'),'utf8')).SolAiEnabled,false,'hidden AI cannot reactivate through an old command');
+    await command({type:'settings.open',x:900,y:58});
+    const popup=await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#popup')),'settings popup'));
+    await waitFor(()=>popup.evaluate('!!document.querySelector(".settings-nav")'),'settings ready');
+    await popup.evaluate("[...document.querySelectorAll('.settings-nav button')].find(b=>b.textContent.trim()==='Sol').click()");
+    assert.equal(await popup.evaluate('document.body.innerText.includes("Sol AI")'),false,'Sol AI absent from Sol settings');
+    await stop();console.log('PASS Sol AI hidden, disabled on upgrade and unable to reactivate');process.exit(0);
+  } else if(process.argv.includes('--start-refresh')) {
+    await pageAt('/a');
+    await command({type:'tab.open',url:'https://start.sol/index.html#start'});
+    const start=await connect(await waitFor(async()=>(await targets()).find(t=>t.url==='https://start.sol/index.html#start'),'start page'));
+    await waitFor(()=>start.evaluate('document.readyState==="complete" && !!document.querySelector(".start-history")'),'start interface ready');
+    await start.evaluate("chrome.webview.addEventListener('message',e=>{if(e.data.event==='start')window.__home=e.data});chrome.webview.postMessage(JSON.stringify({type:'start.ready'}))");
+    await waitFor(()=>start.evaluate('window.__home?.history.length>0'),'initial history');
+    const {DatabaseSync}=await import('node:sqlite');
+    const db=new DatabaseSync(resolve(profile,'browser.db'),{readOnly:true});
+    assert.equal(db.prepare('SELECT count FROM visits WHERE url=?').get(origin+'/a').count,1,'one record per load');
+    const url=`http://localhost:${server.address().port}/visited`;
+    await command({type:'tab.open',url});
+    const visited=await connect(await waitFor(async()=>(await targets()).find(t=>t.url===url),'visited site'));
+    await waitFor(()=>visited.evaluate('document.readyState==="complete"'),'visited loaded');
+    await waitFor(()=>start.evaluate(`window.__home.history.some(v=>v.url===${JSON.stringify(url)})`),'history updates without reloading start');
+    const id=(await waitFor(async()=>(await state()).tabs.find(t=>t.url===url),'visited tab')).id;
+    await command({type:'nav.reload',id});
+    await waitFor(()=>db.prepare('SELECT count FROM visits WHERE url=?').get(url)?.count===2,'revisit recorded once');
+    await waitFor(()=>start.evaluate(`window.__home.frequent[0].url===${JSON.stringify(url)}`),'frequent ranking updates');
+    await waitFor(()=>start.evaluate(`(()=>{const img=[...document.querySelectorAll('.start-history button')].find(b=>b.title===${JSON.stringify(url)})?.querySelector('img');return img?.complete&&img.naturalWidth===192})()`),'original high resolution site favicon');
+    await delay(200);
+    assert.equal(await start.evaluate('getComputedStyle(document.querySelector(".start-history img")).filter'),'none','colored favicon keeps its original colors');
+    await command({type:'tab.activate',id:(await state()).tabs.find(t=>t.url==='https://start.sol/index.html#start').id});
+    const shot=await start.call('Page.captureScreenshot',{format:'png'});
+    await writeFile(resolve(base,'start-refresh.png'),Buffer.from(shot.data,'base64'));
+    db.close();await stop();console.log('PASS live start history/frequent ranking, single visit counting and high resolution site favicons');process.exit(0);
+  } else if(process.argv.includes('--ai-warm')) {
     const page=await pageAt('/a'), id=(await state()).activeId;
     const popup=await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#popup')),'AI popup'));
     await popup.call('Emulation.setFocusEmulationEnabled',{enabled:true});
@@ -505,6 +546,15 @@ try {
     await command({type:'nav.go',id,input:origin+'/address-return'});page=await documentAt(origin+'/address-return');
     assert.equal((await state()).tabs.find(t=>t.id===id).sessionId,admin,'address navigation restores this site choice');
     assert.equal(await page.evaluate('localStorage.account'),'admin');
+    await page.evaluate("sessionStorage.authState='kept'");
+    const authUrl=other+'/__/auth/handler?client_id=fixture&redirect_uri='+encodeURIComponent(origin+'/oauth-return');
+    await page.evaluate(`location.href=${JSON.stringify(authUrl)}`);
+    page=await documentAt(authUrl);
+    assert.equal((await activeTab()).sessionId,admin,'authentication keeps initiating profile');
+    const callbackUrl=origin+'/address-return?state=fixture&code=fixture';
+    await page.evaluate(`location.href=${JSON.stringify(callbackUrl)}`);
+    page=await documentAt(callbackUrl);
+    assert.equal(await page.evaluate('sessionStorage.authState'),'kept','redirect retains sessionStorage');
     await page.call('Emulation.setFocusEmulationEnabled',{enabled:true});
     await delay(200);
     await page.evaluate(`document.querySelector('main').innerHTML='<a href="${other}/clicked#section">Other site</a>'`);
@@ -516,19 +566,40 @@ try {
     assert.equal(await page.evaluate('localStorage.account'),'user');
     assert.equal(await page.evaluate('document.cookie'),'account=user','session cookies survive switching away and back');
     assert.equal(siteRequests.find(r=>r.host===new URL(other).host&&r.url==='/clicked')?.cookie,'account=user','first link request uses destination session');
-    await page.evaluate(`window.open('${origin}/new-window','_blank')`);
-    let child=await documentAt(origin+'/new-window');const childId=(await state()).tabs.find(t=>t.url===origin+'/new-window').id;
-    assert.equal((await state()).tabs.find(t=>t.id===childId).sessionId,admin,'new-window link chooses destination site');
+    await page.evaluate(`void window.open('${origin}/new-window','_blank')`);
+    let child=await documentAt(origin+'/new-window');let childId=(await state()).tabs.find(t=>t.url===origin+'/new-window').id;
+    assert.equal((await state()).tabs.find(t=>t.id===childId).sessionId,user,'popup retains initiating session');
+    assert.equal(await child.evaluate('!!window.opener'),true,'popup retains window.opener');
+    await page.evaluate("window.addEventListener('message',e=>{if(e.data==='auth-complete')window.popupResult=true})");
+    await child.evaluate("window.opener.postMessage('auth-complete','*')");
+    await waitFor(()=>page.evaluate('window.popupResult===true'),'popup communicates with opener');
+    assert.equal(await child.evaluate('document.cookie'),'','popup cannot inherit another profile cookies');
+    await child.evaluate('window.close()');
+    await waitFor(async()=>!(await state()).tabs.some(t=>t.id===childId),'script closes its popup');
     await command({type:'tab.activate',id:first});await command({type:'tab.open',url:other+'/remembered'});
     page=await documentAt(other+'/remembered');assert.equal((await activeTab()).sessionId,user,'new tabs use remembered site');
-    await command({type:'tab.activate',id:childId});await command({type:'nav.go',id:childId,input:origin+'/site-redirect'});
-    child=await documentAt(other+'/signed-in');assert.equal((await state()).tabs.find(t=>t.id===childId).sessionId,admin,'authentication redirects retain initiating session');
+    await command({type:'tab.open',url:origin+'/site-redirect'});
+    child=await documentAt(other+'/signed-in');
+    childId=(await waitFor(async()=> (await state()).tabs.find(t=>t.url===other+'/signed-in'),'redirect tab')).id;
+    assert.equal((await state()).tabs.find(t=>t.id===childId).sessionId,admin,'authentication redirects retain initiating session');
     await command({type:'nav.go',id:childId,input:origin+'/back-to-site'});child=await documentAt(origin+'/back-to-site');
     await child.evaluate(`document.querySelector('main').insertAdjacentHTML('beforeend','<iframe src="${other}/embedded"></iframe>')`);
     await waitFor(()=>siteRequests.some(r=>r.host===new URL(other).host&&r.url==='/embedded'),'embedded frame request');
     await delay(350);assert.equal((await state()).tabs.find(t=>t.id===childId).sessionId,admin,'embedded sites do not switch the parent session');
     await child.evaluate(`document.querySelector('main').innerHTML='<form method="post" action="${other}/form-result"><input name="value" value="test"></form>';document.querySelector('form').requestSubmit()`);
     await documentAt(other+'/form-result');assert.equal((await state()).tabs.find(t=>t.id===childId).sessionId,admin,'form posts retain their initiating session');
+    await command({type:'tab.close',id:childId});
+    await command({type:'tab.activate',id:first});
+    page=await documentAt(origin+'/a');
+    await page.evaluate("sessionStorage.pending='preserve';document.querySelector('main').innerHTML='<input value=initial>';document.querySelector('input').value='unsaved'");
+    await command({type:'tab.open',url:origin+'/idle'});
+    await delay(23000);
+    assert.equal((await state()).tabs.find(t=>t.id===first).asleep,false,'stateful tab is retained');
+    await command({type:'tab.activate',id:first});
+    assert.equal(await page.evaluate('sessionStorage.pending'),'preserve','wake retains storage');
+    assert.equal(await page.evaluate("document.querySelector('input').value"),'unsaved','wake retains form');
+    await page.evaluate("document.querySelector('input').click();document.querySelector('input').value='interactive'");
+    assert.equal(await page.evaluate("document.querySelector('input').value"),'interactive','resumed page responds');
     await delay(2300);await stop();await launch();
     await command({type:'tab.open',url:other+'/restart'});page=await documentAt(other+'/restart');id=(await state()).activeId;
     assert.equal((await state()).tabs.find(t=>t.id===id).sessionId,user,'site choice persists after restart');
@@ -538,7 +609,7 @@ try {
     const requested=(host,url)=>siteRequests.find(r=>r.host===new URL(host).host&&r.url===url);
     assert.equal(requested(origin,'/address-return').cookie,'account=admin','first destination request sends only its chosen account');
     assert.equal(requested(other,'/clicked').cookie,'account=user','link destination request sends only its chosen account');
-    assert.equal(requested(origin,'/new-window').cookie,'account=admin');
+    assert.equal(requested(origin,'/new-window').cookie,undefined,'popup does not leak the destination profile cookies');
     const guest=catalog.find(s=>s.Name==='Invité').Id,rapid=(await state()).activeId;
     await command({type:'session.set',id:rapid,query:guest});await delay(450);
     await switched(rapid,'',other+'/default-again');
@@ -604,7 +675,7 @@ try {
     await command({type:'tab.open',url:origin+'/admin-child'});await waitFor(async()=>(await state()).tabs.some(t=>t.url===origin+'/admin-child'),'child tab');const child=(await state()).activeId;
     let childPage=await pageAt('/admin-child');assert.equal((await state()).tabs.find(t=>t.id===child).sessionId,admin,'new tab uses this site choice');
     assert.equal(await childPage.evaluate('localStorage.account'),'admin');
-    await childPage.evaluate(`window.open('/popup-child','_blank')`);
+    await childPage.evaluate(`void window.open('/popup-child','_blank')`);
     await waitFor(async()=>(await state()).tabs.some(t=>t.url===origin+'/popup-child'),'popup opens in Sol');
     const popupTab=(await state()).tabs.find(t=>t.url===origin+'/popup-child');assert.equal(popupTab.sessionId,admin,'popup session inherited');
     await command({type:'tab.activate',id:child});await command({type:'tab.close',id:popupTab.id});

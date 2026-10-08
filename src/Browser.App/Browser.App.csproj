@@ -18,7 +18,7 @@
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <EnableMsixTooling>true</EnableMsixTooling>
-    <Version>0.1.18</Version>
+    <Version>0.1.19</Version>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
@@ -34,8 +34,7 @@
     <Content Include="..\..\ui\node_modules\@mozilla\readability\Readability.js" Link="inject\Readability.js" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\ui\node_modules\@mozilla\readability\LICENSE.md" Link="inject\Readability-LICENSE.md" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\Sol.ico" CopyToOutputDirectory="PreserveNewest" />
-    <!-- uBlock Origin Lite, récupéré par tools/get-ublock.ps1 (absent : aucun blocage) -->
-    <Content Include="extensions\**" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="extensions\**" Exclude="extensions\ubol\**" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\ui\dist\**" Link="ui\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <!-- Le SDK IA est isolé : ni WinUI ni Browser.Core ne le chargent. Aucune livraison sur x86. -->

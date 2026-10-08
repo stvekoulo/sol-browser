@@ -16,7 +16,7 @@ import { drawSol } from './solScene';
 type Browser = { id: string; name: string; profiles: { folder: string; name: string }[] };
 type Setup = {
   first: boolean; name: string; theme: number; font: number; language: number; engine: number; engines: string[];
-  blocker: boolean; pip: boolean; browsers: Browser[];
+   pip: boolean; browsers: Browser[];
 };
 type Imported = Record<string, { bookmarks: number; history: number; passwords: number; locked: number } | 'running'>;
 
@@ -133,7 +133,6 @@ export default function Welcome() {
       <h1>{t('Réglages', 'Settings')}</h1>
       <p className="welcome-lead">{t('Vous pourrez modifier ces réglages à tout moment.', 'You can change these settings at any time.')}</p>
       <Choice label={t('Moteur de recherche', 'Search engine')} options={setup.engines} value={setup.engine} onPick={i => set('engine', i, { engine: i })} />
-      <Toggle title={t('Bloquer les publicités et les traqueurs', 'Block ads and trackers')} sub={t('Avec uBlock Origin Lite', 'With uBlock Origin Lite')} on={setup.blocker} onPick={on => set('blocker', on ? 1 : 0, { blocker: on })} />
       <Toggle title={t('Lecteur flottant', 'Floating player')} sub={t('Garde la vidéo à l’écran lorsque vous changez d’onglet', 'Keeps the video on screen when you switch tabs')} on={setup.pip} onPick={on => set('pip', on ? 1 : 0, { pip: on })} />
     </>,
 

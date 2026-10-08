@@ -22,6 +22,15 @@ public sealed class TabSessions(string path)
         return host + (uri.IsDefaultPort ? "" : ":" + uri.Port);
     }
     public static bool SameSite(string a, string b) => SiteOf(a) is { } site && site == SiteOf(b);
+    public static bool IsSignIn(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https")) return false;
+        var keys = uri.Query.TrimStart('?').Split('&').Select(p => p.Split('=', 2)[0]).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return uri.AbsolutePath.Contains("/__/auth/", StringComparison.OrdinalIgnoreCase)
+            || keys.Contains("SAMLRequest") || keys.Contains("SAMLResponse")
+            || keys.Contains("client_id") && (keys.Contains("redirect_uri") || keys.Contains("response_type"))
+            || keys.Contains("state") && keys.Contains("code");
+    }
     public string ForSite(string url) => SiteOf(url) is { } site ? Resolve(Sites.GetValueOrDefault(site)) : "";
     public void SetSite(string url, string id)
     {

@@ -124,7 +124,8 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
             or TimeoutException or OperationCanceledException or System.Text.Json.JsonException) { return null; }
         finally { container.Children.Remove(preview); CloseView(preview); }
     }
-    public event Action<string, string>? NewTabRequested; // onglet source, adresse
+    public Func<string, string, Tab?>? CreatePopupTab;
+    public event Action<string>? PopupClosed;
     public event Action<string, double, double, CoreWebView2ContextMenuRequestedEventArgs>? ContextMenuRequested; // id, x, y dans la fenêtre
     public event Action<string, double, double>? DeviceAreaMenuRequested; // id, x, y : clic droit à côté d'un appareil simulé
     public event Action<string, CoreWebView2DownloadStartingEventArgs>? DownloadStarting; // onglet d'origine
@@ -165,7 +166,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     }
     private async Task PrepareProfileAsync(CoreWebView2Profile profile)
     {
-        await AdBlock.ApplyExtensionAsync(profile, settings.BlockAds);
+        await AdBlock.RemoveBundledAsync(profile);
         await PageZoom.InstallAsync(profile, settings.PageZoom);
     }
     public async Task<bool> DeleteSessionAsync(string sessionId)
@@ -187,7 +188,9 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         finally { container.Children.Remove(view); view.Close(); }
     }
 
-    public async void Add(Tab tab)
+    public async void Add(Tab tab) => await AddAsync(tab);
+
+    private async Task<CoreWebView2?> AddAsync(Tab tab, bool navigate = true)
     {
         if (!_watchLayout)
         {
@@ -201,20 +204,20 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         try
         {
             await StartEngineAsync(view, tab.SessionId.Length == 0 ? null : "sol-" + tab.SessionId);
-            // La première page attend que le bloqueur soit prêt.
+            // Préparer les extensions du profil avant sa première navigation.
             var profile = view.CoreWebView2.Profile;
             if (!_profileReady.TryGetValue(profile.ProfileName, out var ready))
                 _profileReady[profile.ProfileName] = ready = PrepareProfileAsync(profile);
             await ready;
         }
         catch (Exception e) when ((e is InvalidOperationException or System.Runtime.InteropServices.COMException)
-            && _views.GetValueOrDefault(tab.Id) != view) { return; } // fermé pendant le démarrage
+            && _views.GetValueOrDefault(tab.Id) != view) { return null; } // fermé pendant le démarrage
         catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException)
         {
             DebugLog.Write($"session.start.failed {e.GetType().Name} {e.HResult}");
-            Remove(tab.Id); AddAsleep(tab); SessionFailed?.Invoke(tab.Id); return;
+            Remove(tab.Id); AddAsleep(tab); SessionFailed?.Invoke(tab.Id); return null;
         }
-        if (!_views.TryGetValue(tab.Id, out var initializing) || initializing != view) return; // fermé ou rouvert pendant l'initialisation
+        if (!_views.TryGetValue(tab.Id, out var initializing) || initializing != view) return null; // fermé ou rouvert pendant l'initialisation
 
         var core = view.CoreWebView2;
         var documentUrl = tab.Url;
@@ -257,7 +260,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
                 StartRequested?.Invoke(tab.Id, command);
         };
         await ApplySettingsAsync(tab.Id, core);
-        if (!_views.TryGetValue(tab.Id, out initializing) || initializing != view) return;
+        if (!_views.TryGetValue(tab.Id, out initializing) || initializing != view) return null;
 
         // Pendant qu'une page d'erreur est affichée, l'onglet garde l'adresse demandée, pas celle de la page d'erreur.
         core.SourceChanged += (_, _) =>
@@ -270,7 +273,8 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         core.NavigationStarting += (_, e) =>
         {
             redirected = e.IsRedirected;
-            routeSite = !_skipSiteRoute.Remove(tab.Id);
+            routeSite = !_skipSiteRoute.Remove(tab.Id) && e.IsUserInitiated
+                && !TabSessions.IsSignIn(e.Uri);
             if (!redirected) navigationSource = documentUrl;
             navigationUrl = e.Uri;
             _pdf.Remove(tab.Id);
@@ -331,7 +335,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
             if (e.ProcessFailedKind == CoreWebView2ProcessFailedKind.RenderProcessExited && _views.GetValueOrDefault(tab.Id) == view)
                 ShowError(tab.Id, core, _errorUrl.GetValueOrDefault(tab.Id, core.Source), "crash");
         };
-        core.NewWindowRequested += (_, e) => { e.Handled = true; NewTabRequested?.Invoke(tab.Id, e.Uri); };
+        core.NewWindowRequested += (sender, e) => _ = OpenWindowAsync(tab.Id, e);
         core.ContextMenuRequested += (_, e) =>
         {
             // Position du clic dans la fenêtre, pour y poser notre menu.
@@ -353,10 +357,34 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         core.FaviconChanged += async (_, _) => FaviconChanged?.Invoke(tab.Id, await ReadFaviconAsync(core));
         // Appareil simulé, lecteur flottant : leur page reste à 100 %, quelle que soit la page chargée ensuite.
         core.DOMContentLoaded += (_, _) => { if (_mode.ContainsKey(tab.Id) || _pip == tab.Id) _ = PageZoom.TabAsync(core, 1); };
-        if (!_views.TryGetValue(tab.Id, out initializing) || initializing != view) return;
+        if (!_views.TryGetValue(tab.Id, out initializing) || initializing != view) return null;
         _ready.Add(tab.Id);
-        Navigate(tab.Id, _target.GetValueOrDefault(tab.Id, tab.Url), route: false);
+        if (navigate) Navigate(tab.Id, _target.GetValueOrDefault(tab.Id, tab.Url), route: false);
         if (_wanted.Remove(tab.Id, out var wanted)) SetDevice(tab.Id, wanted.Name, wanted.Landscape);
+        return core;
+    }
+
+    private async Task OpenWindowAsync(string source, CoreWebView2NewWindowRequestedEventArgs request)
+    {
+        using var deferral = request.GetDeferral();
+        request.Handled = true;
+        Tab? tab = null;
+        try
+        {
+            tab = CreatePopupTab?.Invoke(source, request.Uri);
+            if (tab is null) return;
+            var core = await AddAsync(tab, navigate: false);
+            if (core is null) { PopupClosed?.Invoke(tab.Id); return; }
+            core.WindowCloseRequested += (_, _) => PopupClosed?.Invoke(tab.Id);
+            request.NewWindow = core;
+            RuntimeChanged?.Invoke();
+        }
+        catch (Exception error) when (error is InvalidOperationException or System.Runtime.InteropServices.COMException)
+        {
+            DebugLog.Write($"popup.failed {error.GetType().Name}");
+            if (tab is not null) PopupClosed?.Invoke(tab.Id);
+        }
+        finally { deferral.Complete(); }
     }
 
     // Pages d'erreur du navigateur. _target : adresse de la navigation en cours ; _errorUrl : adresse dont la page
@@ -504,7 +532,8 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         _ = core.AddScriptToExecuteOnDocumentCreatedAsync(SidewaysScript);
         _ = core.AddScriptToExecuteOnDocumentCreatedAsync("document.addEventListener('pointerdown',e=>{if(e.isTrusted)window.chrome.webview.postMessage('sol.page.pointer')},true)");
         _ = core.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "video-cursor.js")));
-        _ = core.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "ai.js")));
+        if (settings.SolAiEnabled)
+            _ = core.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "ai.js")));
         s.IsReputationCheckingRequired = true; // SmartScreen
         // Aucun certificat invalide n'est accepté silencieusement, même sur localhost.
         core.ServerCertificateErrorDetected += (_, e) =>
@@ -596,7 +625,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         { view.Close(); return; }
         var name = core.Profile.ProfileName;
         // Fermer pendant l'installation d'une extension peut laisser son attente liée à une vue détruite.
-        if (_profileReady.TryGetValue(name, out var ready) && !ready.IsCompletedSuccessfully) _profileReady.Remove(name);
+        _profileReady.Remove(name);
         _closingProfiles[name] = PreserveSessionAsync(view, core, name);
     }
     private async Task PreserveSessionAsync(WebView2 view, CoreWebView2 core, string name)
@@ -853,7 +882,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         Harden(core);
         core.Settings.AreDefaultContextMenusEnabled = false;
         core.Settings.IsStatusBarEnabled = false;
-        core.NewWindowRequested += (_, e) => { e.Handled = true; NewTabRequested?.Invoke(id, e.Uri); };
+        core.NewWindowRequested += (sender, e) => _ = OpenWindowAsync(id, e);
         core.DownloadStarting += (_, e) => e.Cancel = true; // les téléchargements passent par l'onglet
         core.NavigationStarting += (_, e) =>
         {
@@ -1039,11 +1068,49 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
                 if (core.IsDocumentPlayingAudio) { _hiddenSince[id] = now; continue; } // musique, appel : il reste éveillé
                 var busy = KeepAwake(id) || _pip == id || _sims.ContainsKey(id) || _loading.Contains(id);
                 if (busy) continue;
-                if (now - since >= DiscardAfter && core.Source.StartsWith("http", StringComparison.Ordinal) && !_errorUrl.ContainsKey(id)) Discard(id, core);
-                else if (now - since >= SuspendAfter && !core.IsSuspended) _ = core.TrySuspendAsync();
+                if (now - since >= DiscardAfter && core.Source.StartsWith("http", StringComparison.Ordinal) && !_errorUrl.ContainsKey(id)) _ = DiscardIfSafeAsync(id, core);
+                else if (now - since >= SuspendAfter && !core.IsSuspended) _ = SuspendAsync(id, core);
             }
             catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { /* vue fermée entre-temps */ }
         }
+    }
+
+    private readonly HashSet<string> _saving = new();
+    private async Task SuspendAsync(string id, CoreWebView2 core)
+    {
+        if (!_saving.Add(id)) return;
+        try
+        {
+            await core.TrySuspendAsync();
+            if (!settings.MemorySaver || !_hiddenSince.ContainsKey(id)) core.Resume();
+        }
+        catch (Exception error) when (error is InvalidOperationException or System.Runtime.InteropServices.COMException) { }
+        finally { _saving.Remove(id); }
+    }
+
+    private async Task DiscardIfSafeAsync(string id, CoreWebView2 core)
+    {
+        if (!_saving.Add(id)) return;
+        try
+        {
+            // Keep live state and embedded sign-in/media frames; suspension retains their browser context.
+            if (TabSessions.IsSignIn(core.Source)) return;
+            if (core.IsSuspended) core.Resume();
+            var safe = await core.ExecuteScriptAsync(@"(() => { try {
+                return sessionStorage.length === 0 && !document.querySelector('iframe')
+                    && ![...document.querySelectorAll('input,textarea')].some(e => e.value !== e.defaultValue)
+                    && ![...document.querySelectorAll('video')].some(e => !e.paused);
+                } catch { return false; } })()");
+            if (safe == "true" && settings.MemorySaver && _hiddenSince.ContainsKey(id)
+                && CoreOf(id) == core && !_loading.Contains(id) && !KeepAwake(id)) Discard(id, core);
+            else if (settings.MemorySaver && _hiddenSince.ContainsKey(id) && CoreOf(id) == core)
+            {
+                await core.TrySuspendAsync();
+                if (!settings.MemorySaver || !_hiddenSince.ContainsKey(id)) core.Resume();
+            }
+        }
+        catch (Exception error) when (error is InvalidOperationException or System.Runtime.InteropServices.COMException) { }
+        finally { _saving.Remove(id); }
     }
 
     private void Discard(string id, CoreWebView2 core)

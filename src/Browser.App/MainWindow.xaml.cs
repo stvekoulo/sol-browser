@@ -96,7 +96,6 @@ public sealed partial class MainWindow : Window
     {
         var settings = _settings;
         if (settings.Font == "custom") settings.Font = "sf"; // ancien nom du choix « SF Pro »
-        AdBlock.PrepareExtension(); // avant la création du moteur
         var blur = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "blur.js"));
 
         UiBridge.Settings = settings;
@@ -147,7 +146,6 @@ public sealed partial class MainWindow : Window
         WireGestures();
 
         await bridge.InitAsync(uiFolder, _controller.Execute);
-        if (settings.BlockAds) _ = AdBlock.UpdateExtensionAsync();
         await popupBridge.InitAsync(uiFolder, _controller.Execute);
         await captureBridge.InitAsync(uiFolder, _controller.Execute);
         popup.Hide();

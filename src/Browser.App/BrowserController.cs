@@ -68,6 +68,12 @@ public sealed partial class BrowserController
         _network = new NetworkInspector(panel.Post);
         _sessionSave.Tick += (_, _) => { _sessionSave.Stop(); SaveSession(); };
         Directory.CreateDirectory(AppPaths.DataDir);
+        // Sol AI reste désactivé pendant cette phase, y compris après une mise à jour.
+        if (_settings.SolAiEnabled)
+        {
+            _settings.SolAiEnabled = false;
+            JsonFileStore.Save(AppPaths.Settings, _settings);
+        }
         _db = new BrowserDb(AppPaths.Database);
         _capture = new CaptureService(window, json => CapturePanel?.Post(json));
         _ai.Changed += () => _window.DispatcherQueue.TryEnqueue(() =>
@@ -97,7 +103,15 @@ public sealed partial class BrowserController
         _sessions.Seed();
         _pages.RouteNavigation = RouteSiteNavigation;
         _pages.NavigationSettled += ApplySiteNavigation;
-        _pages.NewTabRequested += (source, url) => { OpenLink(source, url); Refresh(); };
+        _pages.CreatePopupTab = (source, url) =>
+        {
+            var opener = _tabs.Tabs.FirstOrDefault(t => t.Id == source);
+            if (opener is null) return null;
+            var tab = _tabs.Open(url, sessionId: opener.SessionId);
+            Refresh();
+            return tab;
+        };
+        _pages.PopupClosed += id => { Close(id); Refresh(); };
         _pages.SessionFailed += id => Notice(T("Session indisponible", "Session unavailable"), T("Sol n’a pas pu ouvrir cette session. Réessayez en activant l’onglet ; aucune autre session n’a été utilisée.", "Sol could not open this session. Activate the tab to retry; no other session was used."));
         _pages.Loaded += RecordVisit;
         _pages.StoreInstallRequested += url => _ = InstallStoreExtensionAsync(url);
@@ -110,6 +124,8 @@ public sealed partial class BrowserController
                 _bridge.BroadcastTheme();
                 _pages.PostStart(id, StartJson());
                 foreach (var url in _db.Bookmarks().Select(b => b.Url).Concat(_settings.Shortcuts.Select(s => s.Url)).Distinct().Take(24)) FetchStartIcon(url);
+                if (!AppPaths.Private)
+                    foreach (var visit in _db.RecentHistory(12)) FetchStartIcon(visit.Url);
                 LoadStartPreviews();
             }
             else if (command.Type == "start.navigate") _pages.Navigate(id, Resolve(command.Input!));
@@ -142,6 +158,8 @@ public sealed partial class BrowserController
             if (!_pinsInitialized) { _ = RefreshPinnedExtensionsAsync(); _ = PrepareExtensionsAsync(); _ = UpdateExtensionsLaterAsync(); }
             _ = LearnShortcutNameAsync(id);
             if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { } tab && IsWeb(tab.Url) && tab.Url is not (Settings.DefaultHomePage or QuickNotes.PageUrl)) FetchStartIcon(tab.Url);
+            Refresh();
+            if (_tabs.Tabs.Any(t => t.Url == Settings.DefaultHomePage && !_pages.IsAsleep(t.Id))) LoadStartPreviews();
         };
         _pages.FaviconChanged += (id, data) =>
         {
@@ -195,6 +213,7 @@ public sealed partial class BrowserController
 
     public void Execute(Command c)
     {
+        if (c.Type.StartsWith("ai.", StringComparison.Ordinal)) return; // Sol AI temporairement masqué.
         var id = c.Id ?? "";
         if (c.Type is not ("popup.size" or "dock.size" or "split.resize")) DebugLog.Write($"commande {c.Type} {c.Id} {c.Index}");
         switch (c.Type)
@@ -422,8 +441,6 @@ public sealed partial class BrowserController
             case "network.detail":
                 if (_network.Shown is { } inspected && _pages.CoreOf(inspected) is { } inspectedCore) _ = _network.PostDetailAsync(inspected, inspectedCore, id);
                 return;
-            // Réglages d'uBlock Origin Lite (listes de filtres, sites sans filtrage) : sa propre page, dans un onglet.
-            case "blocker.options": if (_settings.BlockAds && AdBlock.ExtensionId is { } extension) Open($"chrome-extension://{extension}/dashboard.html"); break;
             case "welcome.open": HidePopup(); _ = _welcome.ShowAsync(); return;
             case "welcome.ready": PostWelcome(); return;
             case "welcome.name":
@@ -833,8 +850,6 @@ public sealed partial class BrowserController
         }),
         home = _settings.HomePage == Settings.DefaultHomePage ? "" : _settings.HomePage,
         font = Math.Max(0, Array.IndexOf(Fonts, _settings.Font)),
-        // Version installée ; null : extension absente, ou coupée (ses pages de réglages ne s'ouvrent pas tant qu'elle l'est).
-        ublock = AdBlock.ExtensionId is null || !_settings.BlockAds ? null : AdBlock.ExtensionVersion,
         engine = Math.Max(0, Array.FindIndex(Engines, e => e.Search == _settings.SearchUrlTemplate)),
         engines = Engines.Select(e => e.Name),
         // Réponses retenues, site par site : chacune peut être oubliée séparément.
@@ -859,7 +874,6 @@ public sealed partial class BrowserController
         {
             new { key = "fullscreen", label = T("Plein écran du navigateur", "Browser full screen"), hint = T("Désactivez pour garder la barre des tâches et une fenêtre redimensionnable", "Turn off to keep the taskbar and a resizable window"), on = _settings.FullScreen },
             new { key = "startWallpaper", label = T("Image d'arrière-plan du nouvel onglet", "New tab background image"), hint = T("Affiche l'image de fond sur la page d'accueil ; sinon, suit le thème du navigateur", "Shows the background image on the start page; otherwise follows the browser theme"), on = _settings.StartWallpaper },
-            new { key = "blocker", label = T("Bloquer les publicités et les traqueurs", "Block ads and trackers"), hint = AdBlock.ExtensionId is null ? T("uBlock Origin Lite est absent : rien n'est bloqué", "uBlock Origin Lite is missing: nothing is blocked") : T("Avec uBlock Origin Lite, intégré au navigateur", "With uBlock Origin Lite, built into the browser"), on = _settings.BlockAds },
             new { key = "pip", label = T("Lecteur flottant", "Floating player"), hint = T("En quittant un onglet où une vidéo joue, elle reste à l'écran", "Leaving a tab with a playing video keeps it on screen"), on = _settings.AutoPip },
             new { key = "memory", label = T("Économie de mémoire", "Memory saver"), hint = MemoryHint(), on = _settings.MemorySaver },
             new { key = "scrollbars", label = T("Barre de défilement fine", "Thin scrollbar"), hint = T("Apparaît seulement pendant le défilement", "Only appears while scrolling"), on = !_settings.HideScrollbars },
@@ -956,7 +970,6 @@ public sealed partial class BrowserController
             language = Math.Max(0, Array.IndexOf(Languages, _settings.Language)),
             engine = Math.Max(0, Array.FindIndex(Engines, e => e.Search == _settings.SearchUrlTemplate)),
             engines = Engines.Select(e => e.Name),
-            blocker = _settings.BlockAds,
             pip = _settings.AutoPip,
             browsers = _importSources.Select(s => new { id = s.Id, name = s.Name, profiles = s.Profiles.Select(p => new { folder = p.Folder, name = p.Name }) }),
         }));
@@ -1022,10 +1035,6 @@ public sealed partial class BrowserController
             case "fullscreen":
                 _settings.FullScreen = on;
                 _window.SetBrowserFullScreen(on, maximize: !on);
-                break;
-            case "blocker":
-                _settings.BlockAds = on;
-                foreach (var profile in _pages.Profiles) _ = AdBlock.ApplyExtensionAsync(profile, on);
                 break;
             case "pip": _settings.AutoPip = on; if (!on) _pages.ExitPip(pause: false); break;
             case "memory": _settings.MemorySaver = on; break;
@@ -2051,8 +2060,8 @@ public sealed partial class BrowserController
         // Les extensions des autres navigateurs : beaucoup de petits fichiers à lire, hors du fil de l'interface.
         _extensionOffers = await Task.Run(() => BrowserImport.Detect(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData))
             .SelectMany(source => ExtensionCatalog.Scan(source.UserData, source.Name))
-            // Sans le bloqueur déjà intégré, ni les composants internes du navigateur Comet.
-            .Where(e => !have.Contains(e.Id) && !e.Name.StartsWith("uBlock Origin Lite", StringComparison.OrdinalIgnoreCase) && !e.Name.StartsWith("Comet", StringComparison.OrdinalIgnoreCase))
+            // Les composants internes du navigateur Comet ne sont pas des extensions transférables.
+            .Where(e => !have.Contains(e.Id) && !e.Name.StartsWith("Comet", StringComparison.OrdinalIgnoreCase))
             .GroupBy(e => e.Id).ToDictionary(g => g.Key, g => g.First()));
         return JsonSerializer.Serialize(new
         {
@@ -2830,6 +2839,7 @@ public sealed partial class BrowserController
     private readonly HashSet<string> _startPreviewFailed = new();
     private readonly CancellationTokenSource _startPreviewCancel = new();
     private bool _loadingStartPreviews;
+    private bool _startPreviewsPending;
     // Un aperçu se fait en chargeant le site dans une vue cachée : du réseau, du processeur, et une visite que
     // l'utilisateur n'a pas faite. Une fois par jour suffit, et une seule tentative par site et par session.
     private static readonly TimeSpan StartPreviewAge = TimeSpan.FromDays(1);
@@ -2854,7 +2864,8 @@ public sealed partial class BrowserController
     }
     private async void LoadStartPreviews()
     {
-        if (AppPaths.Private || _closingWindow || _loadingStartPreviews) return;
+        if (AppPaths.Private || _closingWindow) return;
+        if (_loadingStartPreviews) { _startPreviewsPending = true; return; }
         _loadingStartPreviews = true;
         var directory = Path.Combine(AppPaths.DataDir, "start-previews");
         try
@@ -2898,7 +2909,11 @@ public sealed partial class BrowserController
             foreach (var file in new DirectoryInfo(directory).GetFiles("*.png").OrderByDescending(f => f.LastWriteTimeUtc).Skip(24)) file.Delete();
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or OperationCanceledException) { }
-        finally { _loadingStartPreviews = false; }
+        finally
+        {
+            _loadingStartPreviews = false;
+            if (_startPreviewsPending) { _startPreviewsPending = false; LoadStartPreviews(); }
+        }
     }
     private string? StartIcon(string url) => _startIcons.GetValueOrDefault(SiteShortcut.DomainOf(url)) ?? (_tabs.Tabs.FirstOrDefault(t => SiteShortcut.DomainOf(t.Url) == SiteShortcut.DomainOf(url)) is { } tab
         && _favicons.GetValueOrDefault(tab.Id) is { } icon ? icon : _settings.Shortcuts.FirstOrDefault(s => SiteShortcut.DomainOf(s.Url) == SiteShortcut.DomainOf(url))?.Icon);
@@ -2914,7 +2929,7 @@ public sealed partial class BrowserController
             favorites = _db.Bookmarks().Take(24).Select(b => new { url = b.Url, title = b.Title, icon = StartIcon(b.Url) })
                 .Concat(_settings.Shortcuts.Select(s => new { url = s.Url, title = s.Name, icon = StartIcon(s.Url) })).DistinctBy(b => b.url).Take(24),
             frequent = frequent.Select(v => new { url = v.Url, title = v.Title, preview = _startPreviews.GetValueOrDefault(v.Url), previewFailed = _startPreviewFailed.Contains(v.Url) }),
-            history = history.Select(v => new { url = v.Url, title = v.Title, last = v.Last.ToUnixTimeMilliseconds() }),
+            history = history.Select(v => new { url = v.Url, title = v.Title, last = v.Last.ToUnixTimeMilliseconds(), icon = StartIcon(v.Url) }),
             groups = _tabs.Groups.Select(g => new { id = g.Id, name = g.Name, color = g.Color, count = _tabs.Tabs.Count(t => t.GroupId == g.Id) }),
         });
     }
@@ -2973,7 +2988,7 @@ public sealed partial class BrowserController
             groups = _tabs.Groups.Select(g => new { id = g.Id, name = g.Name, color = g.Color, icon = g.Icon, collapsed = g.Collapsed }),
             activeId = _tabs.ActiveId,
             privateMode = AppPaths.Private, // fenêtre de navigation privée
-            shield = _settings.BlockAds && AdBlock.ExtensionId is not null, // blocage des publicités et des traqueurs en service
+            shield = false,
             shortcuts = _settings.Shortcuts.Select(s => new { url = s.Url, name = s.Name, icon = s.Icon, tabId = _shortcutTabs.GetValueOrDefault(s) }),
             extensions = _pinnedExtensions,
             profile = ProfileName(AppPaths.Profile),

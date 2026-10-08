@@ -25,7 +25,7 @@
 - Des profils aux données séparées, et des fenêtres privées effacées à leur fermeture.
 
 **Vos données**
-- Configuration à la première ouverture : votre nom, la langue, le thème, la police, le moteur de recherche et ce qu'il faut bloquer.
+- Configuration à la première ouverture : votre nom, la langue, le thème, la police et le moteur de recherche.
 - Import depuis Chrome, Edge, Brave, Comet, Arc, Vivaldi et Opera : favoris, historique et mots de passe enregistrés. Les mots de passe qu'un navigateur garde pour lui seul s'importent depuis le fichier CSV qu'il exporte.
 - Sauvegarde : réglages, onglets, favoris, historique et mots de passe dans un seul fichier, chiffré par une clé que vous choisissez. Sol ne garde pas cette clé.
 
@@ -35,7 +35,6 @@
 - Polices de l'interface : système, Inter ou SF Pro.
 
 **Moins de distractions**
-- Publicités et traqueurs bloqués par [uBlock Origin Lite](https://github.com/uBlockOrigin/uBOL-home), intégré et tenu à jour.
 - Lecteur flottant : quittez un onglet où une vidéo joue, elle reste à l'écran avec les commandes de Sol.
 - Les sites demandent une fois l'accès au micro, à la caméra ou à la position ; la réponse est retenue par site et peut être oubliée.
 
@@ -81,12 +80,11 @@ Get-FileHash .\Sol-0.1.4-win-x64-Setup.exe -Algorithm SHA256
 
 ## Vie privée
 
-- Aucun compte ni télémétrie envoyée à l’auteur de Sol. Sol AI, facultatif, utilise le moteur local Microsoft avec sa télémétrie facultative désactivée ; catalogue/téléchargements contactent Microsoft et le moteur peut recueillir des diagnostics essentiels. L’inférence du modèle reste locale.
+- Aucun compte ni télémétrie envoyée à l’auteur de Sol. Sol AI est temporairement masqué et désactivé dans cette version ; aucun modèle n’est téléchargé automatiquement.
 - Favoris, historique, mots de passe et réglages restent sur votre ordinateur. Une sauvegarde n'en sort que sous la forme du fichier chiffré que vous exportez.
 - Les connexions que Sol établit de lui-même :
   - les suggestions de recherche, envoyées à votre moteur pendant la saisie dans la barre d'adresse (désactivable) ;
   - la recherche d'une nouvelle version de Sol sur GitLab au démarrage (copies installées seulement) ;
-  - la recherche hebdomadaire d'une nouvelle version d'uBlock Origin Lite sur GitHub ;
   - les icônes des sites de vos raccourcis.
 - Les pages web n'ont aucun canal vers le code du navigateur.
 
@@ -112,7 +110,6 @@ cd ui
 npm ci
 npm run build          # l'interface (React), copiée à côté de l'exécutable par la compilation
 cd ..
-pwsh tools/get-ublock.ps1                      # récupère uBlock Origin Lite (facultatif : sans lui, rien n'est bloqué)
 dotnet test tests/Browser.Core.Tests
 dotnet run --project src/Browser.App
 ```
@@ -145,4 +142,4 @@ Les versions ne sont pas encore signées. Une demande à la [SignPath Foundation
 
 ## Licence
 
-[MIT](LICENSE). Les logiciels tiers livrés avec le navigateur, uBlock Origin Lite (GPLv3) en particulier, sont listés dans [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+[MIT](LICENSE). Les logiciels tiers livrés avec Sol sont listés dans [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

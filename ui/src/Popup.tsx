@@ -5,7 +5,7 @@ import GroupEditor from './GroupEditor';
 import { t, useLang } from './i18n';
 import { Icon } from './Icons';
 import QuickNotes, { type NotesContent } from './QuickNotes';
-import SolAiSettings, { type SolAiState, type AiPreferences } from './SolAiSettings';
+import type { SolAiState, AiPreferences } from './SolAiSettings';
 
 import SolAiAction, { type AiContent } from './SolAiAction';
 
@@ -22,7 +22,7 @@ type Content =
   | { popup: 'menu'; items: string[] }
   | { popup: 'split-layout'; ratio: number }
   | { popup: 'downloads'; items: Download[] }
-  | { popup: 'settings'; section?: string; ai: SolAiState; aiPreferences: AiPreferences; version: string; update: { version: string; percent: number; ready: boolean } | null; check: 'idle' | 'checking' | 'current' | 'failed' | 'portable'; zoom: number; uiScale: number; shortcuts: {action:string; title:string; keys:string}[]; theme: number; language: number; spelling: number; spellingLanguages: string[]; home: string; font: number; ublock: string | null; engine: number; engines: string[]; sites: { origin: string; host: string; summary: string }[]; permissions: number; siteData: 'idle' | 'clearing' | 'done' | 'failed'; tint: Setting[]; items: Setting[] }
+  | { popup: 'settings'; section?: string; ai: SolAiState; aiPreferences: AiPreferences; version: string; update: { version: string; percent: number; ready: boolean } | null; check: 'idle' | 'checking' | 'current' | 'failed' | 'portable'; zoom: number; uiScale: number; shortcuts: {action:string; title:string; keys:string}[]; theme: number; language: number; spelling: number; spellingLanguages: string[]; home: string; font: number;  engine: number; engines: string[]; sites: { origin: string; host: string; summary: string }[]; permissions: number; siteData: 'idle' | 'clearing' | 'done' | 'failed'; tint: Setting[]; items: Setting[] }
   | { popup: 'profiles'; items: Profile[] }
   | { popup: 'sessions'; id: string; current: string; deleting: string | null; items: {id:string;name:string;count:number}[] }
   | { popup: 'group-edit'; create: boolean; id: string; name: string; color: string; icon: string; presets: string[] }
@@ -387,7 +387,7 @@ export default function Popup() {
         {settingsSection === 'general' && <HomeField key={content.home} home={content.home} />}
         {settingsSection === 'appearance' && <TintSettings items={content.tint} />}
         <div className="popup-list">
-          {content.items.filter(s => (['startWallpaper','scrollbars','blur'].includes(s.key) ? 'appearance' : ['blocker','onlineSuggestions','passwords'].includes(s.key) ? 'privacy' : 'general') === settingsSection).map(s => (
+          {content.items.filter(s => (['startWallpaper','scrollbars','blur'].includes(s.key) ? 'appearance' : ['onlineSuggestions','passwords'].includes(s.key) ? 'privacy' : 'general') === settingsSection).map(s => (
             <button
               key={s.key}
               className="setting-row"
@@ -402,15 +402,6 @@ export default function Popup() {
               <span className={`switch${s.on ? ' on' : ''}`} aria-hidden />
             </button>
           ))}
-          {settingsSection === 'privacy' && content.ublock && (
-            <div className="setting-row static">
-              <span className="setting-text">
-                <span className="row-title">uBlock Origin Lite {content.ublock}</span>
-                <span className="row-sub">{t('Listes de filtres et sites sans filtrage. Logiciel libre (GPLv3), mis à jour automatiquement.', 'Filter lists and sites without filtering. Free software (GPLv3), updated automatically.')}</span>
-              </span>
-              <button className="pill-action" onClick={() => send({ type: 'blocker.options' })}>{t('Ouvrir', 'Open')}</button>
-            </div>
-          )}
           <div className="setting-row static" hidden={settingsSection !== 'data'}>
             <span className="setting-text">
               <span className="row-title">{t('Importer d’un autre navigateur', 'Import from another browser')}</span>
@@ -448,7 +439,6 @@ export default function Popup() {
               <button className="pill-action" disabled={content.check === 'checking'} onClick={() => send({ type: 'update.check' })}>{t('Vérifier', 'Check')}</button>
             )}
           </div>
-          {settingsSection === 'about' && content.ai?.available && <div className="theme-row"><SolAiSettings ai={content.ai} preferences={content.aiPreferences} /></div>}
           <div className="setting-row static" hidden={settingsSection !== 'data'}>
             <span className="setting-text">
               <span className="row-title">{t('Sauvegarde', 'Backup')}</span>

@@ -346,7 +346,7 @@ export function useIconLook(src: string | null) {
       }
       const mean = count ? light / count : 128;
       setLook({
-        tone: mean < 60 ? ' tone-dark' : mean > 225 ? ' tone-light' : '',
+        tone: vivid > count * 0.08 ? '' : mean < 60 ? ' tone-dark' : mean > 225 ? ' tone-light' : '',
         color: vivid > count * 0.08 ? `rgb(${sum.map(v => Math.round(v / vivid)).join(', ')})` : null,
       });
     };

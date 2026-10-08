@@ -78,7 +78,6 @@ public sealed class Settings
     /// </summary>
     public string Font { get; set; } = "default";
     /// <summary>Active uBlock Origin Lite pour bloquer les publicités et les traqueurs.</summary>
-    public bool BlockAds { get; set; } = true;
     /// <summary>Met en veille les onglets inactifs, puis les décharge de la mémoire s'ils le restent longtemps.</summary>
     public bool MemorySaver { get; set; } = true;
     /// <summary>Quitter un onglet où une vidéo joue la garde à l'écran dans un lecteur flottant.</summary>

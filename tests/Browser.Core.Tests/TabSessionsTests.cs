@@ -4,6 +4,17 @@ namespace Browser.Core.Tests;
 
 public sealed class TabSessionsTests
 {
+    [Theory]
+    [InlineData("https://accounts.google.com/o/oauth2/auth?client_id=sol&redirect_uri=https%3A%2F%2Fexample.com", true)]
+    [InlineData("https://example.com/__/auth/handler", true)]
+    [InlineData("https://example.com/callback?state=one&code=two", true)]
+    [InlineData("https://example.com/sso?SAMLRequest=value", true)]
+    [InlineData("https://example.com/article?state=read", false)]
+    [InlineData("https://example.com/", false)]
+    [InlineData("javascript:void(0)", false)]
+    public void Sign_in_navigation_keeps_its_browser_context(string url, bool signIn)
+        => Assert.Equal(signIn, TabSessions.IsSignIn(url));
+
     [Fact]
     public void Site_choices_are_explicit_independent_persistent_and_removed_with_the_session()
     {

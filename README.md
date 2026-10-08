@@ -25,7 +25,7 @@
 - Profiles with separate data, and private windows erased when closed.
 
 **Your data**
-- First-run setup: your name, language, theme, font, search engine, and what to block.
+- First-run setup: your name, language, theme, font and search engine.
 - Import from Chrome, Edge, Brave, Comet, Arc, Vivaldi and Opera: bookmarks, history and saved passwords. Passwords a browser keeps to itself can be imported from the CSV file it exports.
 - Backup: settings, tabs, bookmarks, history and passwords in one file, encrypted with a key you choose. Sol does not keep the key.
 
@@ -35,7 +35,6 @@
 - Interface fonts: system, Inter or SF Pro.
 
 **Fewer distractions**
-- Ads and trackers blocked with [uBlock Origin Lite](https://github.com/uBlockOrigin/uBOL-home), built in and kept up to date.
 - Floating player: leave a tab where a video plays and it stays on screen, with Sol's own controls.
 - Sites ask once for the microphone, camera or location; the answer is remembered per site and can be forgotten.
 
@@ -81,12 +80,11 @@ Get-FileHash .\Sol-0.1.4-win-x64-Setup.exe -Algorithm SHA256
 
 ## Privacy
 
-- No account or telemetry sent to Sol's author. Optional Sol AI uses Microsoft's local runtime with optional telemetry disabled; its catalog/downloads contact Microsoft and the runtime may collect essential diagnostics. Model inference runs locally.
+- No account or telemetry sent to Sol's author. Sol AI is temporarily hidden and disabled in this release; no model is downloaded automatically.
 - Bookmarks, history, passwords and settings stay on your computer. A backup leaves it only as the encrypted file you export.
 - Connections Sol makes on its own:
   - search suggestions, sent to your search engine as you type in the address bar (can be turned off);
   - a check for a newer Sol on GitLab at startup (installed copies only);
-  - a weekly check for a newer uBlock Origin Lite on GitHub;
   - the site icons of your shortcuts.
 - Web pages have no channel to the browser's own code.
 
@@ -112,7 +110,6 @@ cd ui
 npm ci
 npm run build          # the interface (React), copied next to the executable by the build
 cd ..
-pwsh tools/get-ublock.ps1                      # fetches uBlock Origin Lite (optional: without it nothing is blocked)
 dotnet test tests/Browser.Core.Tests
 dotnet run --project src/Browser.App
 ```
@@ -145,4 +142,4 @@ Releases are not signed yet. An application to the [SignPath Foundation](https:/
 
 ## Licence
 
-[MIT](LICENSE). Third-party software shipped with the browser, uBlock Origin Lite (GPLv3) in particular, is listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+[MIT](LICENSE). Third-party software shipped with Sol is listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

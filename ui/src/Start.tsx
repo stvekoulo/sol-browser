@@ -69,6 +69,14 @@ function SiteTile({ site }: { site: Site }) {
   );
 }
 
+function HistoryIcon({ site }: { site: Site }) {
+  const look = useIconLook(site.icon ?? null);
+  const name = formatDomain(site.url) || site.title;
+  return <span className="start-history-letter" style={site.icon ? undefined : { background: tileBackground(name) }} aria-hidden>
+    {site.icon ? <img className={look.tone.trim() || undefined} src={site.icon} alt="" draggable={false} /> : name.slice(0, 1).toUpperCase()}
+  </span>;
+}
+
 export default function Start() {
   const [data, setData] = useState(empty);
 
@@ -182,13 +190,7 @@ export default function Start() {
               const title = site.title || domain;
               return (
                 <button key={site.url} onClick={() => open(site.url)} title={site.url}>
-                  <span
-                    className="start-history-letter"
-                    style={{ background: tileBackground(domain || title) }}
-                    aria-hidden
-                  >
-                    {title.slice(0, 1).toUpperCase()}
-                  </span>
+                  <HistoryIcon site={site} />
                   <span>
                     <strong>{title}</strong>
                     <small>{domain}</small>
