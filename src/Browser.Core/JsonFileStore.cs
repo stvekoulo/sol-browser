@@ -4,6 +4,16 @@ namespace Browser.Core;
 
 public sealed class Settings
 {
+    public bool SolAiEnabled { get; set; }
+    private string _solAiModel = "";
+    public string SolAiModel { get => _solAiModel; set => _solAiModel = value ?? ""; }
+    public bool SolAiAdaptation { get; set; }
+    public bool SolAiThinking { get; set; } = true;
+    private int _solAiKeepMinutes = 45;
+    public int SolAiKeepMinutes { get => _solAiKeepMinutes; set => _solAiKeepMinutes = value is >= 0 and <= 10080 ? value : 45; }
+    private int _solAiTone, _solAiLength;
+    public int SolAiTone { get => _solAiTone; set => _solAiTone = value is >= 0 and <= 2 ? value : 0; }
+    public int SolAiLength { get => _solAiLength; set => _solAiLength = value is >= 0 and <= 2 ? value : 0; }
     public bool FullScreen { get; set; } = true;
     private double _uiScale = 1;
     /// <summary>Taille de l'interface choisie dans les réglages : 100, 90 ou 80 %.</summary>

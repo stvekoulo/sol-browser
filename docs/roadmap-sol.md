@@ -1,6 +1,6 @@
 # Sol — workflow des prochaines fonctionnalités
 
-Date : 7 octobre 2026. Statut : direction Sol AI validée ; inventaire commencé, lots 1 à 7 implémentés et testés localement. Le moteur IA et les lots suivants ne sont pas livrés.
+Date : 7 octobre 2026. Statut : lots 1 à 9 implémentés localement. Le lot 9 ajoute les actions contextuelles et une personnalisation locale facultative. Ces changements ne sont pas encore publiés.
 
 ## Direction validée et corrections
 
@@ -55,7 +55,7 @@ Les lots 1 à 7 peuvent être développés sans attendre la livraison complète 
 
 ## Décisions qui restent ouvertes
 
-- **Modèles Rapide / Équilibré / Qualité** : proposer uniquement les niveaux qui ont été mesurés ; pas trois téléchargements imposés ni de sélection fondée seulement sur la RAM totale.
+- **Niveaux Sol AI** : Mini, Medium, High, Ultra et Extra, décision utilisateur. Noms des modèles masqués dans l’interface. Filtrage par OS, architecture, RAM totale/disponible, processeurs logiques et disque ; aucun téléchargement automatique. Mini testé sur CPU, budgets conservateurs et performances non validées pour les autres niveaux. Mesurer ces niveaux avant toute promesse de qualité ou de rapidité.
 - **Visibilité Sol AI** : décision actée. Masquer les actions et réglages Sol AI sur Windows/appareils incompatibles. Ne pas modifier les exigences du navigateur de base. La matrice finale sera fondée sur les capacités effectivement testées, pas uniquement sur le numéro de version Windows.
 - **Cloud facultatif** : mentionné comme perspective dans la discussion. Hors du périmètre local initial ; un lot séparé pourra l’ajouter sur demande, avec fournisseur, coûts et consentement explicités. Aucun fallback cloud silencieux.
 - **Suivi de prix navigateur fermé** : nécessite une tâche/service et une nouvelle décision produit. Ce n’est pas inclus dans le comportement initial.

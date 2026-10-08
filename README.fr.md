@@ -81,7 +81,7 @@ Get-FileHash .\Sol-0.1.4-win-x64-Setup.exe -Algorithm SHA256
 
 ## Vie privée
 
-- Aucune télémétrie, aucun compte. Sol n'envoie rien à son auteur.
+- Aucun compte ni télémétrie envoyée à l’auteur de Sol. Sol AI, facultatif, utilise le moteur local Microsoft avec sa télémétrie facultative désactivée ; catalogue/téléchargements contactent Microsoft et le moteur peut recueillir des diagnostics essentiels. L’inférence du modèle reste locale.
 - Favoris, historique, mots de passe et réglages restent sur votre ordinateur. Une sauvegarde n'en sort que sous la forme du fichier chiffré que vous exportez.
 - Les connexions que Sol établit de lui-même :
   - les suggestions de recherche, envoyées à votre moteur pendant la saisie dans la barre d'adresse (désactivable) ;

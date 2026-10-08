@@ -7,13 +7,14 @@ using Microsoft.UI.Xaml;
 namespace Browser.App;
 
 /// <summary>Exécute les commandes de l'interface sur Browser.Core et les vues de pages, puis renvoie l'état.</summary>
-public sealed class BrowserController
+public sealed partial class BrowserController
 {
     private readonly MainWindow _window;
     private readonly PageHost _pages;
     private readonly UiBridge _bridge;
     private readonly PopupHost _popup;
     private readonly Settings _settings;
+    private readonly SolAiService _ai = new();
     private readonly BrowserDb _db;
     private readonly CaptureService _capture;
     public PopupHost? CapturePanel { get; init; }
@@ -62,11 +63,27 @@ public sealed class BrowserController
     {
         _welcome = welcome;
         (_window, _pages, _bridge, _popup, _dock, _tools, _settings) = (window, pages, bridge, popup, dock, panel, settings);
+        _ai.SetKeepMinutes(settings.SolAiKeepMinutes);
+        _pages.PagePressed += DismissAiPopup;
         _network = new NetworkInspector(panel.Post);
         _sessionSave.Tick += (_, _) => { _sessionSave.Stop(); SaveSession(); };
         Directory.CreateDirectory(AppPaths.DataDir);
         _db = new BrowserDb(AppPaths.Database);
         _capture = new CaptureService(window, json => CapturePanel?.Post(json));
+        _ai.Changed += () => _window.DispatcherQueue.TryEnqueue(() =>
+        {
+            if (_closingWindow) return;
+            if(_ai.Optimization is { } optimization && _ai.Models.Any(m=>m.Id==optimization.Id && m.Cached) && _settings.SolAiModel!=optimization.Id) {
+                _settings.SolAiModel=optimization.Id;JsonFileStore.Save(AppPaths.Settings,_settings);
+            }
+            if (!_ai.Models.Any(m => m.Id == _settings.SolAiModel && m.Cached))
+            {
+                var installed = _ai.Models.FirstOrDefault(m => m.Cached)?.Id ?? "";
+                if (_settings.SolAiModel != installed) { _settings.SolAiModel = installed; JsonFileStore.Save(AppPaths.Settings, _settings); }
+            }
+            if (_settingsOpen) _popup.Post(SettingsJson());
+            PublishAi();
+        });
 
         _pages.PageChanged += (id, url, title) =>
         {
@@ -152,6 +169,7 @@ public sealed class BrowserController
         _window.Closed += (_, _) =>
         {
             _closingWindow = true;
+            _ai.Dispose();
             _pages.StopSpelling();
             _capture.CancelSelection();
             _startPreviewCancel.Cancel();
@@ -168,6 +186,7 @@ public sealed class BrowserController
         };
         ApplyComparison();
         Profiles.DeleteClosedTemporary(AppPaths.BaseDir, IsProfileOpen); // sessions isolées dont la fenêtre est fermée
+        if(_settings.SolAiEnabled)_ai.Prepare(_settings.SolAiModel);
     }
 
     private static string T(string fr, string en) => Language.T(fr, en);
@@ -180,6 +199,34 @@ public sealed class BrowserController
         if (c.Type is not ("popup.size" or "dock.size" or "split.resize")) DebugLog.Write($"commande {c.Type} {c.Id} {c.Index}");
         switch (c.Type)
         {
+            case "ai.enable":
+                if (!_ai.Available || c.Index is not (0 or 1)) return;
+                _settings.SolAiEnabled = c.Index == 1;
+                if (!_settings.SolAiEnabled) { _ai.Cancel(); _ai.Release(); }
+                JsonFileStore.Save(AppPaths.Settings, _settings);
+                if (_settingsOpen) _popup.Post(SettingsJson());
+                if (_settings.SolAiEnabled) _ = PrepareAiAsync("catalog",null);
+                Refresh(); PublishNotes();
+                return;
+            case "ai.select":
+                if (!_settings.SolAiEnabled || _ai.Busy) return;
+                if (!_ai.CanUse(id)) { if (_settingsOpen) _popup.Post(SettingsJson()); return; }
+                _settings.SolAiModel = id; JsonFileStore.Save(AppPaths.Settings, _settings);
+                if (_settingsOpen) _popup.Post(SettingsJson()); return;
+            case "ai.catalog":
+                if (_settings.SolAiEnabled) _ = _ai.RunAsync("catalog"); return;
+            case "ai.download" or "ai.remove" or "ai.check" or "ai.optimize":
+                if (!_settings.SolAiEnabled || _ai.Busy) return;
+                if(c.Type is "ai.download" or "ai.optimize")_ = PrepareAiAsync(c.Type[3..],id);
+                else _ = _ai.RunAsync(c.Type[3..], id); return;
+            case "ai.cancel": _ai.Cancel(); return;
+            case "ai.open": _ = OpenPageAiAsync(id); return;
+            case "ai.notes": OpenNoteAi(c); return;
+            case "ai.run": _ = RunTextAiAsync(c); return;
+            case "ai.apply": _ = ApplyTextAiAsync(); return;
+            case "ai.copy": CopyAi(); return;
+            case "ai.note": NoteAi(); return;
+            case "ai.settings": OpenAiSettings(); return;
             case "palette.open": OpenPalette(); return;
             case "palette.pick":
                 if (_paletteCommands.TryGetValue(id, out var chosen))
@@ -200,6 +247,9 @@ public sealed class BrowserController
             case "notes.visit":
                 if (_notes.Items.FirstOrDefault(n => n.Id == id)?.Url is { Length: > 0 } noteUrl && Uri.TryCreate(noteUrl, UriKind.Absolute, out var noteUri) && noteUri.Scheme is "https" or "http" && noteUri.UserInfo.Length == 0)
                 { Open(noteUrl); Refresh(); } return;
+            case "notes.link":
+                if (c.Url is { Length: <= 4096 } link && Uri.TryCreate(link, UriKind.Absolute, out var linkUri) && linkUri.Scheme is "http" or "https" && linkUri.UserInfo.Length == 0)
+                { Open(link); Refresh(); } return;
             case "notes.open": OpenNotes(c.X ?? 450, c.Y ?? 60); return;
             case "notes.draft":
                 if (c.Title!.Length <= 120 && c.Input!.Length <= 50_000 && c.Id == _noteDraft.Id)
@@ -297,6 +347,32 @@ public sealed class BrowserController
                 { HidePopup(); _pages.Navigate(id, originalUrl); Refresh(); }
                 return;
             case "settings.set":
+                if (id == "aiThinking")
+                {
+                    if (c.Index is not (0 or 1)) return;
+                    _settings.SolAiThinking = c.Index == 1; JsonFileStore.Save(AppPaths.Settings, _settings);
+                    if (_settingsOpen) _popup.Post(SettingsJson());
+                    PublishAi(); return;
+                }
+                if (id == "aiKeepMinutes")
+                {
+                    if (c.Index is not (>= 0 and <= 10080)) return;
+                    _settings.SolAiKeepMinutes = c.Index.Value; _ai.SetKeepMinutes(c.Index.Value);
+                    JsonFileStore.Save(AppPaths.Settings, _settings);
+                    if (_settingsOpen) _popup.Post(SettingsJson());
+                    return;
+                }
+                if (id is "aiTone" or "aiLength" or "aiAdaptation" or "aiReset")
+                {
+                    if (c.Index is not (0 or 1 or 2)) return;
+                    if (id == "aiTone") _settings.SolAiTone = c.Index.Value;
+                    else if (id == "aiLength") _settings.SolAiLength = c.Index.Value;
+                    else if (id == "aiAdaptation") _settings.SolAiAdaptation = c.Index == 1;
+                    else { _settings.SolAiTone = 0; _settings.SolAiLength = 0; _settings.SolAiAdaptation = false; }
+                    JsonFileStore.Save(AppPaths.Settings, _settings);
+                    if (_settingsOpen) _popup.Post(SettingsJson());
+                    return;
+                }
                 if (id == "spelling")
                 {
                     if (c.Index is not (0 or 1 or 2 or 3)) return;
@@ -422,6 +498,7 @@ public sealed class BrowserController
             case "permissions.forget": _permissions.Forget(id); if (_settingsOpen) _popup.Post(SettingsJson()); return;
             case "permissions.clear": _permissions.Clear(); if (_settingsOpen) _popup.Post(SettingsJson()); return;
             case "site-data.clear": if (_settingsOpen) _ = ClearSiteDataAsync(); return;
+            case "site.reset": _ = ResetSiteAsync(); return;
             case "profile.menu": OpenProfileMenu(c.X!.Value, c.Y!.Value); return;
             case "profile.new": AskProfileName(); return;
             case "profile.create": SwitchProfile(Profiles.Create(AppPaths.BaseDir, c.Title!)); return;
@@ -690,6 +767,38 @@ public sealed class BrowserController
     }
 
     private string _siteData = "idle";
+    private (string Id, string Origin, string Session)? _siteReset;
+    private bool _resettingSite;
+    private void AskResetSite(string id)
+    {
+        if (_resettingSite || _tabs.Tabs.FirstOrDefault(t => t.Id == id) is not { } tab ||
+            _pages.CoreOf(id) is not { } core || PermissionStore.OriginOf(core.Source) is not { } origin || core.Source.StartsWith("https://start.sol/")) return;
+        HidePopup();
+        _siteReset = (id, origin, tab.SessionId);
+        _popup.ShowCentered(390, JsonSerializer.Serialize(new { popup = "site-reset", site = new Uri(origin).Host,
+            session = tab.SessionId.Length == 0 ? T("Session actuelle", "Current session") : _sessions.Name(tab.SessionId) }));
+    }
+    private async Task ResetSiteAsync()
+    {
+        if (_resettingSite || _siteReset is not var (id, origin, session)) return;
+        _siteReset = null;
+        if (!_popup.IsOpen || _tabs.Tabs.FirstOrDefault(t => t.Id == id)?.SessionId != session || PermissionStore.OriginOf(_pages.CoreOf(id)?.Source ?? "") != origin) return;
+        if (_downloads.Any(d => d.TabId == id && d.Op.State == Microsoft.Web.WebView2.Core.CoreWebView2DownloadState.InProgress))
+        { Notice(T("Téléchargement en cours", "Download in progress"), T("Attendez sa fin avant de vider les données de ce site.", "Wait for it to finish before clearing this site's data.")); return; }
+        _resettingSite = true;
+        HidePopup();
+        try
+        {
+            if (await _pages.ResetSiteAsync(id, origin))
+            {
+                var permissions = session.Length == 0 ? _defaultPermissions : _sessionPermissions.TryGetValue(session, out var stored)
+                    ? stored : _sessionPermissions[session] = new(Path.Combine(AppPaths.DataDir, "session-permissions", session + ".json"));
+                permissions.Forget(origin);
+            }
+            else if (!_closingWindow) Notice(T("Effacement incomplet", "Incomplete clearing"), T("Certaines données n’ont pas pu être effacées. Réessayez sur ce site.", "Some data could not be cleared. Retry on this site."));
+        }
+        finally { _resettingSite = false; }
+    }
     private async Task ClearSiteDataAsync()
     {
         if (_siteData == "clearing") return;
@@ -706,6 +815,8 @@ public sealed class BrowserController
     private string SettingsJson() => JsonSerializer.Serialize(new
     {
         popup = "settings",
+        ai = _ai.State(_settings.SolAiEnabled, _settings.SolAiModel),
+        aiPreferences = new { tone = _settings.SolAiTone, length = _settings.SolAiLength, thinking = _settings.SolAiThinking, keepMinutes = _settings.SolAiKeepMinutes, adaptation = _settings.SolAiAdaptation, context = AiNavigation(), isPrivate = AppPaths.Private },
         version = typeof(App).Assembly.GetName().Version?.ToString(3) ?? "",
         update = Program.Update is { } update ? new { version = update.Version, percent = update.Percent, ready = update.Ready } : null,
         check = Program.Check,
@@ -953,8 +1064,11 @@ public sealed class BrowserController
         return false;
     }
 
+    public void DismissAiPopup() { if (_aiPopup) HidePopup(); }
     private void HidePopup()
     {
+        if (_aiPopup) { _aiPopup = false; _ai.Cancel(); _aiContext = null; }
+        _siteReset = null;
         _paletteCommands.Clear();
         _paletteItems = null;
         _notesPopup = false;
@@ -2478,6 +2592,9 @@ public sealed class BrowserController
         try
         {
             var items = new List<(string Label, Action? Run)>();
+            var aiText = _settings.SolAiEnabled && _ai.Available ? await _pages.CaptureAiAsync(tabId) : null;
+            if (_settings.SolAiEnabled && _ai.Available && !e.ContextMenuTarget.IsEditable && e.ContextMenuTarget.HasSelection && e.ContextMenuTarget.SelectionText is { Length: > 0 and <= 50_000 } aiSelection)
+                aiText = new(aiSelection, false, "", "", _tabs.Tabs.FirstOrDefault(t => t.Id == tabId)?.Title ?? "");
             var correction = e.ContextMenuTarget.IsEditable && e.ContextMenuTarget.FrameUri == _pages.CoreOf(tabId)?.Source
                 ? await _pages.SpellingSuggestions(tabId) : (Word: "", Suggestions: Array.Empty<string>());
             foreach (var suggestion in correction.Suggestions)
@@ -2519,8 +2636,12 @@ public sealed class BrowserController
                 }
             }
             if (items.Count > 0 && items[^1].Label != "") items.Add(("", null));
+            if (_settings.SolAiEnabled && _ai.Available && (aiText is { Text.Length: > 0 } || aiText?.Editable == true || !e.ContextMenuTarget.IsEditable))
+                items.Add(("Sol AI…", () => _afterMenu = () => _ = OpenPageAiAsync(tabId, aiText)));
             items.Add((T("Capturer une zone", "Capture an area"), () => Capture("region")));
             items.AddRange(DeviceEntries(tabId, x, y));
+            if (PermissionStore.OriginOf(_pages.CoreOf(tabId)?.Source ?? "") is not null && !_pages.CoreOf(tabId)!.Source.StartsWith("https://start.sol/"))
+                items.Add((T("Vider la session de ce site…", "Clear this site's session…"), () => _afterMenu = () => AskResetSite(tabId)));
             items.Add((_tools.IsOpen ? T("Masquer l'inspecteur réseau", "Hide network inspector") : T("Inspecter le réseau", "Inspect network"), () => _afterMenu = ToggleNetwork));
 
             // Le moteur attend notre réponse : il est toujours libéré à la fermeture du menu, avec ou sans choix.
@@ -2565,7 +2686,7 @@ public sealed class BrowserController
     }
 
     private string NotesJson() => JsonSerializer.Serialize(new { popup = "notes", items = _notes.Items,
-        draft = _noteDraft, error = _noteError, privateMode = AppPaths.Private }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+        draft = _noteDraft, error = _noteError, privateMode = AppPaths.Private, aiEnabled = _settings.SolAiEnabled && _ai.Available }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
 
     private void OpenNotes(double x, double y)
     {
@@ -2847,6 +2968,7 @@ public sealed class BrowserController
                 storeInstalled = _pages.CoreOf(t.Id) is { } storeShown && StoreExtension(storeShown.Source) is { } storeId && _installedExtensions.Contains(storeId),
                 translated = _translationOriginals.ContainsKey(t.Id) && PageTranslation.IsGooglePage(t.Url),
                 reader = _reading.Contains(t.Id),
+                ai = _settings.SolAiEnabled && _ai.Available,
             }),
             groups = _tabs.Groups.Select(g => new { id = g.Id, name = g.Name, color = g.Color, icon = g.Icon, collapsed = g.Collapsed }),
             activeId = _tabs.ActiveId,

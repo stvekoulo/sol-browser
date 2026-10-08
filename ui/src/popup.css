@@ -63,6 +63,27 @@ html:has(> .popup-body) { overflow:hidden; }
 .settings-nav .popup-seg-btn { flex:1 0 auto; padding:0 10px; }
 .settings-popup .theme-row { padding:12px 8px; border-bottom:1px solid var(--border); }
 .settings-popup .setting-row { padding:12px 8px; }
+.ai-settings { display:flex; flex-direction:column; gap:10px; min-width:0; }
+.ai-settings .row-hint { margin:0 8px; line-height:1.5; font-size:11px; color:var(--text-dim); }
+.ai-toolbar { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+.ai-models { display:flex; flex-direction:column; max-height:min(340px,45vh); overflow:auto; scrollbar-width:thin; overscroll-behavior:contain; }
+.ai-model { padding:13px 8px; display:flex; flex-direction:column; gap:8px; border-bottom:1px solid var(--border-card); }
+.ai-model .row-title { overflow-wrap:anywhere; }
+.ai-recommended { align-self:flex-start; padding:4px 8px; border-radius:999px; font-size:11px; color:var(--text); background:var(--bg-tab-hover); }
+.ai-model .row-actions { flex-direction:row; justify-content:flex-start; flex-wrap:wrap; }
+.ai-confirm { display:flex; flex-direction:column; align-items:flex-start; gap:10px; padding:9px 0; }
+.ai-confirm label { display:flex; align-items:center; gap:9px; font-size:12px; }
+.ai-confirm input { accent-color:var(--accent); flex-shrink:0; }
+.ai-confirm .row-hint { overflow-wrap:anywhere; margin:0; }
+.ai-operation { padding:10px 8px; border-radius:16px; background:var(--bg-tab-hover); display:flex; flex-direction:column; gap:8px; font-size:12px; }
+.ai-operation progress { width:100%; height:5px; accent-color:var(--accent); }
+.ai-check { padding:10px 8px; display:flex; flex-direction:column; gap:7px; }
+.ai-check p { margin:0; white-space:pre-wrap; font-size:12px; }
+.ai-location { padding:8px; font-size:11px; }
+.ai-location summary { cursor:pointer; margin-bottom:8px; }
+.ai-location span { overflow-wrap:anywhere; }
+.ai-settings button:disabled { opacity:.45; cursor:default; }
+.ai-settings button[aria-pressed="true"] { background:var(--bg-tab-hover); }
 .shortcuts-heading { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
 .shortcuts-settings details { margin-top:6px; }
 .shortcuts-settings summary { cursor:pointer; font-size:12px; padding:7px 0; }
@@ -523,3 +544,39 @@ html:has(> .popup-body) { overflow:hidden; }
 .translation-popup { padding: 12px 16px; }
 .translation-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
 .translation-popup .row-hint { margin: 10px 0 0; line-height: 1.5; }
+
+.ai-action { display:flex; flex-direction:column; gap:12px; padding:14px; min-width:0; }
+.ai-action .notes-actions { flex-wrap:wrap; }
+.ai-action .row-hint { margin:0; overflow-wrap:anywhere; }
+.ai-action details { font-size:12px; }
+.ai-source,.ai-result { white-space:pre-wrap; overflow-wrap:anywhere; max-height:240px; overflow:auto; padding:10px 0; font-size:13px; line-height:1.6; }
+.ai-action select { color:inherit; background:transparent; border:1px solid currentColor; border-radius:16px; padding:5px 10px; }
+.ai-action [aria-pressed=true] { box-shadow:inset 0 0 0 1px currentColor; }
+.ai-settings select { color:inherit; background:var(--bg-tab-hover); border:1px solid var(--border-card); border-radius:16px; padding:6px 10px; font:inherit; }
+/* Keep native keyboard, focus and dismissal behavior inside Sol's themed menu. */
+.ai-settings select, .ai-action select,
+.ai-settings select::picker(select), .ai-action select::picker(select) { appearance:base-select; }
+.ai-settings select, .ai-action select { gap:16px; min-width:110px; cursor:pointer; }
+.ai-settings select::picker(select), .ai-action select::picker(select) {
+  background:var(--bg-sidebar-card); color:var(--text); border:1px solid var(--border-card);
+  border-radius:16px; padding:5px; margin-block:5px; box-shadow:var(--shadow-pill-elevated);
+  font:inherit; max-height:240px; overflow:auto;
+}
+.ai-settings option, .ai-action option { padding:8px 10px; border-radius:11px; gap:12px; }
+.ai-settings option:hover, .ai-settings option:focus, .ai-action option:hover, .ai-action option:focus { background:var(--bg-tab-hover); }
+.ai-settings option:checked, .ai-action option:checked { background:var(--bg-pill-solid); font-weight:600; }
+.ai-settings option::checkmark, .ai-action option::checkmark { color:var(--accent); margin-left:auto; order:1; }
+.ai-settings select::picker-icon, .ai-action select::picker-icon { color:var(--text-dim); }
+.ai-duration { width:90px; padding:6px 10px; border-radius:16px; border:1px solid var(--border-card); background:var(--bg-tab-hover); color:var(--text); font:inherit; }
+.ai-source-title { margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; color:var(--text-dim); }
+.ai-local-label { font-size:11px; color:var(--text-dim); }
+.ai-action .notes-heading .ai-think-toggle { margin-left:auto; }
+.ai-action-tabs { padding:4px; border-radius:18px; background:var(--bg-tab-hover); gap:4px; }
+.ai-action-tabs .pill-action { background:transparent; }
+.ai-action-tabs .pill-action[aria-pressed="true"] { background:var(--bg-pill-solid); box-shadow:var(--shadow-pill-elevated); }
+.ai-work { display:flex; flex-direction:column; gap:7px; padding:12px 0 3px; border-top:1px solid var(--border-card); }
+.ai-work [role="status"] { display:flex; align-items:center; gap:8px; font-size:13px; }
+.ai-spinner { width:13px; height:13px; flex:none; border:2px solid var(--border-strong); border-top-color:var(--accent); border-radius:50%; animation:ai-spin 1s linear infinite; }
+@keyframes ai-spin { to { transform:rotate(360deg); } }
+@media(prefers-reduced-motion:reduce) { .ai-spinner { animation:none; } }
+.ai-think-toggle[aria-pressed="true"] { background:var(--bg-pill-solid); font-weight:600; }

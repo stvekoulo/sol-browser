@@ -234,6 +234,9 @@ public sealed partial class MainWindow : Window
         // handledEventsToo : les vues web marquent ces événements comme traités, on les observe quand même.
         Root.AddHandler(UIElement.PointerPressedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler((_, e) =>
         {
+            var position = e.GetCurrentPoint(PopupFrame).Position;
+            if (PopupFrame.Visibility == Visibility.Visible && (position.X < 0 || position.Y < 0 || position.X >= PopupFrame.ActualWidth || position.Y >= PopupFrame.ActualHeight))
+                _controller?.DismissAiPopup();
             var p = e.GetCurrentPoint(Root).Properties;
             if (p.IsXButton1Pressed) _controller?.Shortcut("nav.back");
             else if (p.IsXButton2Pressed) _controller?.Shortcut("nav.forward");

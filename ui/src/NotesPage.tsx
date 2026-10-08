@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { NoteAiButton } from './SolAiAction';
+import SolMarkdown from './SolMarkdown';
+import { useEffect, useState, useRef } from 'react';
 import { formatDomain, onMessage, send } from './bridge';
 import { t, useLang } from './i18n';
 import { Icon } from './Icons';
@@ -7,9 +9,11 @@ import './notes.css';
 
 export default function NotesPage() {
   useLang();
+  const editor = useRef<HTMLTextAreaElement>(null);
   const [data, setData] = useState<NotesContent | null>(null);
   const [query, setQuery] = useState('');
   const [writing, setWriting] = useState(false);
+  const [preview, setPreview] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   useEffect(()=> {
@@ -27,7 +31,7 @@ export default function NotesPage() {
     send({type:'notes.draft',id:next.id,title:next.title,input:next.text});
   };
   const items = data.items.filter(n=>`${n.title}\n${n.text}\n${n.url}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
-  const start = () => { setWriting(true); setConfirmDelete(false); setConfirmDiscard(false); send({type:'notes.edit',id:''}); };
+  const start = () => { setPreview(false); setWriting(true); setConfirmDelete(false); setConfirmDiscard(false); send({type:'notes.edit',id:''}); };
   const dateGroup = (date:string) => {
     const d = new Date(date), now = new Date();
     if(d.toDateString() === now.toDateString()) return t('Aujourd’hui', 'Today');
@@ -50,8 +54,8 @@ export default function NotesPage() {
       <footer><button className="pill-action" disabled={!data.items.length} onClick={()=>send({type:'notes.export'})}>{t('Exporter les notes', 'Export notes')}</button></footer>
     </aside>
     <section className="notes-document" aria-label={t('Éditeur de note', 'Note editor')}>
-      <header className="notes-document-toolbar"><span aria-live="polite">{dirty ? t('Modifications non enregistrées', 'Unsaved changes') : data.privateMode ? t('Notes privées', 'Private notes') : t('Dans ce profil', 'In this profile')}</span><div className="notes-toolbar-actions">
-        <button className="pill-action" onClick={()=>send({type:'notes.open',x:700,y:80})}>{t('Note rapide', 'Quick note')}</button>
+      <header className="notes-document-toolbar"><span aria-live="polite">{dirty ? t('Modifications non enregistrées', 'Unsaved changes') : data.privateMode ? t('Notes privées', 'Private notes') : t('Dans ce profil', 'In this profile')}</span><div className="notes-toolbar-actions">{data.aiEnabled && editing && !preview && <NoteAiButton editor={editor}/>}
+        {editing && <button className="pill-action" aria-pressed={preview} onClick={()=>setPreview(!preview)}>{preview?t('Modifier','Edit'):t('Aperçu','Preview')}</button>}<button className="pill-action" onClick={()=>send({type:'notes.open',x:700,y:80})}>{t('Note rapide', 'Quick note')}</button>
         {editing && <button className="pill-action" disabled={!draft.text.trim()} onClick={()=>{send({type:'notes.save'});setWriting(false);}}>{t('Enregistrer', 'Save')}</button>}
         {editing && <button className="notes-tool" aria-label={t('Abandonner le brouillon', 'Discard draft')} onClick={()=>{if(confirmDiscard){send({type:'notes.discard'});setWriting(false);setConfirmDiscard(false);}else setConfirmDiscard(true);}}>{confirmDiscard ? t('Abandonner ?', 'Discard?') : <Icon d="M4 4l8 8M12 4l-8 8"/>}</button>}
         {draft.id && <button className="notes-tool" aria-label={t('Supprimer la note', 'Delete note')} onClick={()=>{if(confirmDelete){send({type:'notes.delete',id:draft.id});setWriting(false);setConfirmDelete(false);}else setConfirmDelete(true);}}>{confirmDelete ? t('Supprimer ?', 'Delete?') : <Icon d="M3 4h10M6 4V2h4v2M4 4l.5 10h7L12 4M6.5 7v4M9.5 7v4"/>}</button>}
@@ -60,7 +64,7 @@ export default function NotesPage() {
       {editing ? <div className="notes-paper"><time className="notes-date">{new Date(draft.updated).toLocaleString()}</time>
         <input className="notes-title" aria-label={t('Titre', 'Title')} placeholder={t('Titre de la note', 'Note title')} maxLength={120} value={draft.title} onChange={e=>change('title',e.target.value)}/>
         {draft.url && <span className="notes-document-source">{draft.url}</span>}
-        <textarea className="notes-writing" aria-label={t('Contenu', 'Content')} placeholder={t('Commencez à écrire…', 'Start writing…')} maxLength={50000} value={draft.text} onChange={e=>change('text',e.target.value)}/>
+        {preview ? <div className="notes-markdown"><SolMarkdown text={draft.text} onOpen={url=>send({type:'notes.link',url})}/></div> : <textarea ref={editor} className="notes-writing" aria-label={t('Contenu', 'Content')} placeholder={t('Commencez à écrire…', 'Start writing…')} maxLength={50000} value={draft.text} onChange={e=>change('text',e.target.value)}/>}
         {draft.id && draft.url && <button className="pill-action notes-source-link" onClick={()=>send({type:'notes.visit',id:draft.id})}>{t('Ouvrir la source', 'Open source')}</button>}
       </div> : <div className="notes-welcome"><Icon d="M4 2h8v12H4zM6 5h4M6 8h4M6 11h2" size={38}/><h2>{t('Vos notes, à portée de main', 'Your notes, close at hand')}</h2><p>{t('Sélectionnez une note ou gardez une nouvelle idée.', 'Choose a note or keep a new idea.')}</p><button className="pill-action" onClick={start}>{t('Nouvelle note', 'New note')}</button></div>}
     </section>

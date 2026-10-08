@@ -274,6 +274,7 @@ function AddressPill({ tab, focused, grow, shield }: { tab: Tab | undefined; foc
       </form>
 
       <div className="address-trail">
+        {tab?.ai && /^https?:/.test(rawUrl) && !rawUrl.startsWith('https://start.sol/') && <button className="inline-btn" title={t('Résumer cette page avec Sol AI','Summarize this page with Sol AI')} aria-label={t('Résumer cette page avec Sol AI','Summarize this page with Sol AI')} onClick={()=>send({type:'ai.open',id:tab.id})}><Icon d="M8 1l2 5 5 2-5 2-2 5-2-5-5-2 5-2z" size={14}/></button>}
         {tab && /^https?:/.test(rawUrl) && !isStartPage(rawUrl) && rawUrl !== 'https://start.sol/index.html#notes' && (
           <button className={`inline-btn${tab.reader ? ' on' : ''}`} aria-pressed={!!tab.reader}
             aria-label={tab.reader ? t('Quitter le mode lecteur', 'Exit reader mode') : t('Mode lecteur', 'Reader mode')}

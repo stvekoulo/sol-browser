@@ -19,6 +19,7 @@ export type Tab = {
   storeDetail?: boolean;
   translated?: boolean;
   reader?: boolean;
+  ai?: boolean;
   storeInstalled?: boolean; // fiche du store d'une extension déjà installée
 };
 

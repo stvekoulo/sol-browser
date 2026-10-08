@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdir, writeFile, readFile, readdir } from 'node:fs/promises';
+import { mkdir, writeFile, readFile, readdir, cp } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -14,10 +14,14 @@ const profile = resolve(base, 'profiles/robustness');
 const echoRequests = [];
 const sessionRequests = [];
 const siteRequests = [];
+let markdownImageRequests=0;
 await mkdir(profile, { recursive: true });
+const aiCache = process.argv.find(arg => arg.startsWith('--ai-cache='))?.slice(11);
+if (aiCache) await cp(resolve(aiCache), resolve(base, 'ai'), {recursive:true});
 await mkdir(resolve(base, 'downloads'), { recursive: true });
 await mkdir(resolve(base, 'captures'), { recursive: true });
 const server = createServer((req, res) => {
+  if(req.url==='/markdown-image.svg'){markdownImageRequests++;res.writeHead(200,{'Content-Type':'image/svg+xml'});return res.end('<svg xmlns="http://www.w3.org/2000/svg" width="160" height="60"><rect width="160" height="60" fill="green"/></svg>');}
   if(process.argv.includes('--site-sessions'))siteRequests.push({host:req.headers.host,url:req.url,cookie:req.headers.cookie});
   if(req.url==='/site-redirect'){res.writeHead(302,{Location:`http://localhost:${server.address().port}/signed-in`});return res.end();}
   if(['/document','/download'].includes(req.url))sessionRequests.push({url:req.url,cookie:req.headers.cookie});
@@ -62,6 +66,7 @@ await once(debugPort, 'listening');
 const port = debugPort.address().port;
 await new Promise(r => debugPort.close(r));
 await writeFile(resolve(profile, 'settings.json'), JSON.stringify({ Onboarded: true, Theme: 'dark', HomePage: `${origin}/a`, BlockAds: false, OnlineSuggestions: false, LiveColor: false }));
+if(process.argv.includes('--site-reset'))await writeFile(resolve(profile,'permissions.json'),JSON.stringify({[origin+' Camera']:true,[`http://localhost:${server.address().port} Camera`]:true}));
 let app, ui;
 if (process.argv.includes('--history')) {
   const { DatabaseSync } = await import('node:sqlite');
@@ -123,7 +128,7 @@ async function hotkey(action, withoutAlt = false) {
   assert.equal((await once(proc,'exit'))[0],0,'native shortcut dispatch');
 }
 async function launch(extra = []) {
-  app = spawn(exe, ['--profile=robustness', process.argv.includes('--small') ? '--bounds=-9000,-9000,400,400' : '--bounds=-9000,-9000,1100,800', ...extra], { windowsHide: true, env: { ...process.env, NAVIGATEUR_DATA_DIR: base, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port} --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows`, NAVIGATEUR_DEBUG: '1', NAVIGATEUR_TEST_DOWNLOAD_DIR: resolve(base, 'downloads'), NAVIGATEUR_CAPTURE_DIR: resolve(base,'captures'), NAVIGATEUR_SAVER_TEST: '1' } });
+  app = spawn(exe, ['--profile=robustness', process.argv.includes('--small') ? '--bounds=-9000,-9000,400,400' : '--bounds=-9000,-9000,1100,800', ...extra], { windowsHide: true, env: { ...process.env, NAVIGATEUR_DATA_DIR: base, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port} --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows`, NAVIGATEUR_DEBUG: '1', NAVIGATEUR_TEST_DOWNLOAD_DIR: resolve(base, 'downloads'), NAVIGATEUR_CAPTURE_DIR: resolve(base,'captures'), NAVIGATEUR_SAVER_TEST: '1', ...(process.argv.includes('--ai-offline') ? {SOL_AI_OFFLINE_TEST:'1'} : {}) } });
   const target = await waitFor(async () => (await targets()).find(t => t.url === 'https://ui.navigateur/index.html'), 'toolbar');
   ui = await connect(target);
   await waitFor(async () => {
@@ -148,7 +153,326 @@ async function stop() {
 }
 try {
   await launch(process.argv.includes('--private-check') ? ['--private'] : []);
-  if(process.argv.includes('--site-sessions')) {
+  if(process.argv.includes('--ai-warm')) {
+    const page=await pageAt('/a'), id=(await state()).activeId;
+    const popup=await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#popup')),'AI popup'));
+    await popup.call('Emulation.setFocusEmulationEnabled',{enabled:true});
+    await popup.evaluate(`chrome.webview.addEventListener('message',e=>{if(e.data.popup){window.__aiMessage=e.data;window.__phases??=[];window.__partials??=[];if(e.data.popup==='ai-action'&&e.data.busy){window.__phases.push(e.data.phase);if(e.data.result)window.__partials.push({phase:e.data.phase,text:e.data.result})}}})`);
+    const content=()=>popup.evaluate('window.__aiMessage');
+    await command({type:'settings.open',x:900,y:60});await command({type:'ai.enable',index:1});
+    await waitFor(async()=>{const c=await content();return c?.popup==='settings'&&!c.ai.busy&&c.ai.warm&&c.ai.models.some(m=>m.cached)},'cached AI catalog and prepared model',60000);
+    assert.equal((await content()).aiPreferences.keepMinutes,45);
+    assert.equal((await content()).aiPreferences.thinking,true);
+    await page.evaluate(`chrome.webview.postMessage(JSON.stringify({type:'ai.enable',index:0}))`);await delay(150);
+    assert.equal((await content()).ai.enabled,true,'site cannot invoke browser commands');
+    for(const minutes of [90,0,45]){await command({type:'settings.set',id:'aiKeepMinutes',index:minutes});await waitFor(async()=>(await content()).aiPreferences.keepMinutes===minutes,'keep duration setting');}
+    await page.evaluate(`document.body.innerHTML='<main><h1>Garden</h1><p>The garden opens Saturday. Volunteers plant ten apple trees.</p></main>'`);
+    await command({type:'ai.open',id});await waitFor(async()=>(await content())?.popup==='ai-action','AI action');
+    await popup.evaluate(`Object.defineProperty(document,'hasFocus',{configurable:true,value:()=>false});window.dispatchEvent(new Event('blur'))`);await delay(350);
+    assert.equal((await content()).popup,'ai-action','blur does not dismiss AI');await popup.evaluate('delete document.hasFocus');
+    await command({type:'ai.run',query:'summary',title:'fr',input:''});
+    await waitFor(async()=>{const c=await content();if(c?.error)throw Error(c.error);return c?.popup==='ai-action'&&!c.busy&&c.result},'Think summary',600000);
+    assert.equal((await content()).error,null);assert.match((await content()).result,/samedi/i);assert.equal((await content()).warm,true);
+    assert.match((await content()).result,/pommier|pomme/i);assert.doesNotMatch((await content()).result,/terre|okay|let me|the user|<think>/i);
+    const partials=await popup.evaluate('window.__partials');assert.ok(partials.length>0,'answer streamed while busy');
+    assert.ok(partials.every(p=>p.phase==='generating'&&!/okay|let me|the user|<think>/i.test(p.text)),'thinking stays hidden');
+    console.log('PASS native Think final answer; model retained');
+    await popup.evaluate(`document.querySelector('.ai-think-toggle').click()`);
+    await waitFor(async()=>(await content()).thinking===false,'Think disabled in panel');
+    await popup.evaluate('window.__phases=[]');
+    await command({type:'ai.run',query:'translate',title:'fr',input:''});
+    await waitFor(async()=>{const c=await content();return c?.popup==='ai-action'&&c.busy},'warm generation');
+    await writeFile(resolve(base,'ai-thinking.png'),Buffer.from((await popup.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    await waitFor(async()=>{const c=await content();if(c?.error)throw Error(c.error);return c?.popup==='ai-action'&&!c.busy&&c.result},'warm translation',600000);
+    assert.ok(!(await popup.evaluate('window.__phases')).includes('loading'),'no second model load');
+    assert.ok(!(await popup.evaluate('window.__phases')).includes('thinking'),'Think disabled');
+    assert.match((await content()).result,/samedi/i);
+    console.log('PASS native Think off; second answer without reloading');
+    await command({type:'settings.open',x:900,y:60});await waitFor(async()=>(await content()).popup==='settings','settings');
+    assert.equal((await content()).ai.warm,true);await popup.evaluate(`[...document.querySelectorAll('.settings-nav button')].find(b=>b.textContent==='Sol').click()`);
+    assert.equal((await content()).aiPreferences.thinking,false);
+    for(const scale of [0,1,2]){await command({type:'settings.set',id:'uiScale',index:scale});await delay(150);assert.ok(await popup.evaluate('document.documentElement.scrollWidth<=innerWidth+1'));}
+    await writeFile(resolve(base,'ai-availability.png'),Buffer.from((await popup.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    await command({type:'settings.set',id:'aiKeepMinutes',index:1});
+    await waitFor(async()=>!(await content()).ai.warm,'idle model expires after custom minute',75000);
+    await command({type:'settings.set',id:'aiKeepMinutes',index:45});
+    console.log('PASS custom idle expiry');
+    await command({type:'ai.open',id});await waitFor(async()=>(await content()).popup==='ai-action','AI reopened');
+    await popup.call('Emulation.setFocusEmulationEnabled',{enabled:false});
+    await page.call('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,x:40,y:180});
+    await page.call('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,x:40,y:180});
+    await delay(350);await command({type:'ai.run',query:'summary',title:'fr',input:''});await delay(200);
+    assert.equal((await content()).busy,false,'outside click dismissed the AI action');
+    await command({type:'ai.enable',index:0});await stop();console.log('PASS native Think, warm model reuse, 45/custom/session duration, blur retention, outside click and 100/90/80; '+base);process.exit(0);
+  } else if(process.argv.includes('--video-cursor')) {
+    const page=await pageAt('/a');
+    await page.call('Emulation.setFocusEmulationEnabled',{enabled:true});
+    await page.evaluate(`(async()=>{document.body.innerHTML='<video muted style="position:absolute;left:20px;top:20px;width:320px;height:180px;cursor:crosshair"></video><button style="position:absolute;left:40px;top:40px">Pause</button>';const canvas=document.createElement('canvas');canvas.width=320;canvas.height=180;const ctx=canvas.getContext('2d');window.__draw=setInterval(()=>{ctx.fillStyle='green';ctx.fillRect(0,0,320,180)},50);window.__video=document.querySelector('video');__video.srcObject=canvas.captureStream(20);await __video.play();})()`);
+    const move=(x,y)=>page.call('Input.dispatchMouseEvent',{type:'mouseMoved',x,y});
+    const cursor=()=>page.evaluate('getComputedStyle(__video).cursor');
+    await page.evaluate(`const policy=document.createElement('meta');policy.httpEquiv='Content-Security-Policy';policy.content="style-src 'none'";document.head.append(policy)`);
+    await move(200,100);assert.equal(await cursor(),'crosshair');
+    await waitFor(async()=>(await cursor())==='none','playing video hides pointer',6000);
+    await move(201,100);assert.equal(await cursor(),'crosshair');
+    await waitFor(async()=>(await cursor())==='none','idle hides again',6000);
+    await page.evaluate('__video.pause()');assert.equal(await cursor(),'crosshair');
+    await page.evaluate('__video.play()');await waitFor(async()=>(await cursor())==='none','resume with stationary pointer',6000);
+    await move(201,100);assert.equal(await cursor(),'crosshair');
+    await page.evaluate('__video.play()');await move(60,50);await delay(3300);assert.equal(await cursor(),'crosshair','controls stay visible');
+    await move(500,300);await delay(3300);assert.equal(await cursor(),'crosshair','outside player stays visible');
+    await page.evaluate('clearInterval(__draw)');
+    await stop();console.log('PASS native video cursor idle, movement, pause, controls and site custom cursor; '+base);process.exit(0);
+  } else if(process.argv.includes('--ai-private')) {
+    assert.equal((await state()).privateMode,true);
+    const popup=await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#popup')),'private settings'));
+    await popup.call('Emulation.setFocusEmulationEnabled',{enabled:true});
+    await popup.evaluate(`chrome.webview.addEventListener('message',e=>{if(e.data.popup==='settings')window.__privateAi=e.data;})`);
+    await command({type:'bookmark.add',url:origin+'/a?secret=1',title:'Private favorite'});
+    await command({type:'settings.open',x:900,y:60});
+    await command({type:'settings.set',id:'aiAdaptation',index:1});
+    const settings=await waitFor(()=>popup.evaluate('window.__privateAi?.aiPreferences?.adaptation?window.__privateAi:null'),'private adaptation state');
+    assert.equal(settings.aiPreferences.isPrivate,true);assert.equal(settings.aiPreferences.context,'','private browsing never supplies adaptation context');
+    await command({type:'settings.set',id:'aiReset',index:0});
+    await stop();console.log('PASS private browsing excluded from Sol AI adaptation');process.exit(0);
+  } else if(process.argv.includes('--markdown')) {
+    await pageAt('/a');
+    const text=`# Titre\n\n## Section\n\n### Sous-section\n\n#### Niveau 4\n\n##### Niveau 5\n\n###### Niveau 6\n\n**Gras**, *italique*, ~~barré~~ et \`code\`.\n\n> Citation\n\n- Élément\n  - Sous-élément\n\n1. Première étape\n2. Seconde étape\n\n- [x] Fait\n- [ ] À faire\n\n| Colonne | Valeur |\n| --- | --- |\n| Sol | Clair |\n\n\`\`\`js\nconst greeting = "Bonjour";\n\`\`\`\n\nFormule $x^2$\n\n$$\n\\frac{1}{2}\n$$\n\n[Page locale](${origin}/a)\n\n![Aperçu](${origin}/markdown-image.svg)\n\nRéférence[^1]\n\n[^1]: Note de bas de page.\n\n---\n\n<b>HTML nettoyé</b><script>window.__markdownInjected=true</script><img src="javascript:alert(1)" onerror="window.__markdownInjected=true">\n\n[Interdit](javascript:alert(1))`;
+    await command({type:'notes.draft',id:'',title:'Markdown',input:text});
+    await command({type:'notes.open',x:500,y:70});
+    const popup=await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#popup')),'markdown note'));
+    await popup.call('Emulation.setFocusEmulationEnabled',{enabled:true});
+    const preview=()=>popup.evaluate(`Array.from(document.querySelectorAll('button')).find(b=>/^Aperçu$|^Preview$/.test(b.textContent)).click()`);
+    await waitFor(()=>popup.evaluate(`!!document.querySelector('.notes-text')`),'markdown editor');await preview();
+    await waitFor(()=>popup.evaluate(`!!document.querySelector('.sol-markdown .katex')`),'math rendering');
+    const rendered=await popup.evaluate(`(()=>{const m=document.querySelector('.sol-markdown');return {headings:Array.from(m.querySelectorAll('h1,h2,h3,h4,h5,h6')).filter(h=>!h.closest('.footnotes')).length,strong:!!m.querySelector('strong'),em:!!m.querySelector('em'),del:!!m.querySelector('del'),table:!!m.querySelector('table'),quote:!!m.querySelector('blockquote'),code:!!m.querySelector('pre code .hljs-keyword'),checks:m.querySelectorAll('input[disabled]').length,footnote:!!m.querySelector('[data-footnote-ref]'),unsafe:m.querySelectorAll('script,iframe,[onerror],a[href^="javascript:"]').length,injected:!!window.__markdownInjected,images:m.querySelectorAll('img[src]').length};})()`);
+    assert.equal(rendered.headings,6);for(const key of ['strong','em','del','table','quote','code','footnote'])assert.equal(rendered[key],true,key);
+    assert.equal(rendered.checks,2);assert.equal(rendered.unsafe,0);assert.equal(rendered.injected,false);assert.equal(markdownImageRequests,0);assert.equal(rendered.images,0);
+    await popup.evaluate(`Array.from(document.querySelectorAll('.sol-markdown button')).find(b=>/Afficher|Show/.test(b.textContent)).click()`);
+    await waitFor(()=>popup.evaluate(`document.querySelector('.sol-markdown img')?.naturalWidth===160`),'explicit image loading');assert.equal(markdownImageRequests,1);
+    for(const scale of [0,1,2]){await command({type:'settings.set',id:'uiScale',index:scale});await delay(200);assert.ok(await popup.evaluate(`document.documentElement.scrollWidth<=innerWidth+1`),'markdown fits every scale');}
+    await writeFile(resolve(base,'markdown.png'),Buffer.from((await popup.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    await command({type:'notes.manage'});
+    const notePage=await connect(await waitFor(async()=>(await targets()).find(t=>t.url==='https://start.sol/index.html#notes'),'notes workspace'));
+    await waitFor(()=>notePage.evaluate(`!!document.querySelector('.notes-writing')`),'note workspace editor');
+    await notePage.evaluate(`Array.from(document.querySelectorAll('button')).find(b=>/^Aperçu$|^Preview$/.test(b.textContent)).click()`);
+    await waitFor(()=>notePage.evaluate(`!!document.querySelector('.sol-markdown table')`),'workspace markdown');
+    const before=(await state()).tabs.length;
+    await notePage.evaluate(`Array.from(document.querySelectorAll('.sol-markdown a')).find(a=>a.textContent==='Page locale').click()`);
+    await waitFor(async()=>(await state()).tabs.length===before+1,'safe markdown link opens a tab');
+    assert.ok(!(await readFile(resolve(profile,'notes.json'),'utf8').catch(()=>'' )).includes('Markdown'),'preview does not save draft');
+    await stop();console.log('PASS native Markdown, headings, nested lists, tasks, tables, code, math, footnotes, safe HTML/links/images, notes and 100/90/80; '+base);process.exit(0);
+  } else if(process.argv.includes('--ai-actions')) {
+    const id=(await state()).activeId, page=await pageAt('/a');
+    const popup=await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#popup')),'AI popup'));
+    await popup.call('Emulation.setFocusEmulationEnabled',{enabled:true});
+    await popup.evaluate(`chrome.webview.addEventListener('message',e=>{if(e.data.popup)window.__aiMessage=e.data;})`);
+    const content=()=>popup.evaluate('window.__aiMessage');
+    await command({type:'settings.open',x:900,y:60});
+    await command({type:'ai.enable',index:1});
+    await waitFor(async()=>{const d=await content();return d?.popup==='settings'&&!d.ai.busy&&d.ai.models.some(m=>m.cached)},'cached AI catalog',60000);
+    const model=(await content()).ai.models.find(m=>m.cached&&m.name==='Sol AI');assert.ok(model);
+    assert.ok((await content()).ai.models.every(m=>m.name==='Sol AI'),'one public AI module');
+    await command({type:'bookmark.add',url:origin+'/a?token=private-query',title:'Local gardening fixture'});
+    await command({type:'settings.open',x:900,y:60});
+    await command({type:'settings.set',id:'aiTone',index:2});
+    await command({type:'settings.set',id:'aiLength',index:1});
+    await command({type:'settings.set',id:'aiAdaptation',index:1});
+    await waitFor(async()=>(await content())?.aiPreferences?.adaptation,'local adaptation enabled');
+    assert.match((await content()).aiPreferences.context,/Local gardening fixture/);
+    assert.ok(!(await content()).aiPreferences.context.includes('private-query'),'navigation query excluded');
+    assert.equal(JSON.parse(await readFile(resolve(profile,'settings.json'),'utf8')).SolAiTone,2,'preferences persisted');
+    await command({type:'settings.set',id:'aiReset',index:0});
+    await waitFor(async()=>(await content())?.aiPreferences?.context==='','adaptation reset');
+    const usable=model.usable;
+    await command({type:'ai.select',id:model.id});
+    await command({type:'popup.close'});
+    await page.evaluate(`document.body.innerHTML='<article><h1>A community garden</h1><p>The community garden opens on Saturday. Volunteers will plant ten apple trees. Everyone is welcome.</p></article><textarea id="draft">hello world</textarea><input id="secret" type="password" value="never-process">';document.documentElement.lang='en';`);
+    assert.equal(await page.evaluate(`document.querySelector('#secret').focus();window.__solAI.capture()`),null,'sensitive field excluded');
+    const snapshot=await page.evaluate(`(()=>{const f=document.querySelector('#draft');f.focus();f.setSelectionRange(0,5);return window.__solAI.capture()})()`);
+    assert.equal(snapshot.text,'hello');assert.equal(snapshot.editable,true);
+    assert.equal(await page.evaluate(`document.querySelector('#draft').value='changed';window.__solAI.apply(${JSON.stringify(snapshot.token)},'Bonjour')`),false,'stale text rejected');
+    const valid=await page.evaluate(`(()=>{const f=document.querySelector('#draft');f.value='hello world';f.focus();f.setSelectionRange(0,5);return window.__solAI.capture()})()`);
+    assert.equal(await page.evaluate(`window.__solAI.apply(${JSON.stringify(valid.token)},'Bonjour')`),true,'native editable replacement');
+    assert.equal(await page.evaluate(`document.querySelector('#draft').value`),'Bonjour world','selected range only');
+    await command({type:'ai.open',id});
+    await waitFor(async()=>(await content())?.popup==='ai-action','summary popup');
+    assert.equal((await content()).editable,false);assert.match((await content()).text,/apple trees/);
+    for(const scale of [0,1,2]) {await command({type:'settings.set',id:'uiScale',index:scale});await delay(250);assert.ok(await popup.evaluate(`document.documentElement.scrollWidth<=innerWidth+1`),'AI actions fit all scales');}
+    await command({type:'ai.run',query:'summary',title:'fr'});
+    const response=await waitFor(async()=>{const d=await content();return d?.popup==='ai-action'&&!d.busy&&(d.result||d.error)?d:null},'real local summary',180000);
+    if(response.error==='machine-capacity'||!usable&&response.error==='choose-model')console.log('PASS capacity gate (no generation claimed)');
+    else {assert.equal(response.error,null);assert.match(response.result,/pommier|pommes/i);assert.match(response.result,/samedi/i);console.log('SUMMARY '+response.result);}
+    await writeFile(resolve(base,'ai-actions.png'),Buffer.from((await popup.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    await command({type:'popup.close'});
+    await command({type:'notes.open',x:500,y:70});
+    await command({type:'notes.draft',id:'',title:'Test',input:'A short draft'});
+    await command({type:'ai.notes',index:0,width:0,height:7});
+    await waitFor(async()=>(await content())?.popup==='ai-action'&&(await content()).note,'note action');
+    assert.equal((await content()).text,'A short');assert.equal((await content()).editable,true);
+    await command({type:'popup.close'});
+    const point=await page.evaluate(`(()=>{const f=document.querySelector('#draft');f.focus();f.setSelectionRange(0,7);const r=f.getBoundingClientRect();return {x:r.x+10,y:r.y+10}})()`);
+    for(const type of ['mousePressed','mouseReleased'])await page.call('Input.dispatchMouseEvent',{type,button:'right',clickCount:1,...point});
+    await waitFor(async()=>(await content())?.popup==='menu','native AI context menu');
+    const menu=(await content()).items;assert.ok(menu.includes('Sol AI…'));
+    await command({type:'menu.pick',index:menu.indexOf('Sol AI…')});
+    await waitFor(async()=>(await content())?.popup==='ai-action','context text tool');
+    assert.equal((await content()).editable,true);assert.equal((await content()).text,'Bonjour');
+    if(usable) {
+      await command({type:'popup.close'});
+      await page.evaluate(`const f=document.querySelector('#draft');f.value='bonjour je voudrai savoir si vous ete disponible demain';f.focus();f.setSelectionRange(0,f.value.length);`);
+      for(const type of ['mousePressed','mouseReleased'])await page.call('Input.dispatchMouseEvent',{type,button:'right',clickCount:1,...point});
+      await waitFor(async()=>(await content())?.popup==='menu','field context menu');
+      await command({type:'menu.pick',index:(await content()).items.indexOf('Sol AI…')});
+      await waitFor(async()=>(await content())?.popup==='ai-action','field AI');
+      await command({type:'ai.run',query:'improve',title:'fr'});
+      const correction=await waitFor(async()=>{const d=await content();return d?.popup==='ai-action'&&!d.busy&&(d.result||d.error)?d:null},'native field correction',180000);
+      assert.equal(correction.error,null);assert.match(correction.result,/voudrais[\s\S]*êtes/i);
+      assert.equal(await page.evaluate(`document.querySelector('#draft').value`),'bonjour je voudrai savoir si vous ete disponible demain','preview does not apply automatically');
+      await command({type:'ai.apply'});
+      await waitFor(()=>page.evaluate(`document.querySelector('#draft').value.includes('voudrais')`),'explicit field replacement');
+      await command({type:'notes.open',x:500,y:70});
+      await command({type:'notes.draft',id:'',title:'Draft',input:'nous avon recu votre demande'});
+      await command({type:'ai.notes',index:0,width:0,height:0});
+      await waitFor(async()=>(await content())?.popup==='ai-action'&&(await content()).note,'whole note AI');
+      await command({type:'ai.run',query:'improve',title:'fr'});
+      const note=await waitFor(async()=>{const d=await content();return d?.popup==='ai-action'&&!d.busy&&(d.result||d.error)?d:null},'native note correction',180000);
+      assert.equal(note.error,null);assert.match(note.result,/avons reçu/i);
+      await command({type:'ai.apply'});
+      await waitFor(()=>popup.evaluate(`document.querySelector('.notes-text')?.value.includes('avons reçu')`),'note proposal applied to draft');
+      assert.ok(!(await readFile(resolve(profile,'notes.json'),'utf8').catch(()=>'' )).includes('avons reçu'),'AI never saves notes automatically');
+    }
+    await stop();console.log('PASS native AI action extraction, sensitive exclusion, stale selection, range replacement, note selection, responsive popup; '+base);process.exit(0);
+  } else if(process.argv.includes('--ai')) {
+    await command({type:'settings.open',x:1000,y:60});
+    const popup=await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#popup')),'AI settings'));
+    await popup.call('Emulation.setFocusEmulationEnabled',{enabled:true});
+    await popup.evaluate(`chrome.webview.addEventListener('message',e=>{if(e.data.popup==='settings')window.__checkAi=e.data.ai;})`);
+    await command({type:'settings.set',id:'theme',index:2});
+    const ai=()=>popup.evaluate('window.__checkAi');
+    await waitFor(async()=>(await ai())?.available,'compatible AI helper');
+    assert.equal((await ai()).enabled,false,'AI off by default');
+    assert.equal(await popup.evaluate(`document.querySelectorAll('.settings-nav button').length`),5,'AI belongs to the existing Sol section');
+    await popup.evaluate(`Array.from(document.querySelectorAll('.settings-nav button')).find(b=>b.textContent==='Sol').click()`);
+    await waitFor(()=>popup.evaluate(`!!document.querySelector('.ai-settings button[role=switch]')`),'AI section');
+    await popup.evaluate(`document.querySelector('.ai-settings button[role=switch]').click()`);
+    await waitFor(async()=>(await ai())?.busy,'catalog starts');
+    await waitFor(async()=>!(await ai())?.busy,'real model catalog',60000);
+    assert.equal((await ai()).error,null,'catalog loaded');
+    assert.ok((await ai()).models.every(m=>m.device==='CPU' && m.license),'real compatible metadata');
+    const model=(await ai()).models.find(m=>m.name==='Sol AI');
+    if(!model) assert.ok((await ai()).machine.availableMb<1536,'insufficient available RAM hides install choices');
+    if(model && !model.cached) {
+      await popup.evaluate(`Array.from(document.querySelectorAll('.ai-model')).find(e=>e.textContent.includes('Sol AI')).querySelector('button').click()`);
+      assert.equal(await popup.evaluate(`Array.from(document.querySelectorAll('.ai-confirm button')).find(b=>b.textContent==='Installer sur cet ordinateur').disabled`),true,'download requires explicit license choice');
+      await popup.evaluate(`document.querySelector('.ai-confirm input').click()`);
+      assert.equal(await popup.evaluate(`Array.from(document.querySelectorAll('.ai-confirm button')).find(b=>b.textContent==='Installer sur cet ordinateur').disabled`),false,'accepted license enables installation');
+    }
+    for(const index of [0,1,2]) {
+      await command({type:'settings.set',id:'uiScale',index});await delay(350);
+      assert.ok(await popup.evaluate(`document.documentElement.scrollWidth<=innerWidth+1`),'AI settings fit every scale');
+      await writeFile(resolve(base,`ai-scale-${index}.png`),Buffer.from((await popup.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    }
+    await popup.evaluate(`document.querySelector('.ai-settings button[role=switch]').click()`);
+    await waitFor(async()=>!(await ai()).enabled,'AI disabled');
+    await stop();await launch();
+    await command({type:'settings.open',x:1000,y:60});
+    const reopened=await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#popup')),'reopened AI settings'));
+    await reopened.call('Emulation.setFocusEmulationEnabled',{enabled:true});
+    await waitFor(()=>reopened.evaluate(`Array.from(document.querySelectorAll('.settings-nav button')).some(b=>b.textContent==='Sol')`),'Sol section after restart');
+    await reopened.evaluate(`Array.from(document.querySelectorAll('.settings-nav button')).find(b=>b.textContent==='Sol').click()`);
+    assert.equal(await reopened.evaluate(`document.querySelector('.ai-settings button[role=switch]').getAttribute('aria-checked')`),'false','disabled state persists');
+    if(aiCache && model) {
+      await reopened.evaluate(`chrome.webview.addEventListener('message',e=>{if(e.data.popup==='settings')window.__checkAi=e.data.ai;})`);
+      const current=()=>reopened.evaluate('window.__checkAi');
+      await reopened.evaluate(`document.querySelector('.ai-settings button[role=switch]').click()`);
+      await waitFor(async()=>(await current())?.busy,'catalog refresh starts');
+      await waitFor(async()=>!(await current())?.busy && (await current())?.models.some(m=>m.id===model.id&&m.cached),'installed model recognised',60000);
+      await command({type:'ai.select',id:model.id});
+      if(!(await current()).models.find(m=>m.id===model.id).usable) {
+        assert.equal((await current()).selected,'','memory reserve blocks selection');
+        console.log('PASS memory reserve prevents loading on a busy machine; inference already measured separately');
+        await stop();process.exit(0);
+      }
+      await waitFor(async()=>(await current()).selected===model.id,'model selected');
+      await command({type:'ai.check',id:model.id});
+      await waitFor(async()=>(await current()).busy,'inference starts');
+      await command({type:'ai.cancel'});
+      await waitFor(async()=>!(await current()).busy,'inference cancelled',10000);
+      assert.equal((await current()).phase,'cancelled','cancellation releases process');
+      await command({type:'ai.check',id:model.id});
+      await waitFor(async()=>(await current()).busy,'failure isolation starts');
+      const terminate=spawn('powershell.exe',['-NoProfile','-NonInteractive','-Command',`$child=Get-CimInstance Win32_Process -Filter "ParentProcessId=${app.pid} AND Name='Sol.AI.exe'";if(!$child){exit 2};$child|ForEach-Object{Stop-Process -Id $_.ProcessId -Force}`],{windowsHide:true,stdio:'ignore'});
+      assert.equal((await once(terminate,'exit'))[0],0,'terminate only this test browser helper');
+      await waitFor(async()=>!(await current()).busy && (await current()).error==='module-stopped','helper failure reported',15000);
+      assert.ok((await state()).tabs.length>0,'Sol survives helper failure');
+      await command({type:'ai.check',id:model.id});
+      await waitFor(async()=>!(await current()).busy && (await current()).check,'real CPU inference',120000);
+      assert.equal((await current()).error,null,'inference completed');
+      assert.match((await current()).check.text,/4|four/i,'fixed check produces a result');
+      console.log('Local check: '+JSON.stringify((await current()).check));
+      await writeFile(resolve(base,'ai-checked.png'),Buffer.from((await reopened.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+      await command({type:'ai.remove',id:model.id});
+      await waitFor(async()=>!(await current()).busy && !(await current()).models.find(m=>m.id===model.id).cached,'model removed',30000);
+      assert.equal((await current()).selected,'','removed model cannot stay selected');
+    }
+    console.log('PASS Sol AI opt-in, real catalog, consent, settings persistence and 100/90/80 UI'+(aiCache?', CPU inference, cancellation and model removal':''));
+    console.log('Evidence: '+base);
+    await stop();
+    process.exit(0);
+  } else if(process.argv.includes('--site-reset')) {
+    const first=(await state()).activeId;
+    const page=await pageAt('/a');
+    const popup=await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#popup')),'site menu'));
+    await popup.call('Emulation.setFocusEmulationEnabled',{enabled:true});
+    await page.call('Network.setCookie',{name:'http-only',value:'secret',url:origin,httpOnly:true});
+    await page.evaluate(`document.cookie='account=main;path=/';document.cookie='deep=keep-until-reset;path=/deep';localStorage.account='main';sessionStorage.account='main';
+      (async()=>{const db=await new Promise((resolve,reject)=>{const r=indexedDB.open('site-reset',1);r.onupgradeneeded=()=>r.result.createObjectStore('data');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});db.close();await (await caches.open('site-reset')).put('/cached',new Response('cached'));await navigator.serviceWorker.register('/sw.js');})()`);
+    const other=`http://localhost:${server.address().port}/b`;
+    await command({type:'tab.open',url:other});
+    const otherPage=await connect(await waitFor(async()=>(await targets()).find(t=>t.url===other),'other site'));
+    await waitFor(()=>otherPage.evaluate(`document.readyState==='complete' && location.href===${JSON.stringify(other)}`),'other site ready');
+    await otherPage.evaluate(`document.cookie='account=other;path=/';localStorage.account='other'`);
+    await command({type:'tab.open',url:origin+'/isolated'});
+    await pageAt('/isolated');
+    const isolatedId=await waitFor(async()=>(await state()).tabs.find(t=>t.url===origin+'/isolated')?.id,'isolated tab state');
+    const admin=JSON.parse(await readFile(resolve(profile,'tab-sessions.json'),'utf8')).find(s=>s.Name==='Admin').Id;
+    const old=(await targets()).map(t=>t.id);await command({type:'session.set',id:isolatedId,query:admin});
+    const isolated=await connect(await waitFor(async()=>(await targets()).find(t=>t.url===origin+'/isolated'&&!old.includes(t.id)),'other session'));
+    await waitFor(()=>isolated.evaluate(`document.readyState==='complete' && location.href===${JSON.stringify(origin+'/isolated')}`),'other session ready');
+    await isolated.evaluate(`document.cookie='account=isolated;path=/';localStorage.account='isolated'`);
+    await command({type:'tab.activate',id:first});
+    const menu=async()=>{
+      await page.call('Emulation.setFocusEmulationEnabled',{enabled:true});
+      for(const type of ['mousePressed','mouseReleased'])await page.call('Input.dispatchMouseEvent',{type,button:'right',clickCount:1,x:100,y:150});
+      await waitFor(()=>popup.evaluate(`Array.from(document.querySelectorAll('.row')).some(b=>b.textContent.includes('Vider la session'))`),'right-click clear action');
+      await popup.evaluate(`Array.from(document.querySelectorAll('.row')).find(b=>b.textContent.includes('Vider la session')).dispatchEvent(new MouseEvent('mousedown',{bubbles:true}))`);
+      await waitFor(()=>popup.evaluate(`document.body.textContent.includes('Vider et recharger')`),'site confirmation');
+    };
+    await menu();await command({type:'popup.close'});
+    assert.equal(await page.evaluate('localStorage.account'),'main','cancel preserves data');
+    await command({type:'site.reset'});await delay(150);
+    assert.equal(await page.evaluate('localStorage.account'),'main','closed confirmation cannot clear data');
+    await menu();
+    await delay(450);
+    await writeFile(resolve(base,'site-reset.png'),Buffer.from((await popup.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    const beforeReload=await page.evaluate('performance.timeOrigin');
+    await popup.evaluate(`Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Vider et recharger').click()`);
+    await waitFor(()=>page.evaluate(`performance.timeOrigin>${beforeReload} && document.readyState==='complete' && localStorage.account===undefined && sessionStorage.account===undefined && document.cookie===''`),'current site cleared and reloaded');
+    assert.deepEqual(await page.evaluate(`(async()=>({db:(await indexedDB.databases()).length,cache:(await caches.keys()).length,workers:(await navigator.serviceWorker.getRegistrations()).length}))()`),{db:0,cache:0,workers:0});
+    assert.equal((await page.call('Network.getCookies',{urls:[origin+'/deep']})).cookies.length,0,'cookies at other paths cleared');
+    const permissions=JSON.parse(await readFile(resolve(profile,'permissions.json'),'utf8'));
+    assert.equal(permissions[origin+' Camera'],undefined,'site permissions forgotten');
+    assert.equal(permissions[`http://localhost:${server.address().port} Camera`],true,'other site permissions kept');
+    assert.equal(await otherPage.evaluate('document.cookie'),'account=other','other site cookie preserved');
+    assert.equal(await otherPage.evaluate('localStorage.account'),'other','other site storage preserved');
+    assert.equal(await isolated.evaluate('document.cookie'),'account=isolated','same site in another session preserved');
+    assert.equal(await isolated.evaluate('localStorage.account'),'isolated','isolated storage preserved');
+    await command({type:'session.set',id:first,query:admin});await delay(300);
+    const before=(await targets()).map(t=>t.id);await command({type:'session.set',id:first,query:''});
+    const returned=await connect(await waitFor(async()=>(await targets()).find(t=>t.url===origin+'/a'&&!before.includes(t.id)),'reset session reopened'));
+    assert.equal(await returned.evaluate('document.cookie'),'','old session cookies do not return');
+    await stop();console.log('PASS site reset confirmation, cancellation, cookies/all paths, local/session storage, IndexedDB, CacheStorage, service workers, session and site isolation');console.log('Evidence: '+base);process.exit(0);
+  } else if(process.argv.includes('--site-sessions')) {
     const activeTab=async()=>{const s=await state();return s.tabs.find(t=>t.id===s.activeId)};
     const other=`http://localhost:${server.address().port}`;
     const first=(await state()).activeId;
@@ -1372,6 +1696,7 @@ try {
 } catch (error) {
   if(process.argv.includes('--site-sessions')&&ui){console.error('SITE STATE',JSON.stringify((await state()).tabs.map(({id,url,sessionId,loading,asleep})=>({id,url,sessionId,loading,asleep}))));console.error('SITE REQUESTS',JSON.stringify(siteRequests.filter(r=>r.url==='/clicked')))}
   const manager = (await targets()).find(t=>t.url.endsWith('#popup'));
+  if(manager && process.argv.includes('--ai')) console.error('AI STATE',await (await connect(manager)).evaluate('window.__checkAi'));
   if (manager) console.error('MANAGER',await (await connect(manager)).evaluate('JSON.stringify(window.__extensions,(key,value)=>key === "icon" ? undefined : value)'));
   if (ui) console.error(await ui.evaluate('JSON.stringify({ready:document.readyState,listening:window.__checkListening,lastEvent:window.__checkLastMessage?.event,text:document.body?.innerText.slice(0,300)})').catch(() => 'UI unavailable'));
   console.error(await readFile(resolve(profile, 'debug.log'), 'utf8').catch(() => 'No diagnostic log'));

@@ -18,7 +18,7 @@
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <EnableMsixTooling>true</EnableMsixTooling>
-    <Version>0.1.17</Version>
+    <Version>0.1.18</Version>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
@@ -38,4 +38,12 @@
     <Content Include="extensions\**" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\ui\dist\**" Link="ui\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <!-- Le SDK IA est isolé : ni WinUI ni Browser.Core ne le chargent. Aucune livraison sur x86. -->
+  <Target Name="BuildSolAi" AfterTargets="Build" Condition="'$(RuntimeIdentifier)' == 'win-x64' Or '$(RuntimeIdentifier)' == 'win-arm64'">
+    <Exec Command="dotnet publish &quot;$(MSBuildProjectDirectory)\..\Sol.AI\Sol.AI.csproj&quot; -c $(Configuration) -r $(RuntimeIdentifier) --self-contained true -o &quot;$(TargetDir)ai&quot; --nologo -v q" />
+  </Target>
+  <Target Name="PublishSolAi" AfterTargets="Publish" Condition="'$(RuntimeIdentifier)' == 'win-x64' Or '$(RuntimeIdentifier)' == 'win-arm64'">
+    <ItemGroup><SolAiFiles Include="$(TargetDir)ai\**\*" /></ItemGroup>
+    <Copy SourceFiles="@(SolAiFiles)" DestinationFiles="@(SolAiFiles->'$(PublishDir)ai\%(RecursiveDir)%(Filename)%(Extension)')" />
+  </Target>
 </Project>

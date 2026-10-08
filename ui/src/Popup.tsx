@@ -5,11 +5,15 @@ import GroupEditor from './GroupEditor';
 import { t, useLang } from './i18n';
 import { Icon } from './Icons';
 import QuickNotes, { type NotesContent } from './QuickNotes';
+import SolAiSettings, { type SolAiState, type AiPreferences } from './SolAiSettings';
+
+import SolAiAction, { type AiContent } from './SolAiAction';
 
 type Item = { url: string; title: string; kind?: 'search' | 'go' | 'history' | 'site' };
 type PaletteItem = { id: string; title: string; hint: string; shortcut: string; group: string; keywords: string };
 type Content =
   | { popup: 'palette'; items: PaletteItem[]; listHeight: number }
+  | AiContent
   | NotesContent
   | { popup: 'notes-select'; items: {id:string; title:string}[] }
   | { popup: 'translation'; id: string; target: 'fr' | 'en'; available: boolean; original: boolean }
@@ -18,7 +22,7 @@ type Content =
   | { popup: 'menu'; items: string[] }
   | { popup: 'split-layout'; ratio: number }
   | { popup: 'downloads'; items: Download[] }
-  | { popup: 'settings'; version: string; update: { version: string; percent: number; ready: boolean } | null; check: 'idle' | 'checking' | 'current' | 'failed' | 'portable'; zoom: number; uiScale: number; shortcuts: {action:string; title:string; keys:string}[]; theme: number; language: number; spelling: number; spellingLanguages: string[]; home: string; font: number; ublock: string | null; engine: number; engines: string[]; sites: { origin: string; host: string; summary: string }[]; permissions: number; siteData: 'idle' | 'clearing' | 'done' | 'failed'; tint: Setting[]; items: Setting[] }
+  | { popup: 'settings'; section?: string; ai: SolAiState; aiPreferences: AiPreferences; version: string; update: { version: string; percent: number; ready: boolean } | null; check: 'idle' | 'checking' | 'current' | 'failed' | 'portable'; zoom: number; uiScale: number; shortcuts: {action:string; title:string; keys:string}[]; theme: number; language: number; spelling: number; spellingLanguages: string[]; home: string; font: number; ublock: string | null; engine: number; engines: string[]; sites: { origin: string; host: string; summary: string }[]; permissions: number; siteData: 'idle' | 'clearing' | 'done' | 'failed'; tint: Setting[]; items: Setting[] }
   | { popup: 'profiles'; items: Profile[] }
   | { popup: 'sessions'; id: string; current: string; deleting: string | null; items: {id:string;name:string;count:number}[] }
   | { popup: 'group-edit'; create: boolean; id: string; name: string; color: string; icon: string; presets: string[] }
@@ -27,6 +31,7 @@ type Content =
   | { popup: 'permission'; site: string; what: string; secure: boolean }
   | { popup: 'prompt'; title: string; hint: string; placeholder: string; submit: string; value: string; command: string; id: string | null; secret?: boolean }
   | { popup: 'notice'; title: string; hint: string }
+  | { popup: 'site-reset'; site: string; session: string }
   | { popup: 'extension-confirm'; id: string; name: string; version: string; icon: string | null; update: boolean; access: string[] }
   | { popup: 'extensions'; session: string; updates: '' | 'checking' | 'current' | 'updated' | 'failed'; installed: { id: string; name: string; version: string; enabled: boolean; page: boolean; options: boolean; pinned: boolean; icon: string | null; store: boolean; update: string | null }[]; available: { id: string; name: string; version: string; from: string }[] };
 
@@ -113,6 +118,7 @@ export default function Popup() {
   const libraryTimer = useRef(0);
   const root = useRef<HTMLDivElement>(null);
   const fresh = useRef(false);
+  const current = useRef<Content | null>(null);
   useLang();
   const [opening, setOpening] = useState(0); // change à chaque ouverture : rejoue l'apparition
 
@@ -126,12 +132,14 @@ export default function Popup() {
       if (isFresh) setOpening(n => n + 1);
       fresh.current = false;
       const next = data as Content;
+      current.current = next;
       setSelected(-1);
       if (next.popup === 'library' && isFresh) {
         setLibTab(next.tab ?? (next.bookmarks.length > 0 ? 'bookmarks' : 'history'));
         setLibraryQuery('');
         window.clearTimeout(libraryTimer.current);
       }
+      if (next.popup === 'settings' && next.section && isFresh) setSettingsSection(next.section);
       setContent(next);
     });
     const close = () => send({ type: 'popup.close' });
@@ -140,7 +148,7 @@ export default function Popup() {
     let leaving = 0;
     const blurred = () => {
       window.clearTimeout(leaving);
-      leaving = window.setTimeout(() => !document.hasFocus() && close(), 150);
+      leaving = window.setTimeout(() => current.current?.popup !== 'ai-action' && !document.hasFocus() && close(), 150);
     };
     window.addEventListener('blur', blurred);
     const key = (e: KeyboardEvent) => e.key === 'Escape' && close();
@@ -168,6 +176,8 @@ export default function Popup() {
   }, [content, libTab, settingsSection]);
 
   if (!content) return null;
+
+  if (content.popup === 'ai-action') return <div key={opening} ref={root} className="popup arriving"><SolAiAction content={content}/></div>;
 
   if (content.popup === 'palette')
     return <div key={opening} ref={root} className="popup arriving palette-popup"><CommandPalette items={content.items} listHeight={content.listHeight} /></div>;
@@ -438,6 +448,7 @@ export default function Popup() {
               <button className="pill-action" disabled={content.check === 'checking'} onClick={() => send({ type: 'update.check' })}>{t('Vérifier', 'Check')}</button>
             )}
           </div>
+          {settingsSection === 'about' && content.ai?.available && <div className="theme-row"><SolAiSettings ai={content.ai} preferences={content.aiPreferences} /></div>}
           <div className="setting-row static" hidden={settingsSection !== 'data'}>
             <span className="setting-text">
               <span className="row-title">{t('Sauvegarde', 'Backup')}</span>
@@ -485,6 +496,14 @@ export default function Popup() {
   if (content.popup === 'sessions') return <SessionPicker key={opening} rootRef={root} content={content} />;
   if (content.popup === 'profiles')
     return <ProfileList key={opening} rootRef={root} items={content.items} />;
+
+  if (content.popup === 'site-reset') return <div ref={root} className="popup arriving">
+    <div className="popup-header"><span className="popup-header-title">{t('Vider la session de ce site ?', 'Clear this site’s session?')}</span></div>
+    <p className="row-sub extension-note"><strong>{content.site}</strong> · {content.session}</p>
+    <p className="row-sub extension-note">{t('Cookies, données locales, cache du site et autorisations seront effacés. Vous serez déconnecté et la page sera rechargée.', 'Cookies, local data, site cache and permissions will be cleared. You will be signed out and the page will reload.')}</p>
+    <p className="row-sub extension-note">{t('Les cookies partagés avec d’autres sous-domaines seront aussi supprimés, ainsi que le cache HTTP de cette session. Les autres sessions, vos mots de passe, favoris et historique sont conservés.', 'Cookies shared with other subdomains and this session’s HTTP cache will also be cleared. Other sessions, your passwords, bookmarks and history are kept.')}</p>
+    <div className="extension-confirm-actions"><button className="pill-action" onClick={() => send({type:'popup.close'})}>{t('Annuler','Cancel')}</button><button className="pill-action danger" onClick={() => send({type:'site.reset'})}>{t('Vider et recharger','Clear and reload')}</button></div>
+  </div>;
 
   if (content.popup === 'extension-confirm')
     return <div ref={root} className="popup arriving">

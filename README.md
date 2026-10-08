@@ -81,7 +81,7 @@ Get-FileHash .\Sol-0.1.4-win-x64-Setup.exe -Algorithm SHA256
 
 ## Privacy
 
-- No telemetry, no account. Sol sends nothing to its author.
+- No account or telemetry sent to Sol's author. Optional Sol AI uses Microsoft's local runtime with optional telemetry disabled; its catalog/downloads contact Microsoft and the runtime may collect essential diagnostics. Model inference runs locally.
 - Bookmarks, history, passwords and settings stay on your computer. A backup leaves it only as the encrypted file you export.
 - Connections Sol makes on its own:
   - search suggestions, sent to your search engine as you type in the address bar (can be turned off);

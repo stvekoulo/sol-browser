@@ -21,6 +21,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     private readonly Dictionary<string, IReadOnlyList<CoreWebView2Cookie>> _sessionCookies = new();
     private readonly Dictionary<string, Task> _closingProfiles = new();
     public event Action<string>? SessionFailed;
+    public event Action? PagePressed;
     public Func<string, string, string?, bool, bool>? RouteNavigation { get; set; }
     public event Action<string>? NavigationSettled;
     public bool IsPdf(string id) => _pdf.Contains(id);
@@ -237,10 +238,11 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         core.SetVirtualHostNameToFolderMapping("start.sol", Path.Combine(AppContext.BaseDirectory, "ui"), CoreWebView2HostResourceAccessKind.Deny);
         core.WebMessageReceived += (_, e) =>
         {
+            if (e.Source == core.Source && e.WebMessageAsJson == "\"sol.page.pointer\"") { PagePressed?.Invoke(); return; }
             if (e.Source == QuickNotes.PageUrl && core.Source == QuickNotes.PageUrl)
             {
                 if (CommandParser.Parse(e.TryGetWebMessageAsString()) is { } notes && notes.Type is
-                    "notes.ready" or "notes.open" or "notes.draft" or "notes.save" or "notes.edit" or "notes.discard" or "notes.delete" or "notes.export" or "notes.visit")
+                    "notes.ready" or "notes.open" or "notes.draft" or "notes.save" or "notes.edit" or "notes.discard" or "notes.delete" or "notes.export" or "notes.visit" or "notes.link" or "ai.notes")
                     NotesRequested?.Invoke(tab.Id, notes);
                 return;
             }
@@ -274,7 +276,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
             _pdf.Remove(tab.Id);
             if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var document) && document.AbsolutePath.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)) _pdf.Add(tab.Id);
             core.Settings.IsZoomControlEnabled = IsPdf(tab.Id);
-            core.Settings.IsWebMessageEnabled = e.Uri is Settings.DefaultHomePage or QuickNotes.PageUrl || IsStore(e.Uri);
+            core.Settings.IsWebMessageEnabled = true; // handler validates origin and permits only dismissal outside internal pages/stores
             Navigating?.Invoke(core);
             DebugLog.Write($"navigation.start {tab.Id} #{e.NavigationId} redirect={e.IsRedirected}");
             if (_navigation.GetValueOrDefault(tab.Id) != e.NavigationId) _downloading.Remove(tab.Id);
@@ -487,12 +489,12 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { return false; }
     }
 
-    // Une page web est du contenu non fiable : aucun pont vers l'hôte, aucune permission accordée d'office.
+    // Une page web est non fiable : aucun objet hôte, aucune permission ; seuls les messages filtrés sont acceptés.
     private void Harden(CoreWebView2 core)
     {
         var s = core.Settings;
         s.AreHostObjectsAllowed = false;
-        s.IsWebMessageEnabled = false;
+        s.IsWebMessageEnabled = true;
         // Mots de passe : gestionnaire du moteur (proposition d'enregistrement, stockage chiffré, remplissage).
         s.IsPasswordAutosaveEnabled = settings.SavePasswords && !AppPaths.Private; // rien à retenir d'une fenêtre privée
         s.IsSwipeNavigationEnabled = true;
@@ -500,6 +502,9 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         s.IsGeneralAutofillEnabled = false;
         s.HiddenPdfToolbarItems = CoreWebView2PdfToolbarItems.None; // recherche, pages, rotation, impression et enregistrement natifs
         _ = core.AddScriptToExecuteOnDocumentCreatedAsync(SidewaysScript);
+        _ = core.AddScriptToExecuteOnDocumentCreatedAsync("document.addEventListener('pointerdown',e=>{if(e.isTrusted)window.chrome.webview.postMessage('sol.page.pointer')},true)");
+        _ = core.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "video-cursor.js")));
+        _ = core.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "ai.js")));
         s.IsReputationCheckingRequired = true; // SmartScreen
         // Aucun certificat invalide n'est accepté silencieusement, même sur localhost.
         core.ServerCertificateErrorDetected += (_, e) =>
@@ -528,6 +533,41 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         }
         catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException)
         { DebugLog.Write($"site-data.clear {e.GetType().Name}"); return false; }
+    }
+
+    public async Task<bool> ResetSiteAsync(string id, string origin)
+    {
+        if (Core(id) is not { } core || PermissionStore.OriginOf(core.Source) != origin) return false;
+        var name = core.Profile.ProfileName;
+        var host = new Uri(origin).IdnHost;
+        bool Matches(CoreWebView2Cookie cookie)
+        {
+            var domain = cookie.Domain.TrimStart('.');
+            return host.Equals(domain, StringComparison.OrdinalIgnoreCase) || host.EndsWith("." + domain, StringComparison.OrdinalIgnoreCase);
+        }
+        var pages = _views.Values.Select(v => v.CoreWebView2).OfType<CoreWebView2>()
+            .Where(p => p.Profile.ProfileName == name && PermissionStore.OriginOf(p.Source) == origin).ToArray();
+        try
+        {
+            foreach (var page in pages)
+            {
+                page.Stop();
+                await page.ExecuteScriptAsync("sessionStorage.clear()");
+            }
+            await core.CallDevToolsProtocolMethodAsync("Storage.clearDataForOrigin",
+                System.Text.Json.JsonSerializer.Serialize(new { origin, storageTypes = "all" }));
+            foreach (var cookie in await core.Profile.CookieManager.GetCookiesAsync(""))
+                if (Matches(cookie)) core.Profile.CookieManager.DeleteCookie(cookie);
+            // Les cookies gardés en mémoire ne doivent pas revenir au prochain changement de session.
+            if (_sessionCookies.TryGetValue(name, out var saved)) _sessionCookies[name] = saved.Where(c => !Matches(c)).ToArray();
+            // ponytail: le moteur ne propose pas de purge HTTP par origine ; seul ce cache est partagé dans la session.
+            await core.Profile.ClearBrowsingDataAsync(CoreWebView2BrowsingDataKinds.DiskCache);
+            foreach (var page in pages)
+                if (PermissionStore.OriginOf(page.Source) == origin) page.Reload();
+            return true;
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException)
+        { DebugLog.Write($"site.reset {e.GetType().Name}"); return false; }
     }
 
     public void Remove(string id)
