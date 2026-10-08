@@ -152,7 +152,11 @@ public sealed partial class BrowserController
         };
         _pages.Discarded += id => { _restored.Add(id); _network.Forget(id); Refresh(); }; // son rechargement ne sera pas une nouvelle visite
         _pages.KeepAwake = id => _split.Contains(id) || _downloads.Any(d => d.TabId == id && d.Op.State == Microsoft.Web.WebView2.Core.CoreWebView2DownloadState.InProgress);
-        _pages.PipReturnRequested += id => { Activate(id); Refresh(); };
+        _pages.PipReturnRequested += id => {
+            Activate(id); Refresh();
+            if (Presenter?.State == OverlappedPresenterState.Minimized) Presenter.Restore();
+            _window.Activate();
+        };
         _pages.Loaded += id =>
         {
             if (!_pinsInitialized) { _ = RefreshPinnedExtensionsAsync(); _ = PrepareExtensionsAsync(); _ = UpdateExtensionsLaterAsync(); }
@@ -424,7 +428,6 @@ public sealed partial class BrowserController
             case "dock.size":
                 if (!_dockShown && (_updateDismissed || Program.Update is null)) return;
                 _dock.SetSize(c.Width!.Value, c.Height!.Value);
-                _pages.DockHeight = Math.Clamp(c.Height!.Value, 44, 420); // le lecteur flottant se pose au-dessus
                 return;
             case "shortcut.menu": OpenShortcutMenu(c.Index!.Value, c.X!.Value, c.Y!.Value); return;
             case "shortcut.update": UpdateShortcut(id, c.Title!, c.Input!); break;
@@ -567,6 +570,7 @@ public sealed partial class BrowserController
                     {
                         if (target.Length > 0) { Open(target); Refresh(); }
                         if (Presenter?.State == OverlappedPresenterState.Minimized) Presenter.Restore();
+                        _window.Activate();
                         SetForegroundWindow(WinRT.Interop.WindowNative.GetWindowHandle(_window));
                     }));
                 }
@@ -695,7 +699,6 @@ public sealed partial class BrowserController
         else
         {
             _dock.Hide();
-            _pages.DockHeight = 0;
         }
         if (changed) Refresh(); // le bouton de la barre apparaît quand l'encart disparaît, et inversement
     }
@@ -1036,7 +1039,7 @@ public sealed partial class BrowserController
                 _settings.FullScreen = on;
                 _window.SetBrowserFullScreen(on, maximize: !on);
                 break;
-            case "pip": _settings.AutoPip = on; if (!on) _pages.ExitPip(pause: false); break;
+            case "pip": _settings.AutoPip = on; if (!on) _pages.ExitPip(); break;
             case "memory": _settings.MemorySaver = on; break;
             case "scrollbars": _settings.HideScrollbars = !on; break;
             case "blur": _settings.BlurEnabled = on; break;

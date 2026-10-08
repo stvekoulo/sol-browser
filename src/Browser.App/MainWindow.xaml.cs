@@ -101,6 +101,7 @@ public sealed partial class MainWindow : Window
         UiBridge.Settings = settings;
         Root.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(UiBridge.InitialBackground);
         var pages = new PageHost(Pages, PrimaryColumn, DividerColumn, SecondaryColumn, blur, settings);
+        WirePageCursor(pages);
         pages.FullScreenChanged += SetFullScreen;
         var bridge = new UiBridge(Ui, "index.html", Sidebar, SidebarColumn, pages);
         _bridge = bridge;

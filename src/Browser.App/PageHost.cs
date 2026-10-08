@@ -197,7 +197,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
             _watchLayout = true;
             container.SizeChanged += (_, _) => ApplyLayout(_layout.Primary, _layout.Secondary, _layout.Ratio);
         }
-        var view = new WebView2 { Visibility = Visibility.Collapsed, Opacity = 0, DefaultBackgroundColor = UiBridge.InitialBackground };
+        var view = new CursorWebView { Visibility = Visibility.Collapsed, Opacity = 0, DefaultBackgroundColor = UiBridge.InitialBackground };
         _views[tab.Id] = view;
         view.GotFocus += (_, _) => { if (_visible.Contains(tab.Id) && _views.GetValueOrDefault(tab.Id) == view) PageFocused?.Invoke(tab.Id); };
         container.Children.Add(view);
@@ -342,9 +342,8 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
             var point = view.TransformToVisual(null).TransformPoint(new Windows.Foundation.Point(e.Location.X, e.Location.Y));
             ContextMenuRequested?.Invoke(tab.Id, point.X, point.Y, e);
         };
-        view.SizeChanged += (_, _) => { if (_pip != tab.Id) ClipToDevice(view); };
+        view.SizeChanged += (_, _) => ClipToDevice(view);
         core.SourceChanged += (_, _) => SyncMirrors(tab.Id, core.Source);
-        WatchFrames(tab.Id, core);
         core.DownloadStarting += (_, e) =>
         {
             DebugLog.Write($"download.start {tab.Id} current={_navigation.GetValueOrDefault(tab.Id)}");
@@ -355,8 +354,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         core.Settings.IsStatusBarEnabled = false;
         core.StatusBarTextChanged += (_, _) => StatusChanged?.Invoke(tab.Id, core.StatusBarText);
         core.FaviconChanged += async (_, _) => FaviconChanged?.Invoke(tab.Id, await ReadFaviconAsync(core));
-        // Appareil simulé, lecteur flottant : leur page reste à 100 %, quelle que soit la page chargée ensuite.
-        core.DOMContentLoaded += (_, _) => { if (_mode.ContainsKey(tab.Id) || _pip == tab.Id) _ = PageZoom.TabAsync(core, 1); };
+        core.DOMContentLoaded += (_, _) => { if (_mode.ContainsKey(tab.Id)) _ = PageZoom.TabAsync(core, 1); };
         if (!_views.TryGetValue(tab.Id, out initializing) || initializing != view) return null;
         _ready.Add(tab.Id);
         if (navigate) Navigate(tab.Id, _target.GetValueOrDefault(tab.Id, tab.Url), route: false);
@@ -607,8 +605,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         _ready.Remove(id);
         _skipSiteRoute.Remove(id);
         _hiddenSince.Remove(id);
-        if (_pip == id) ExitPip(pause: false);
-        _childFrames.Remove(id);
+        if (_pip == id) ExitPip();
         if (_views.TryGetValue(id, out var closing)) ClearSims(id, closing);
         if (!_views.Remove(id, out var view)) return;
         _loading.Remove(id);
@@ -711,10 +708,9 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         divider.Width = new GridLength(split ? 8 : 0);
         secondary.Width = split ? new GridLength(1 - ratio, GridUnitType.Star) : new GridLength(0);
         // L'onglet du lecteur flottant redevient l'onglet affiché : il reprend sa place.
-        if (_pip is not null && (_pip == activeId || _pip == secondaryId)) ExitPip(pause: false);
+        if (_pip is not null && (_pip == activeId || _pip == secondaryId)) ExitPip();
         foreach (var (id, view) in _views)
         {
-            if (id == _pip) continue; // lecteur flottant : sa vue reste affichée, là où il l'a posée
             var column = id == activeId ? 0 : split && id == secondaryId ? 2 : -1;
             view.Visibility = column < 0 ? Visibility.Collapsed : Visibility.Visible;
             if (column >= 0) Grid.SetColumn(view, column);
@@ -1135,10 +1131,10 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
             _ = PageZoom.RefreshAsync(core);
     }
 
-    // À la sortie d'un appareil simulé ou du lecteur flottant : la page retrouve les métriques de sa vue et le zoom du profil.
+    // À la sortie d'un appareil simulé : la page retrouve les métriques de sa vue et le zoom du profil.
     private async Task ApplyZoomAsync(string id)
     {
-        if (!_views.TryGetValue(id, out var view) || view.CoreWebView2 is not { } core || _mode.ContainsKey(id) || _pip == id) return;
+        if (!_views.TryGetValue(id, out var view) || view.CoreWebView2 is not { } core || _mode.ContainsKey(id)) return;
         try { await core.CallDevToolsProtocolMethodAsync("Emulation.clearDeviceMetricsOverride", "{}"); }
         catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException or ArgumentException) { return; /* vue fermée entre-temps */ }
         await PageZoom.TabAsync(core, null);
