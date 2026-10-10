@@ -2,7 +2,7 @@
 
 # Sol
 
-**Sol browser** est un navigateur web léger pour Windows, avec les onglets dans une carte latérale, un bloqueur de publicités intégré et des outils pour les développeurs web. Son interface prend les couleurs de la page affichée.
+**Sol browser** est un navigateur web léger pour Windows, avec les onglets dans une carte latérale, les extensions du Chrome Web Store et des outils pour les développeurs web. Son interface prend les couleurs de la page affichée.
 
 *[English version](README.md)*
 
@@ -35,7 +35,7 @@
 - Polices de l'interface : système, Inter ou SF Pro.
 
 **Moins de distractions**
-- Lecteur flottant : quittez un onglet où une vidéo joue, elle reste à l'écran avec les commandes de Sol.
+- Lecteur flottant : quittez un onglet où une vidéo joue, elle reste à l'écran dans la fenêtre vidéo du moteur (Picture-in-Picture).
 - Les sites demandent une fois l'accès au micro, à la caméra ou à la position ; la réponse est retenue par site et peut être oubliée.
 
 **Économe en mémoire**
@@ -46,7 +46,7 @@
 - Simulateur d'appareils avec leur vraie forme, rotation, et plusieurs écrans côte à côte.
 - Inspecteur réseau : requêtes, filtre API, erreurs, en-têtes et corps des réponses.
 - `:3000` ouvre `http://localhost:3000`, et un serveur pas encore démarré est retenté tout seul.
-- Captures d'une zone, de la partie visible ou de la page entière, en PNG ou en PDF.
+- Captures d'une zone, de la partie visible ou de la page entière, en PNG ou en PDF, avec un aperçu avant d'enregistrer. Un appareil simulé est capturé avec sa coque.
 
 ![La même page sur un téléphone, une tablette et un écran d'ordinateur, côte à côte](docs/images/responsive.png)
 

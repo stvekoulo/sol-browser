@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using Browser.Core;
 using Microsoft.UI.Xaml;
@@ -5,8 +6,6 @@ using Microsoft.Web.WebView2.Core;
 using Windows.Storage.Pickers;
 using Windows.Graphics.Imaging;
 using Windows.Storage.Streams;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 
 namespace Browser.App;
 
@@ -18,8 +17,11 @@ public sealed class CaptureService(Window window, Action<string>? post = null)
     private bool _running;
     public bool Busy => _running;
     private TaskCompletionSource<BitmapBounds?>? _selection;
+    private TaskCompletionSource<bool>? _decision;
     public void Select(BitmapBounds bounds) => _selection?.TrySetResult(bounds);
-    public void CancelSelection() => _selection?.TrySetResult(null);
+    /// <summary>L'aperçu est accepté : reste à choisir où l'enregistrer.</summary>
+    public void Save() => _decision?.TrySetResult(true);
+    public void Cancel() { _selection?.TrySetResult(null); _decision?.TrySetResult(false); }
     private void Send(string kind, string? data = null) => post?.Invoke(JsonSerializer.Serialize(new { @event = "capture-state", kind, data }));
 
     // Sélection d'une zone à la souris, dessinée dans la page. Renvoie { x, y, w, h } dans la fenêtre, ou null (Échap).
@@ -59,127 +61,128 @@ public sealed class CaptureService(Window window, Action<string>? post = null)
     private const string Metrics = """
         ({ w: Math.max(document.documentElement.scrollWidth, document.body ? document.body.scrollWidth : 0),
            h: Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0),
-           sx: scrollX, sy: scrollY, vw: innerWidth, vh: innerHeight, dpr: devicePixelRatio })
+           sx: scrollX, sy: scrollY, dpr: devicePixelRatio })
         """;
 
+    /// <summary>La page seule, rendue par le moteur.</summary>
     /// <param name="mode">"region", "visible" ou "full".</param>
-    public async Task RunAsync(CoreWebView2 core, string mode, string title)
+    public Task RunAsync(CoreWebView2 core, string mode, string title) => GuardAsync(async () =>
+    {
+        JsonElement? region = null;
+        if (mode == "region")
+        {
+            region = await EvalAsync(core, SelectRegion);
+            if (region is not { ValueKind: JsonValueKind.Object }) return; // sélection annulée
+        }
+        var (png, dpr) = await ScreenshotAsync(core, mode, region);
+        // Page entière en PDF : une vraie page PDF, texte sélectionnable, sans limite de hauteur.
+        await ReviewAsync(png, dpr, title, mode == "full" ? async path => await core.PrintToPdfAsync(path, null) : null);
+    });
+
+    /// <summary>
+    /// Ce que la fenêtre affiche, tel que Windows le compose : interface, pages et coques des appareils simulés.
+    /// Ni le bureau ni les autres fenêtres n'y figurent, et aucun sélecteur de partage ne s'ouvre.
+    /// </summary>
+    /// <param name="area">Partie de la fenêtre à garder (null : toute la fenêtre). Une zone tracée l'est toujours sur la fenêtre entière.</param>
+    public Task RunWindowAsync(Windows.Foundation.Rect? area, string mode, string title) => GuardAsync(async () =>
+    {
+        await Task.Delay(150); // les contrôles de capture viennent d'être masqués : le temps que l'écran le montre
+        var scale = window.Content.XamlRoot.RasterizationScale;
+        var (pixels, width, height) = await GrabAsync();
+        var bounds = new BitmapBounds { Width = width, Height = height };
+        if (mode == "region")
+        {
+            _selection = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            var whole = await EncodeAsync(pixels, width, height, bounds, false);
+            post?.Invoke(JsonSerializer.Serialize(new { @event = "capture-preview", data = "data:image/png;base64," + Convert.ToBase64String(whole), width, height }));
+            if (await _selection.Task is not { } chosen) return;
+            if (chosen.Width < 1 || chosen.Height < 1 || chosen.X >= width || chosen.Y >= height || chosen.Width > width - chosen.X || chosen.Height > height - chosen.Y) throw new InvalidDataException("Zone de capture invalide.");
+            bounds = chosen;
+        }
+        else if (area is { } kept)
+        {
+            var left = (uint)Math.Clamp(Math.Round(kept.X * scale), 0, width - 1);
+            var top = (uint)Math.Clamp(Math.Round(kept.Y * scale), 0, height - 1);
+            bounds = new BitmapBounds
+            {
+                X = left, Y = top,
+                Width = (uint)Math.Clamp(Math.Round(kept.Width * scale), 1, width - left),
+                Height = (uint)Math.Clamp(Math.Round(kept.Height * scale), 1, height - top),
+            };
+        }
+        await ReviewAsync(await EncodeAsync(pixels, width, height, bounds, false), scale, title);
+    });
+
+    private async Task GuardAsync(Func<Task> capture)
     {
         if (_running) return;
         _running = true;
-        var failed = false;
-        try
-        {
-            JsonElement? region = null;
-            if (mode == "region")
-            {
-                region = await EvalAsync(core, SelectRegion);
-                if (region is not { ValueKind: JsonValueKind.Object }) return; // sélection annulée
-            }
+        try { await capture(); Send("done"); }
+        // page fermée pendant la capture, ou dossier non inscriptible : rien n'est enregistré
+        catch (Exception e) when (e is InvalidOperationException or IOException or UnauthorizedAccessException or COMException or InvalidDataException or ArgumentException)
+        { Send("error", e.Message); }
+        finally { _selection = null; _decision = null; _running = false; }
+    }
 
-            foreach (var path in await ChoosePathsAsync(title))
+    // L'image est montrée avant tout enregistrement ; elle n'est écrite que si l'utilisateur la garde.
+    private async Task ReviewAsync(byte[] png, double pixelsPerDip, string title, Func<string, Task>? pdfPage = null)
+    {
+        post?.Invoke(JsonSerializer.Serialize(new { @event = "capture-review", data = "data:image/png;base64," + Convert.ToBase64String(png) }));
+        while (true)
+        {
+            _decision = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            if (!await _decision.Task) return;
+            var paths = await ChoosePathsAsync(title);
+            if (paths.Count == 0) continue; // dialogue d'enregistrement annulé : l'aperçu reste affiché
+            foreach (var path in paths)
             {
-                var pdf = path.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
-                if (pdf && mode == "full")
-                {
-                    await core.PrintToPdfAsync(path, null); // vraie page PDF, texte sélectionnable, sans limite de hauteur
-                    continue;
-                }
-                var (image, dpr) = await ScreenshotAsync(core, mode, region, pdf ? "jpeg" : "png");
+                if (!path.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)) await File.WriteAllBytesAsync(path, png);
+                else if (pdfPage is not null) await pdfPage(path);
                 // 96 pixels CSS par pouce, 72 points PDF par pouce.
-                await File.WriteAllBytesAsync(path, pdf ? PdfImage.Wrap(image, dpr * 96 / 72) : image);
+                else await File.WriteAllBytesAsync(path, PdfImage.Wrap(await JpegAsync(png), pixelsPerDip * 96 / 72));
             }
+            return;
         }
-        catch (Exception e) when (e is InvalidOperationException or IOException or UnauthorizedAccessException or System.Runtime.InteropServices.COMException or InvalidDataException)
-        {
-            // page fermée pendant la capture, ou dossier non inscriptible : rien n'est enregistré
-            Send("error", e.Message);
-            failed = true;
-        }
-        finally { _running = false; if (!failed) Send("done"); }
     }
 
-    /// <summary>Assemble les surfaces visibles de Sol, sans filmer le bureau ni ouvrir un sélecteur de partage Windows.</summary>
-    public async Task RunWindowAsync(FrameworkElement root, string mode)
+    // PW_CLIENTONLY | PW_RENDERFULLCONTENT : le contenu de la fenêtre, vues web comprises, sans son cadre.
+    private async Task<(byte[] Pixels, uint Width, uint Height)> GrabAsync()
     {
-        if (_running) return;
-        _running = true;
-        try
+        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
+        if (!GetClientRect(hwnd, out var client) || client.Right < 1 || client.Bottom < 1) throw new InvalidOperationException("Fenêtre indisponible.");
+        return await Task.Run(() =>
         {
-            if (root.ActualWidth < 1 || root.ActualHeight < 1) throw new InvalidOperationException("Fenêtre indisponible.");
-            var scale = Math.Min(3840 / root.ActualWidth, 2160 / root.ActualHeight);
-            var width = (uint)Math.Max(1, Math.Round(root.ActualWidth * scale));
-            var height = (uint)Math.Max(1, Math.Round(root.ActualHeight * scale));
-            var pixels = new byte[checked((int)(width * height * 4))];
-            var background = (root as Panel)?.Background as SolidColorBrush;
-            var color = background?.Color ?? UiBridge.InitialBackground;
-            for (var i = 0; i < pixels.Length; i += 4) { pixels[i] = color.B; pixels[i+1] = color.G; pixels[i+2] = color.R; pixels[i+3] = 255; }
-            foreach (var view in Views(root))
+            var info = new BitmapInfoHeader { Size = 40, Width = client.Right, Height = -client.Bottom, Planes = 1, BitCount = 32 };
+            var dc = CreateCompatibleDC(0);
+            var bitmap = CreateDIBSection(dc, ref info, 0, out var bits, 0, 0);
+            var previous = SelectObject(dc, bitmap);
+            try
             {
-                if (view.Name == "CaptureControls" || view.CoreWebView2 is not { } core || view.ActualWidth < 1 || view.ActualHeight < 1) continue;
-                var origin = view.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point());
-                var left = (int)Math.Round(origin.X * scale); var top = (int)Math.Round(origin.Y * scale);
-                if (left >= width || top >= height) continue;
-                var targetWidth = (uint)Math.Max(1, Math.Round(view.ActualWidth * scale));
-                var targetHeight = (uint)Math.Max(1, Math.Round(view.ActualHeight * scale));
-                // Le moteur rend chaque surface à la résolution finale : texte et icônes restent nets.
-                var metrics = (await EvalAsync(core, "({w:innerWidth,h:innerHeight,dpr:devicePixelRatio,sx:scrollX,sy:scrollY})"))!.Value;
-                var w = metrics.GetProperty("w").GetDouble(); var h = metrics.GetProperty("h").GetDouble();
-                var layout = await core.CallDevToolsProtocolMethodAsync("Page.getLayoutMetrics", "{}");
-                using var layoutDoc = JsonDocument.Parse(layout);
-                var zoom = layoutDoc.RootElement.GetProperty("cssVisualViewport").GetProperty("zoom").GetDouble();
-                var clipWidth = Math.Max(1, Math.Floor(w * zoom));
-                var result = await core.CallDevToolsProtocolMethodAsync("Page.captureScreenshot", JsonSerializer.Serialize(new { format = "png", captureBeyondViewport = false, clip = new { x = metrics.GetProperty("sx").GetDouble() * zoom, y = metrics.GetProperty("sy").GetDouble() * zoom, width = clipWidth, height = Math.Max(1, Math.Floor(h * zoom)), scale = targetWidth / (clipWidth * metrics.GetProperty("dpr").GetDouble() / zoom) } }));
-                using var json = JsonDocument.Parse(result);
-                using var image = new InMemoryRandomAccessStream();
-                using (var writer = new DataWriter(image.GetOutputStreamAt(0))) { writer.WriteBytes(Convert.FromBase64String(json.RootElement.GetProperty("data").GetString()!)); await writer.StoreAsync(); }
-                var decoder = await BitmapDecoder.CreateAsync(image);
-                var data = (await decoder.GetPixelDataAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied, new BitmapTransform { ScaledWidth = targetWidth, ScaledHeight = targetHeight }, ExifOrientationMode.IgnoreExifOrientation, ColorManagementMode.DoNotColorManage)).DetachPixelData();
-                for (var y = 0; y < targetHeight; y++) for (var x = 0; x < targetWidth; x++)
-                {
-                    var dx = left + x; var dy = top + y;
-                    if (dx < 0 || dy < 0 || dx >= width || dy >= height) continue;
-                    var source = (int)((y * targetWidth + x) * 4); var dest = (int)((dy * width + dx) * 4); var alpha = data[source+3];
-                    for (var channel = 0; channel < 3; channel++) pixels[dest+channel] = (byte)Math.Min(255, data[source+channel] + (pixels[dest+channel] * (255-alpha) + 127) / 255);
-                }
+                if (bitmap == 0 || !PrintWindow(hwnd, dc, 3)) throw new InvalidOperationException("Fenêtre indisponible.");
+                var pixels = new byte[client.Right * client.Bottom * 4];
+                Marshal.Copy(bits, pixels, 0, pixels.Length);
+                for (var i = 3; i < pixels.Length; i += 4) pixels[i] = 255; // GDI ne renseigne pas l'opacité
+                return (pixels, (uint)client.Right, (uint)client.Bottom);
             }
-            var region = new BitmapBounds { Width = width, Height = height };
-            if (mode == "region")
-            {
-                _selection = new(TaskCreationOptions.RunContinuationsAsynchronously);
-                var png = await EncodeAsync(pixels, width, height, region, false);
-                post?.Invoke(JsonSerializer.Serialize(new { @event = "capture-preview", data = "data:image/png;base64," + Convert.ToBase64String(png), width, height }));
-                var chosen = await _selection.Task;
-                if (chosen is null) { Send("done"); return; }
-                region = chosen.Value;
-                if (region.Width < 1 || region.Height < 1 || region.X >= width || region.Y >= height || region.Width > width-region.X || region.Height > height-region.Y) throw new InvalidDataException("Zone de capture invalide.");
-            }
-            Send("saving");
-            foreach (var path in await ChoosePathsAsync(Language.T("du navigateur", "of browser")))
-            {
-                var pdf = path.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
-                var image = await EncodeAsync(pixels, width, height, region, pdf);
-                await File.WriteAllBytesAsync(path, pdf ? PdfImage.Wrap(image, scale * 96 / 72) : image);
-            }
-            Send("done");
-        }
-        catch (Exception error) when (error is InvalidOperationException or IOException or UnauthorizedAccessException or System.Runtime.InteropServices.COMException or InvalidDataException)
-        { Send("error", error.Message); }
-        finally { _selection = null; _running = false; }
+            finally { SelectObject(dc, previous); DeleteObject(bitmap); DeleteDC(dc); }
+        });
     }
 
-    private static IEnumerable<WebView2> Views(DependencyObject parent)
+    private static async Task<byte[]> JpegAsync(byte[] png)
     {
-        if (parent is UIElement { Visibility: Visibility.Collapsed }) yield break;
-        if (parent is WebView2 view) { yield return view; yield break; }
-        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
-            foreach (var child in Views(VisualTreeHelper.GetChild(parent, i))) yield return child;
+        using var input = new InMemoryRandomAccessStream();
+        using (var writer = new DataWriter(input.GetOutputStreamAt(0))) { writer.WriteBytes(png); await writer.StoreAsync(); }
+        var decoder = await BitmapDecoder.CreateAsync(input);
+        var pixels = (await decoder.GetPixelDataAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied, new BitmapTransform(), ExifOrientationMode.IgnoreExifOrientation, ColorManagementMode.DoNotColorManage)).DetachPixelData();
+        return await EncodeAsync(pixels, decoder.PixelWidth, decoder.PixelHeight, new BitmapBounds { Width = decoder.PixelWidth, Height = decoder.PixelHeight }, true);
     }
 
     private static async Task<byte[]> EncodeAsync(byte[] pixels, uint width, uint height, BitmapBounds bounds, bool jpeg)
     {
         using var output = new InMemoryRandomAccessStream();
-        var encoder = await BitmapEncoder.CreateAsync(jpeg ? BitmapEncoder.JpegEncoderId : BitmapEncoder.PngEncoderId, output);
+        var encoder = jpeg
+            ? await BitmapEncoder.CreateAsync(BitmapEncoder.JpegEncoderId, output, [new("ImageQuality", new BitmapTypedValue(0.95f, Windows.Foundation.PropertyType.Single))])
+            : await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId, output);
         encoder.SetPixelData(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied, width, height, 96, 96, pixels);
         encoder.BitmapTransform.Bounds = bounds;
         await encoder.FlushAsync();
@@ -187,7 +190,7 @@ public sealed class CaptureService(Window window, Action<string>? post = null)
         var result = new byte[(int)output.Size]; reader.ReadBytes(result); return result;
     }
 
-    private static async Task<(byte[] Image, double Dpr)> ScreenshotAsync(CoreWebView2 core, string mode, JsonElement? region, string format)
+    private static async Task<(byte[] Image, double Dpr)> ScreenshotAsync(CoreWebView2 core, string mode, JsonElement? region)
     {
         // Les bandes de flou du navigateur ne font pas partie de la page.
         const string blurHost = "window.__navBlurHost && (window.__navBlurHost.style.display = '{0}')";
@@ -196,28 +199,25 @@ public sealed class CaptureService(Window window, Action<string>? post = null)
         {
             var m = (await EvalAsync(core, Metrics))!.Value;
             double N(JsonElement e, string name) => e.GetProperty(name).GetDouble();
-            var width = mode == "region" ? N(region!.Value, "w") : N(m, mode == "full" ? "w" : "vw");
-            var height = mode == "region" ? N(region!.Value, "h") : N(m, mode == "full" ? "h" : "vh");
+            var width = mode == "region" ? N(region!.Value, "w") : N(m, "w");
+            var height = mode == "region" ? N(region!.Value, "h") : N(m, "h");
             var dpr = N(m, "dpr");
             using var layout = JsonDocument.Parse(await core.CallDevToolsProtocolMethodAsync("Page.getLayoutMetrics", "{}"));
             var zoom = layout.RootElement.GetProperty("cssVisualViewport").GetProperty("zoom").GetDouble();
-            var clipWidth = Math.Max(1, Math.Floor(width * zoom)); // le moteur arrondit le clip aux pixels entiers
-            var scale = Math.Max(1, 3840 / (clipWidth * dpr / zoom)); // rendu du moteur en 4K, sans redimensionner le PNG après capture
-            var physicalWidth = clipWidth * dpr / zoom * scale;
-            var maxHeight = Math.Min(MaxImageHeight, 48_000_000 / physicalWidth); // plafond mémoire pour les pages longues
-            var clip = new {
-                // Le clip CDP utilise les pixels indépendants du périphérique, avant le zoom du moteur.
-                x = (mode == "full" ? 0 : N(m, "sx") + (mode == "region" ? N(region!.Value, "x") : 0)) * zoom,
-                y = (mode == "full" ? 0 : N(m, "sy") + (mode == "region" ? N(region!.Value, "y") : 0)) * zoom,
-                width = clipWidth, height = Math.Max(1, Math.Floor(Math.Min(height, maxHeight / (dpr * scale)) * zoom)), scale,
+            // L'image a les pixels de l'écran : un pixel affiché, un pixel enregistré, quel que soit le zoom de la page.
+            var maxHeight = Math.Min(MaxImageHeight, 48_000_000 / Math.Max(1, width * dpr)); // plafond mémoire pour les pages longues
+            // Partie visible : la vue telle quelle, sans découpe. Sinon, un clip CDP, en pixels indépendants du périphérique
+            // (avant le zoom du moteur).
+            var parameters = new Dictionary<string, object> { ["format"] = "png", ["captureBeyondViewport"] = mode != "visible" };
+            if (mode != "visible") parameters["clip"] = new {
+                x = (mode == "full" ? 0 : N(m, "sx") + N(region!.Value, "x")) * zoom,
+                y = (mode == "full" ? 0 : N(m, "sy") + N(region!.Value, "y")) * zoom,
+                width = Math.Max(1, Math.Floor(width * zoom)), // le moteur arrondit le clip aux pixels entiers
+                height = Math.Max(1, Math.Floor(Math.Min(height, maxHeight / dpr) * zoom)), scale = 1,
             };
-            var parameters = new Dictionary<string, object?> { ["format"] = format, ["captureBeyondViewport"] = mode != "visible" };
-            if (format == "jpeg") parameters["quality"] = 100;
-            parameters["clip"] = clip;
-
             var json = await core.CallDevToolsProtocolMethodAsync("Page.captureScreenshot", JsonSerializer.Serialize(parameters));
             using var doc = JsonDocument.Parse(json);
-            return (Convert.FromBase64String(doc.RootElement.GetProperty("data").GetString()!), dpr * scale);
+            return (Convert.FromBase64String(doc.RootElement.GetProperty("data").GetString()!), dpr);
         }
         finally
         {
@@ -252,4 +252,19 @@ public sealed class CaptureService(Window window, Action<string>? post = null)
         using var doc = JsonDocument.Parse(json);
         return doc.RootElement.GetProperty("result").TryGetProperty("value", out var value) ? value.Clone() : null;
     }
+
+    [StructLayout(LayoutKind.Sequential)] private struct Rect { public int Left, Top, Right, Bottom; }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BitmapInfoHeader
+    {
+        public uint Size; public int Width, Height; public ushort Planes, BitCount;
+        public uint Compression, SizeImage; public int XPelsPerMeter, YPelsPerMeter; public uint ClrUsed, ClrImportant;
+    }
+    [DllImport("user32.dll")] private static extern bool GetClientRect(nint hwnd, out Rect rect);
+    [DllImport("user32.dll")] private static extern bool PrintWindow(nint hwnd, nint dc, uint flags);
+    [DllImport("gdi32.dll")] private static extern nint CreateCompatibleDC(nint dc);
+    [DllImport("gdi32.dll")] private static extern nint CreateDIBSection(nint dc, ref BitmapInfoHeader info, uint usage, out nint bits, nint section, uint offset);
+    [DllImport("gdi32.dll")] private static extern nint SelectObject(nint dc, nint item);
+    [DllImport("gdi32.dll")] private static extern bool DeleteObject(nint item);
+    [DllImport("gdi32.dll")] private static extern bool DeleteDC(nint dc);
 }

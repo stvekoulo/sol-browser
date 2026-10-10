@@ -64,7 +64,7 @@ public static class CommandParser
         ["extension.pin"] = ["id"], ["extensions.update"] = [], ["extension.update"] = ["id"],
         ["capture.size"] = ["height"], ["capture.close"] = [], ["capture.visibility"] = ["index"],
         ["capture.run"] = ["query"], ["capture.region"] = ["x", "y", "width", "height"],
-        ["capture.selection"] = ["index"],
+        ["capture.selection"] = ["index"], ["capture.save"] = [],
         ["backup.export"] = [], ["backup.export.key"] = ["title"], ["backup.import"] = [], ["backup.restore"] = ["title"],
         ["ui.ready"] = [], ["ui.tooltip"] = [],
     };

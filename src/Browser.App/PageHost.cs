@@ -204,6 +204,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         try
         {
             await StartEngineAsync(view, tab.SessionId.Length == 0 ? null : "sol-" + tab.SessionId);
+            (_bubbles ??= new NativeBubbles(container)).Watch(view.CoreWebView2.BrowserProcessId);
             // Préparer les extensions du profil avant sa première navigation.
             var profile = view.CoreWebView2.Profile;
             if (!_profileReady.TryGetValue(profile.ProfileName, out var ready))
@@ -744,6 +745,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     }
 
     public const string Comparison = "compare";
+    private NativeBubbles? _bubbles; // bulles du moteur, recentrées sur la zone des pages
     private readonly Dictionary<string, List<Sim>> _sims = new(); // le premier est la vue de l'onglet, les suivants ses miroirs
     private readonly Dictionary<string, string> _mode = new();    // nom de l'appareil, ou « compare »
     private readonly Dictionary<string, (double Width, double Height, double Scale)> _fit = new();
@@ -927,6 +929,21 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
             container.Children.Remove(sim.View);
             sim.View.Close();
         }
+    }
+
+    /// <summary>Place des appareils simulés d'un onglet affiché, dans la fenêtre : leurs coques et une marge. Null : vue ordinaire.</summary>
+    public Windows.Foundation.Rect? DeviceArea(string id)
+    {
+        if (!_sims.TryGetValue(id, out var sims) || !_views.TryGetValue(id, out var main) || main.Visibility != Visibility.Visible) return null;
+        var shells = sims.Select(s => s.Below).OfType<FrameworkElement>().Where(s => s.ActualWidth > 0)
+            .Select(s => s.TransformToVisual(null).TransformBounds(new(0, 0, s.ActualWidth, s.ActualHeight))).ToList();
+        if (shells.Count == 0) return null;
+        const double margin = 24;
+        var room = Room(main);
+        var column = container.TransformToVisual(null).TransformBounds(new(Grid.GetColumn(main) == 2 ? container.ActualWidth - room.Width : 0, 0, room.Width, room.Height));
+        double left = Math.Max(column.Left, shells.Min(s => s.Left) - margin), top = Math.Max(column.Top, shells.Min(s => s.Top) - margin);
+        double right = Math.Min(column.Right, shells.Max(s => s.Right) + margin), bottom = Math.Min(column.Bottom, shells.Max(s => s.Bottom) + margin);
+        return right > left && bottom > top ? new(left, top, right - left, bottom - top) : null;
     }
 
     private (double Width, double Height) Room(WebView2 main) =>

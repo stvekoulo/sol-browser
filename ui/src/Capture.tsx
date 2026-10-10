@@ -5,12 +5,14 @@ import { t, useLang } from './i18n';
 
 type Area = { x:number; y:number; width:number; height:number };
 export default function Capture() {
-  const [phase,setPhase]=useState<'idle'|'ready'|'saving'|'selecting'>('idle');
+  const [phase,setPhase]=useState<'idle'|'ready'|'saving'|'selecting'|'review'>('idle');
   const [mode,setMode]=useState('visible');
   const [includeBrowser,setIncludeBrowser]=useState(false);
   const [error,setError]=useState('');
   const [preview,setPreview]=useState('');
   const [area,setArea]=useState<Area|null>(null);
+  const [shot,setShot]=useState({width:0,height:0});
+  const [device,setDevice]=useState(false);
   const root=useRef<HTMLDivElement>(null);
   const image=useRef<HTMLImageElement>(null);
   const anchor=useRef<{x:number;y:number}|null>(null);
@@ -18,24 +20,24 @@ export default function Capture() {
   const close=()=>{send({type:'capture.selection',index:0});send({type:'capture.close'});setPhase('idle');setPreview('');};
   useEffect(()=>{
     const off=onMessage(data=>{
-      const message=data as {event?:string;kind?:string;mode?:string;data?:string};
+      const message=data as {event?:string;kind?:string;mode?:string;data?:string;device?:boolean};
       if(message.event==='capture-open'){
-        setPhase('ready');setMode(message.mode!);setError('');
+        setPhase('ready');setMode(message.mode!);setDevice(!!message.device);setError('');
         // Pas requestAnimationFrame : la vue est encore masquée à la réouverture, et une vue masquée n'en reçoit pas.
         setTimeout(()=>{if(root.current)send({type:'capture.size',height:root.current.getBoundingClientRect().height});},0);
       }
+      if(message.event==='capture-review'){setPreview(message.data!);setShot({width:0,height:0});setPhase('review');send({type:'capture.selection',index:1});}
       if(message.event==='capture-preview'){setPreview(message.data!);setArea(null);setPhase('selecting');send({type:'capture.selection',index:1});}
       if(message.event==='capture-state'){
         if(message.kind==='done')close();
         else if(message.kind==='error'){setError(message.data??t('Capture impossible.','Capture failed.'));setPhase('ready');send({type:'capture.selection',index:0});send({type:'capture.visibility',index:1});}
-        else if(message.kind==='saving'){setPhase('saving');send({type:'capture.selection',index:0});send({type:'capture.visibility',index:0});}
       }
     });
     const escape=(event:KeyboardEvent)=>{if(event.key==='Escape')close();};
     window.addEventListener('keydown',escape);return()=>{off();window.removeEventListener('keydown',escape);};
   },[]);
   useLayoutEffect(()=>{
-    if(!root.current||phase==='selecting'||phase==='idle')return;
+    if(!root.current||phase==='selecting'||phase==='review'||phase==='idle')return;
     const measure=()=>send({type:'capture.size',height:root.current!.getBoundingClientRect().height});
     const observer=new ResizeObserver(measure);observer.observe(root.current);measure();return()=>observer.disconnect();
   },[phase]);
@@ -55,6 +57,17 @@ export default function Capture() {
       setPhase('saving');send({type:'capture.selection',index:0});send({type:'capture.visibility',index:0});
     }
   };
+  // Aperçu avant enregistrement : l'image telle qu'elle sera écrite. Une page entière défile ; le reste tient à l'écran.
+  if(phase==='review')return <div className="capture-review" role="dialog" aria-label={t('Aperçu de la capture','Screenshot preview')}>
+    <div className={shot.height>shot.width*2?'capture-shot tall':'capture-shot'}>
+      <img src={preview} alt={t('Capture à enregistrer','Screenshot to save')} draggable={false} onLoad={e=>setShot({width:e.currentTarget.naturalWidth,height:e.currentTarget.naturalHeight})}/>
+    </div>
+    <div className="capture-options capture-bar">
+      <span>{shot.width>0&&`${shot.width} × ${shot.height} px`}</span>
+      <button onClick={close}>{t('Annuler','Cancel')}</button>
+      <button className="capture-action" autoFocus onClick={()=>send({type:'capture.save'})}>{t('Enregistrer…','Save…')}</button>
+    </div>
+  </div>;
   if(phase==='selecting')return <div className="capture-selection" onPointerDown={select} onPointerMove={select} onPointerUp={select}>
     <img ref={image} src={preview} alt={t('Aperçu du navigateur à sélectionner','Browser preview to select')} draggable={false}/>
     <p>{t('Trace une zone · Échap pour annuler','Drag an area · Escape to cancel')}</p>
@@ -71,7 +84,7 @@ export default function Capture() {
         <button className="capture-action" onClick={()=>{setError('');setPhase('saving');send({type:'capture.run',query:mode,index:includeBrowser?1:0});}}>{t('Capturer','Capture')}</button>
         <button className="capture-close" aria-label={t('Fermer','Close')} onClick={close}>×</button>
       </div>
-      <p className={error?'capture-error':'capture-hint'}>{error||(includeBrowser?t('Barre du haut, sidebar et onglets affichés inclus. Les contrôles de capture sont exclus.','Top bar, sidebar and displayed tabs included. Capture controls are excluded.'):t('Seul le contenu de la page est capturé.','Only page content is captured.'))}</p>
+      <p className={error?'capture-error':'capture-hint'}>{error||(includeBrowser?t('Barre du haut, sidebar et onglets affichés inclus. Les contrôles de capture sont exclus.','Top bar, sidebar and displayed tabs included. Capture controls are excluded.'):device?t('L’appareil simulé est capturé avec sa coque. « Page entière » : la page seule.','The simulated device is captured with its frame. “Full page”: the page alone.'):t('Seul le contenu de la page est capturé.','Only page content is captured.'))}</p>
     </>:phase==='saving'?<p className="capture-hint">{t('Préparation de la capture…','Preparing capture…')}</p>:null}
   </div>;
 }

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdir, writeFile, readFile, readdir, cp } from 'node:fs/promises';
+import { mkdir, writeFile, readFile, readdir, cp, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -1200,6 +1200,9 @@ try {
     await popup.call('Emulation.setFocusEmulationEnabled',{enabled:true});
     await waitFor(()=>popup.evaluate(`!!document.querySelector('.notes-text')`),'notes editor');
     await command({type:'capture.run',query:'visible',index:1});
+    const notesCapture=await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#capture')),'capture controls'));
+    await waitFor(()=>notesCapture.evaluate('!!document.querySelector(".capture-review img")?.naturalWidth'),'notes capture preview',40000);
+    await notesCapture.evaluate('document.querySelector(".capture-bar .capture-action").click()');
     await waitFor(()=>readFile(resolve(base,'captures/capture.png')).then(b=>b.length>10000).catch(()=>false),'centered notes native capture');
     await popup.evaluate(`document.querySelector('.notes-text').focus()`);
     await popup.call('Input.insertText',{text:'Une note conservée dans Sol.'});
@@ -1413,7 +1416,7 @@ try {
     console.log(`Evidence: ${base}`);
     process.exit(0);
   }
-  if (process.argv.includes('--extensions')) {
+  if (process.argv.includes('--extensions') || process.argv.includes('--captures')) {
     const page = await pageAt('/a');
     const initialWidth = await page.evaluate('innerWidth');
     await command({type:'zoom.out'});
@@ -1434,19 +1437,48 @@ try {
     const captureUi=await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#capture')),'capture controls'));
     await captureUi.evaluate(`chrome.webview.addEventListener('message',e=>{if(e.data.event==='capture-state')window.__captureResult=e.data;});`);
     await waitFor(()=>captureUi.evaluate('!!document.querySelector(".capture-action")'),'screenshot options');
-    await captureUi.evaluate('document.querySelector(".capture-action").click()');
-    const capture = await waitFor(async()=>readFile(resolve(base,'captures/capture.png')).catch(()=>null),'4K screenshot');
-    assert.equal(capture.readUInt32BE(16),3840,'screenshot renders at 3840 pixels wide');
-    await waitFor(async()=>readFile(resolve(base,'captures/capture.pdf')).catch(()=>null),'PDF image capture');
-    console.log('PASS 4K PNG and high quality PDF screenshot');
+    // L'aperçu précède tout enregistrement ; « Enregistrer… » écrit le fichier.
+    const saveCapture=async label=>{
+      await waitFor(()=>captureUi.evaluate('!!document.querySelector(".capture-review img")?.naturalWidth'),`${label} preview`,40000);
+      await captureUi.evaluate('document.querySelector(".capture-bar .capture-action").click()');
+      await waitFor(()=>captureUi.evaluate('window.__captureResult?.kind === "done"'),`${label} saved`,40000);
+      return readFile(resolve(base,'captures/capture.png'));
+    };
+    await captureUi.evaluate('window.__captureResult=null;document.querySelector(".capture-action").click()');
+    await waitFor(()=>captureUi.evaluate('!!document.querySelector(".capture-review img")?.naturalWidth'),'screenshot preview',40000);
+    assert.equal(await readFile(resolve(base,'captures/capture.png')).catch(()=>null),null,'nothing is written before the preview is accepted');
+    const capture = await saveCapture('page');
+    const shown = await (await pageAt('/a')).evaluate('[visualViewport.width*devicePixelRatio,visualViewport.height*devicePixelRatio]');
+    assert.ok(Math.abs(capture.readUInt32BE(16)-shown[0])<=1.5 && Math.abs(capture.readUInt32BE(20)-shown[1])<=1.5,`screenshot has the pixels shown on screen (${capture.readUInt32BE(16)}x${capture.readUInt32BE(20)} for ${shown})`);
+    await readFile(resolve(base,'captures/capture.pdf'));
+    console.log('PASS screenshot at screen size, previewed before saving, as PNG and PDF');
+    await command({type:'capture.menu'});
+    await waitFor(()=>captureUi.evaluate('!!document.querySelector(".capture-action")'),'capture options before cancel');
+    await captureUi.evaluate('window.__captureResult=null;document.querySelector(".capture-action").click()');
+    await waitFor(()=>captureUi.evaluate('!!document.querySelector(".capture-review img")?.naturalWidth'),'preview to cancel',40000);
+    await rm(resolve(base,'captures/capture.png'));
+    await captureUi.evaluate('document.querySelector(".capture-bar button").click()');
+    await waitFor(()=>captureUi.evaluate('window.__captureResult?.kind === "done"'),'preview cancelled');
+    assert.equal(await readFile(resolve(base,'captures/capture.png')).catch(()=>null),null,'a cancelled preview saves nothing');
+    console.log('PASS cancelled preview writes no file');
+    await command({type:'device.set',id,query:'iPhone 18 Pro Max'});
+    await waitFor(async()=>!!(await state()).tabs.find(t=>t.id===id).device,'simulated device');
+    await delay(2500);
+    await command({type:'capture.run',query:'visible',index:0});
+    const framed = await saveCapture('simulated device');
+    // La page seule ferait 440 points x 3 = 1320 pixels de large ; avec sa coque, la capture a les pixels de la fenêtre.
+    assert.ok(framed.readUInt32BE(16) < 1100 && framed.readUInt32BE(20) <= 800,`simulated device captured with its frame (${framed.readUInt32BE(16)}x${framed.readUInt32BE(20)})`);
+    await writeFile(resolve(base,'device-capture.png'),framed);
+    await command({type:'device.set',id,query:''});
+    await delay(1500);
+    console.log('PASS simulated device captured with its frame');
     await command({type:'capture.menu'});
     await waitFor(()=>captureUi.evaluate('!!document.querySelector(".capture-action")'),'capture options reopened');
     await captureUi.evaluate('document.querySelector(".capture-browser").click()');
     assert.match(await captureUi.evaluate('document.body.innerText'),/Fenêtre entière|Entire window/);
     await captureUi.evaluate('window.__captureResult=null;document.querySelector(".capture-action").click()');
-    await waitFor(()=>captureUi.evaluate('window.__captureResult?.kind === "done"'),'whole browser screenshot',40000);
-    const fullBrowser=await readFile(resolve(base,'captures/capture.png'));
-    assert.equal(fullBrowser.readUInt32BE(20),2160,'whole browser capture fits within 4K');
+    const fullBrowser=await saveCapture('whole browser');
+    assert.ok(fullBrowser.readUInt32BE(16)>1000 && fullBrowser.readUInt32BE(16)<=1100 && fullBrowser.readUInt32BE(20)>700 && fullBrowser.readUInt32BE(20)<=800,'whole browser capture has the window pixels');
     assert.ok(!fullBrowser.equals(capture),'window capture differs from page-only capture');
     await writeFile(resolve(base,'whole-browser.png'),fullBrowser);
     console.log('PASS native whole browser screenshot including toolbar and sidebar, without screen sharing');
@@ -1459,8 +1491,7 @@ try {
     await captureUi.call('Input.dispatchMouseEvent',{type:'mousePressed',x:dimensions.w*.1,y:dimensions.h*.2,button:'left',clickCount:1});
     await captureUi.call('Input.dispatchMouseEvent',{type:'mouseMoved',x:dimensions.w*.6,y:dimensions.h*.7,button:'left',buttons:1});
     await captureUi.call('Input.dispatchMouseEvent',{type:'mouseReleased',x:dimensions.w*.6,y:dimensions.h*.7,button:'left',clickCount:1});
-    await waitFor(()=>captureUi.evaluate('window.__captureResult?.kind === "done"'),'whole browser selected area',40000);
-    const selectedArea=await readFile(resolve(base,'captures/capture.png'));
+    const selectedArea=await saveCapture('whole browser selected area');
     assert.ok(Math.abs(selectedArea.readUInt32BE(16)-fullBrowser.readUInt32BE(16)*.5)<=2);
     assert.ok(Math.abs(selectedArea.readUInt32BE(20)-fullBrowser.readUInt32BE(20)*.5)<=2);
     console.log('PASS full interface region selection and cropped screenshot');
@@ -1476,6 +1507,7 @@ try {
     await captureUi.evaluate('document.querySelector(".capture-close").click()');
     await command({type:'settings.set',id:'uiScale',index:0});
     console.log('PASS responsive capture controls at 80% interface scale');
+    if (!process.argv.includes('--extensions')) { await stop(); console.log(`Evidence: ${base}`); process.exit(0); }
     await command({type:'extensions.open'});
     const popup = await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#popup')),'extensions manager'));
     await popup.evaluate(`chrome.webview.addEventListener('message',e=>{ if(e.data.popup) window.__extensions=e.data; })`);

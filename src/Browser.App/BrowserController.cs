@@ -193,7 +193,7 @@ public sealed partial class BrowserController
             _closingWindow = true;
             _ai.Dispose();
             _pages.StopSpelling();
-            _capture.CancelSelection();
+            _capture.Cancel();
             _startPreviewCancel.Cancel();
             _sessionSave.Stop();
             HidePopup(); // terminer les demandes de permission encore en attente
@@ -540,14 +540,14 @@ public sealed partial class BrowserController
             case "capture.size": CapturePanel?.SetHeight(c.Height!.Value); return;
             case "capture.visibility": CapturePanel?.SetVisible(c.Index == 1); return;
             case "capture.selection": CapturePanel?.SetSelection(c.Index == 1); return;
-            case "capture.close": _capture.CancelSelection(); CapturePanel?.Hide(); return;
+            case "capture.close": _capture.Cancel(); CapturePanel?.Hide(); return;
+            case "capture.save": _capture.Save(); return;
             case "capture.region": _capture.Select(new Windows.Graphics.Imaging.BitmapBounds { X = (uint)Math.Max(0,c.X!.Value), Y = (uint)Math.Max(0,c.Y!.Value), Width = (uint)Math.Max(0,c.Width!.Value), Height = (uint)Math.Max(0,c.Height!.Value) }); return;
             case "capture.run":
                 if (c.Query is "region" or "visible" or "full")
                 {
                     CapturePanel?.Hide();
-                    if (c.Index == 1) _ = _capture.RunWindowAsync((FrameworkElement)_window.Content, c.Query);
-                    else Capture(c.Query);
+                    Capture(c.Query, browser: c.Index == 1);
                 } return;
             case "window.close": _window.Close(); return;
             case "window.drag": BeginDrag(); return;
@@ -2495,13 +2495,16 @@ public sealed partial class BrowserController
         if (_capture.Busy) return;
         if (CapturePanel?.IsOpen == true) { CapturePanel.Hide(); return; }
         HidePopup();
-        CapturePanel?.ShowBottom(640, JsonSerializer.Serialize(new { @event = "capture-open", mode = "visible" }));
+        CapturePanel?.ShowBottom(640, JsonSerializer.Serialize(new { @event = "capture-open", mode = "visible", device = _tabs.ActiveId is { } shown && _pages.DeviceOf(shown) is not null }));
     }
 
-    private void Capture(string mode)
+    private void Capture(string mode, bool browser = false)
     {
-        if (_tabs.Tabs.FirstOrDefault(t => t.Id == _tabs.ActiveId) is { } tab && _pages.CoreOf(tab.Id) is { } core)
-            _ = _capture.RunAsync(core, mode, tab.Title);
+        var tab = _tabs.Tabs.FirstOrDefault(t => t.Id == _tabs.ActiveId);
+        if (browser) _ = _capture.RunWindowAsync(null, mode, T("du navigateur", "of browser"));
+        // Appareil simulé : la page seule n'a pas sa coque. La capture prend ce que la fenêtre en affiche.
+        else if (tab is not null && mode != "full" && _pages.DeviceArea(tab.Id) is { } devices) _ = _capture.RunWindowAsync(devices, mode, tab.Title);
+        else if (tab is not null && _pages.CoreOf(tab.Id) is { } core) _ = _capture.RunAsync(core, mode, tab.Title);
     }
 
     // Clic droit dans une page : le moteur fournit ses commandes (copier, coller, inspecter…), on les affiche dans notre vue.

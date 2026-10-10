@@ -2,7 +2,7 @@
 
 # Sol
 
-**Sol browser** is a light web browser for Windows, with tabs in a sidebar, built-in ad blocking and tools for web developers. Its interface takes the colours of the page you are looking at.
+**Sol browser** is a light web browser for Windows, with tabs in a sidebar, Chrome Web Store extensions and tools for web developers. Its interface takes the colours of the page you are looking at.
 
 *[Version française](README.fr.md)*
 
@@ -35,7 +35,7 @@
 - Interface fonts: system, Inter or SF Pro.
 
 **Fewer distractions**
-- Floating player: leave a tab where a video plays and it stays on screen, with Sol's own controls.
+- Floating player: leave a tab where a video plays and it stays on screen in the engine's video window (Picture-in-Picture).
 - Sites ask once for the microphone, camera or location; the answer is remembered per site and can be forgotten.
 
 **Light on memory**
@@ -46,7 +46,7 @@
 - Device simulator with real device shapes, rotation, and several screens side by side.
 - Network inspector: requests, API filter, errors, headers and response bodies.
 - `:3000` opens `http://localhost:3000`, and a dev server that is not up yet is retried automatically.
-- Screenshots of an area, the visible part or the full page, as PNG or PDF.
+- Screenshots of an area, the visible part or the full page, as PNG or PDF, with a preview before saving. A simulated device is captured with its frame.
 
 ![The same page on a phone, a tablet and a desktop screen, side by side](docs/images/responsive.png)
 
