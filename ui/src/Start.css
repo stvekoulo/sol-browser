@@ -59,6 +59,38 @@
 .start-heading p { margin: 0; color: var(--text-dim); font-size: 13px; }
 :root[data-wallpaper="true"] .start-heading p { color: rgba(255, 255, 255, 0.85); }
 
+.start-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+.start-more {
+  flex: none;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--bg-glass-pill);
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 150ms var(--ease-out), transform 120ms var(--ease-out);
+}
+.start-more:active { transform: scale(0.97); }
+@media (hover: hover) and (pointer: fine) {
+  .start-more:hover { background: var(--bg-glass-pill-hover); }
+}
+:root[data-wallpaper="true"] .start-more { background: rgba(255, 255, 255, 0.16); }
+/* Favoris révélés par « Voir tout » : ils arrivent à la suite, sans déplacer ceux qui étaient là. */
+.start-site.is-entering { animation: start-site-in 200ms var(--ease-out) backwards; }
+@keyframes start-site-in { from { opacity: 0; transform: translateY(6px) scale(0.97); } }
+@media (prefers-reduced-motion: reduce) {
+  .start-site.is-entering { animation: start-site-fade 160ms ease backwards; }
+  @keyframes start-site-fade { from { opacity: 0; } }
+}
+
 /* Grille Safari des Favoris : jusqu'à 9 tuiles squircle par rangée, centrées avec leur libellé dessous. */
 .start-favorites {
   display: grid;

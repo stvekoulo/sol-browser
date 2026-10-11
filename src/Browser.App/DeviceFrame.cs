@@ -102,8 +102,10 @@ public static class DeviceFrame
 
     /// <param name="s">Échelle d'affichage : l'appareil entier tient dans la fenêtre.</param>
     /// <param name="turned">Appareil tourné d'un quart de tour : son haut passe à gauche.</param>
-    /// <param name="page">Couleur de fond de la page : celle de la barre d'état, comme sur l'appareil.</param>
-    public static (FrameworkElement Below, FrameworkElement Above) Build(Device d, double s, bool turned, Windows.UI.Color page)
+    /// <param name="page">Fond de la page : celui de la barre d'état, comme sur l'appareil.</param>
+    /// <param name="ink">Couleur lisible sur ce fond : l'heure, le réseau, les menus.</param>
+    /// <remarks>Les deux pinceaux restent ceux de l'appelant : changer leur couleur suffit, sans redessiner l'appareil.</remarks>
+    public static (FrameworkElement Below, FrameworkElement Above) Build(Device d, double s, bool turned, SolidColorBrush page, SolidColorBrush ink)
     {
         var metal = Brush(104, 104, 110);
         var shell = new Grid { Width = d.ShellWidth * s, Height = d.ShellHeight * s };
@@ -179,8 +181,8 @@ public static class DeviceFrame
             Width = screenWidth, Height = screenHeight, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 0, d.Foot * s),
         };
-        screen.Children.Add(new Border { CornerRadius = new CornerRadius(d.Radius * s, d.Radius * s, d.PageRadius * s, d.PageRadius * s), Background = new SolidColorBrush(page) });
-        if (inset > 0) screen.Children.Add(d.Kind is "laptop" or "imac" ? MenuBar(d, s, inset, page) : StatusBar(d, s, inset, page));
+        screen.Children.Add(new Border { CornerRadius = new CornerRadius(d.Radius * s, d.Radius * s, d.PageRadius * s, d.PageRadius * s), Background = page });
+        if (inset > 0) screen.Children.Add(d.Kind is "laptop" or "imac" ? MenuBar(d, s, inset, ink) : StatusBar(d, s, inset, ink));
 
         var below = new Grid { Width = turned ? shell.Height : shell.Width, Height = turned ? shell.Width : shell.Height };
         below.Children.Add(turned ? Turned(shell, shell.Width, shell.Height) : shell);
@@ -211,10 +213,8 @@ public static class DeviceFrame
     }
 
     // Barre d'état : l'heure à gauche, le réseau et la batterie à droite, dans la couleur lisible sur le fond de la page.
-    private static Grid StatusBar(Device d, double s, double inset, Windows.UI.Color page)
+    private static Grid StatusBar(Device d, double s, double inset, SolidColorBrush ink)
     {
-        var dark = 0.299 * page.R + 0.587 * page.G + 0.114 * page.B < 128;
-        var ink = dark ? Brush(255, 255, 255) : Brush(0, 0, 0);
         var big = d.Kind is "island" or "fold-closed";
         // À côté de l'îlot ou du poinçon sur un téléphone, au bord sur les autres.
         var edge = (d.Kind switch { "island" => (d.Width - d.CutWidth) / 4 - 18, "fold-closed" => 52, "home" => 8, _ => 22 }) * s;
@@ -277,10 +277,8 @@ public static class DeviceFrame
     }
 
     // Barre des menus d'un Mac : les menus à gauche, la batterie (portable) et l'heure à droite.
-    private static Grid MenuBar(Device d, double s, double inset, Windows.UI.Color page)
+    private static Grid MenuBar(Device d, double s, double inset, SolidColorBrush ink)
     {
-        var dark = 0.299 * page.R + 0.587 * page.G + 0.114 * page.B < 128;
-        var ink = dark ? Brush(255, 255, 255) : Brush(0, 0, 0);
         var size = Math.Max(1, 13 * s); // sans taille minimale : agrandis, les menus passeraient sous l'encoche
         var bar = new Grid { Height = inset * s, VerticalAlignment = VerticalAlignment.Top };
         var menus = new StackPanel

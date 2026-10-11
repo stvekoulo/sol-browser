@@ -1,12 +1,22 @@
 /* Mouvement de l'interface. Courbe : --ease-out de theme.css.
    Le cadre des vues flottantes ne peut pas être animé (voir PopupHost.cs) : c'est leur contenu qui arrive. */
-:root { --slow: 300ms; --stagger: 34ms; }
+/* Un menu s'ouvre des dizaines de fois par jour : son arrivée reste brève (moins de 300 ms, dernière ligne comprise). */
+:root { --slow: 180ms; --stagger: 16ms; }
 
 /* Retour de pression : le bouton s'enfonce légèrement, pour confirmer que le clic est pris. */
 :where(button.pill-surface, .pill-icon-btn, .segment-btn, .inline-btn, .pinned-pill, .pill-action, .sidebar-new-tab, .sidebar-url-btn, .dock-mini-btn, .stepper button):active:not(:disabled) {
   transform: scale(0.95);
   transition: transform 120ms var(--ease-out);
 }
+
+/* Même retour sur les tuiles de la page d'accueil et les commandes de capture. */
+:where(.start-site, .start-preview, .start-history button, .start-groups button, .capture-options button):active:not(:disabled) {
+  transform: scale(0.97);
+  transition: transform 120ms var(--ease-out);
+}
+
+/* Aperçu d'une capture : l'image et sa barre arrivent ensemble, brièvement. */
+.capture-review > * { animation: arrive 200ms var(--ease-out) both; }
 
 /* Ouverture d'un menu ou d'un panneau : chaque ligne glisse en place à la suite de la précédente. */
 @keyframes arrive {
@@ -30,7 +40,7 @@
 @keyframes rise {
   from { opacity: 0; transform: translateY(18px) scale(0.97); }
 }
-.dock { animation: rise 360ms var(--ease-out) both; }
+.dock { animation: rise 240ms var(--ease-out) both; }
 
 /* Carte latérale : elle glisse depuis le bord gauche à l'ouverture, et y retourne à la fermeture.
    Durées reprises par SidebarHost.cs, qui attend la fin du mouvement. */

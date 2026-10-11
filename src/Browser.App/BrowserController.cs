@@ -122,13 +122,14 @@ public sealed partial class BrowserController
             if (command.Type == "start.ready")
             {
                 _bridge.BroadcastTheme();
-                _pages.PostStart(id, StartJson());
-                foreach (var url in _db.Bookmarks().Select(b => b.Url).Concat(_settings.Shortcuts.Select(s => s.Url)).Distinct().Take(24)) FetchStartIcon(url);
+                _pages.PostStart(id, _startPosted[id] = StartJson());
+                foreach (var url in _db.Bookmarks().Select(b => b.Url).Take(24)) FetchStartIcon(url);
                 if (!AppPaths.Private)
                     foreach (var visit in _db.RecentHistory(12)) FetchStartIcon(visit.Url);
                 LoadStartPreviews();
             }
             else if (command.Type == "start.navigate") _pages.Navigate(id, Resolve(command.Input!));
+            else if (command.Type == "start.favorites") _ = FetchFavoriteIconsAsync();
             else if (_tabs.Groups.Any(g => g.Id == command.Id) && _tabs.Tabs.FirstOrDefault(t => t.GroupId == command.Id) is { } tab)
             { Activate(tab.Id); Refresh(); }
         };
@@ -557,6 +558,7 @@ public sealed partial class BrowserController
                     _pages.Navigate(_suggestTab, _suggestions[i].Url);
                 break;
             case "ui.ready":
+                _statePosted = null; // une vue de l'interface vient de (re)démarrer : elle n'a encore rien reçu
                 _bridge.BroadcastTheme();
                 if (_tabs.Tabs.Count == 0)
                 {
@@ -2924,6 +2926,40 @@ public sealed partial class BrowserController
     private string? StartIcon(string url) => _startIcons.GetValueOrDefault(SiteShortcut.DomainOf(url)) ?? (_tabs.Tabs.FirstOrDefault(t => SiteShortcut.DomainOf(t.Url) == SiteShortcut.DomainOf(url)) is { } tab
         && _favicons.GetValueOrDefault(tab.Id) is { } icon ? icon : _settings.Shortcuts.FirstOrDefault(s => SiteShortcut.DomainOf(s.Url) == SiteShortcut.DomainOf(url))?.Icon);
 
+    private const int MaxStartFavorites = 300;
+    private readonly Dictionary<string, string> _startPosted = new(); // dernier contenu envoyé à chaque page d'accueil
+    // La page d'accueil porte des images (icônes, aperçus) : elle n'est renvoyée que si son contenu a changé.
+    private void PostStartPages(IEnumerable<Tab> starts)
+    {
+        var json = StartJson();
+        foreach (var tab in starts)
+            if (_startPosted.GetValueOrDefault(tab.Id) != json) _pages.PostStart(tab.Id, _startPosted[tab.Id] = json);
+        foreach (var gone in _startPosted.Keys.Where(id => _tabs.Tabs.All(t => t.Id != id)).ToList()) _startPosted.Remove(gone);
+    }
+
+    // « Voir tout » : les icônes des favoris au-delà des premiers, quelques sites à la fois, sans rafraîchir tout le
+    // navigateur à chaque icône reçue.
+    private bool _fetchingFavoriteIcons;
+    private async Task FetchFavoriteIconsAsync()
+    {
+        if (_fetchingFavoriteIcons) return;
+        _fetchingFavoriteIcons = true;
+        try
+        {
+            var missing = _db.Bookmarks().Take(MaxStartFavorites).Select(b => b.Url).Where(IsWeb)
+                .DistinctBy(SiteShortcut.DomainOf).Where(url => !_startIcons.ContainsKey(SiteShortcut.DomainOf(url))).ToList();
+            foreach (var batch in missing.Chunk(4))
+            {
+                foreach (var url in batch) _startIcons[SiteShortcut.DomainOf(url)] = null;
+                var icons = await Task.WhenAll(batch.Select(FetchSiteIconAsync));
+                if (_closingWindow) return;
+                for (var i = 0; i < batch.Length; i++) _startIcons[SiteShortcut.DomainOf(batch[i])] = icons[i];
+                PostStartPages(_tabs.Tabs.Where(t => t.Url == Settings.DefaultHomePage && !_pages.IsAsleep(t.Id)).ToList());
+            }
+        }
+        finally { _fetchingFavoriteIcons = false; }
+    }
+
     private string StartJson()
     {
         IReadOnlyList<Visit> history = AppPaths.Private ? [] : _db.RecentHistory(13).Where(v => v.Url != Settings.DefaultHomePage).Take(12).ToList();
@@ -2932,8 +2968,8 @@ public sealed partial class BrowserController
         return JsonSerializer.Serialize(new
         {
             @event = "start", privateMode = AppPaths.Private, lang = Language.Current, wallpaper = _settings.StartWallpaper,
-            favorites = _db.Bookmarks().Take(24).Select(b => new { url = b.Url, title = b.Title, icon = StartIcon(b.Url) })
-                .Concat(_settings.Shortcuts.Select(s => new { url = s.Url, title = s.Name, icon = StartIcon(s.Url) })).DistinctBy(b => b.url).Take(24),
+            // Les favoris du profil, tous, dans l'ordre de la bibliothèque : la page en montre deux rangées, puis le reste sur demande.
+            favorites = _db.Bookmarks().Take(MaxStartFavorites).Select(b => new { url = b.Url, title = b.Title, icon = StartIcon(b.Url) }),
             frequent = frequent.Select(v => new { url = v.Url, title = v.Title, preview = _startPreviews.GetValueOrDefault(v.Url), previewFailed = _startPreviewFailed.Contains(v.Url) }),
             history = history.Select(v => new { url = v.Url, title = v.Title, last = v.Last.ToUnixTimeMilliseconds(), icon = StartIcon(v.Url) }),
             groups = _tabs.Groups.Select(g => new { id = g.Id, name = g.Name, color = g.Color, count = _tabs.Tabs.Count(t => t.GroupId == g.Id) }),
@@ -2951,7 +2987,7 @@ public sealed partial class BrowserController
         }
         if (_nativeZoom != UseNativeZoom) { _nativeZoom = UseNativeZoom; NativeZoomChanged?.Invoke(); }
         var starts = _tabs.Tabs.Where(t => t.Url == Settings.DefaultHomePage && !_pages.IsAsleep(t.Id)).ToList();
-        if (starts.Count > 0) { var json = StartJson(); foreach (var tab in starts) _pages.PostStart(tab.Id, json); }
+        if (starts.Count > 0) PostStartPages(starts);
         // Regrouper les changements ; un crash ne perd plus toute la session depuis le démarrage.
         if (!AppPaths.Private) { _sessionSave.Stop(); _sessionSave.Start(); }
         if (_tabs.ActiveId is { } recent && _recentTabs.LastOrDefault() != recent)
@@ -2970,7 +3006,7 @@ public sealed partial class BrowserController
                 _ = _pages.TryEnterPipAsync(left);
         }
         _pages.ApplyLayout(showSplit ? _split.PrimaryId : _tabs.ActiveId, showSplit ? _split.SecondaryId : null, _split.Ratio);
-        _bridge.Post(JsonSerializer.Serialize(new
+        var state = JsonSerializer.Serialize(new
         {
             tabs = _tabs.Tabs.Select(t => new
             {
@@ -3006,8 +3042,13 @@ public sealed partial class BrowserController
                 docked = _dockShown, // l'encart en bas à droite les affiche : le bouton de la barre fait double emploi
                 active = _downloads.Count(d => d.Op.State == Microsoft.Web.WebView2.Core.CoreWebView2DownloadState.InProgress),
             },
-        }));
+        });
+        // Une page qui charge rafraîchit plusieurs fois de suite sans que rien de visible ne change : la barre et la
+        // carte latérale ne sont redessinées que si leur état a changé.
+        if (state == _statePosted) return;
+        _bridge.Post(_statePosted = state);
     }
+    private string? _statePosted;
 
     // Déplacement de la fenêtre depuis la barre de titre dessinée par l'interface.
     private void BeginDrag()

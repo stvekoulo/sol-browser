@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useIconLook } from './Sidebar';
 import { formatDomain, onMessage, send } from './bridge';
 import { setLang, t, useLang } from './i18n';
@@ -48,7 +48,7 @@ function tileBackground(seed: string): string {
 
 const open = (input: string) => send({ type: 'start.navigate', input });
 
-function SiteTile({ site }: { site: Site }) {
+function SiteTile({ site, enter }: { site: Site; enter?: number }) {
   const domain = formatDomain(site.url);
   const name = site.title || domain || site.url;
   const letter = (domain || name).slice(0, 1).toUpperCase();
@@ -56,7 +56,12 @@ function SiteTile({ site }: { site: Site }) {
   const look = useIconLook(site.icon ?? null); // icône d'une seule teinte : inversée dans le thème où elle disparaîtrait
 
   return (
-    <button className="start-site" title={site.url} onClick={() => open(site.url)}>
+    <button
+      className={enter === undefined ? 'start-site' : 'start-site is-entering'}
+      style={enter === undefined ? undefined : { animationDelay: `${Math.min(enter * 18, 240)}ms` }}
+      title={site.url}
+      onClick={() => open(site.url)}
+    >
       <span
         className={`start-monogram${hasIcon ? ' has-icon' : ' is-letter'}`}
         style={hasIcon ? undefined : { background: tileBackground(domain || name) }}
@@ -79,6 +84,21 @@ function HistoryIcon({ site }: { site: Site }) {
 
 export default function Start() {
   const [data, setData] = useState(empty);
+  // Favoris : deux rangées, puis « Voir tout ». Le nombre de colonnes suit la largeur de la page.
+  const [allFavorites, setAllFavorites] = useState(false);
+  const [columns, setColumns] = useState(9);
+  const favoritesGrid = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const grid = favoritesGrid.current;
+    if (!grid) return;
+    const measure = () => setColumns(Math.max(1, getComputedStyle(grid).gridTemplateColumns.split(' ').length));
+    const observer = new ResizeObserver(measure);
+    observer.observe(grid);
+    measure();
+    return () => observer.disconnect();
+  }, []);
+  const shownFirst = columns * 2;
+  const favorites = allFavorites ? data.favorites : data.favorites.slice(0, shownFirst);
 
   useLang();
   useEffect(() => {
@@ -106,10 +126,24 @@ export default function Start() {
         )}
 
         <section className="start-section">
-          <h2>{t('Favoris', 'Favorites')}</h2>
-          <div className="start-favorites">
-            {data.favorites.map(site => (
-              <SiteTile key={site.url} site={site} />
+          <div className="start-section-head">
+            <h2>{t('Favoris', 'Favorites')}</h2>
+            {data.favorites.length > shownFirst && (
+              <button
+                className="start-more"
+                aria-expanded={allFavorites}
+                onClick={() => {
+                  if (!allFavorites) send({ type: 'start.favorites' }); // les icônes des favoris qui n'étaient pas affichés
+                  setAllFavorites(!allFavorites);
+                }}
+              >
+                {allFavorites ? t('Voir moins', 'Show less') : t(`Voir tout (${data.favorites.length})`, `Show all (${data.favorites.length})`)}
+              </button>
+            )}
+          </div>
+          <div className="start-favorites" ref={favoritesGrid}>
+            {favorites.map((site, index) => (
+              <SiteTile key={site.url} site={site} enter={allFavorites && index >= shownFirst ? index - shownFirst : undefined} />
             ))}
           </div>
           {!data.favorites.length && (

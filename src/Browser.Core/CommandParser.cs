@@ -40,7 +40,7 @@ public static class CommandParser
         ["notes.select"] = ["id"],
         ["notes.discard"] = [],
         ["notes.manage"] = [], ["notes.ready"] = [], ["notes.visit"] = ["id"],
-        ["start.ready"] = [], ["start.navigate"] = ["input"], ["start.group"] = ["id"],
+        ["start.ready"] = [], ["start.navigate"] = ["input"], ["start.group"] = ["id"], ["start.favorites"] = [],
         ["popup.size"] = ["height"], ["popup.close"] = [],
         ["download.cancel"] = ["id"], ["download.open"] = ["id"], ["download.reveal"] = ["id"],
         ["downloads.open"] = ["x", "y"],

@@ -1199,6 +1199,7 @@ try {
     const popup = await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#popup')),'notes popup'));
     await popup.call('Emulation.setFocusEmulationEnabled',{enabled:true});
     await waitFor(()=>popup.evaluate(`!!document.querySelector('.notes-text')`),'notes editor');
+    await delay(1200); // le navigateur vient de démarrer : la capture prend ce que la fenêtre affiche, il faut qu'elle soit peinte
     await command({type:'capture.run',query:'visible',index:1});
     const notesCapture=await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#capture')),'capture controls'));
     await waitFor(()=>notesCapture.evaluate('!!document.querySelector(".capture-review img")?.naturalWidth'),'notes capture preview',40000);
@@ -1337,6 +1338,13 @@ try {
     await command({type:'settings.set',id:'spelling',index:3});
     await page.evaluate(`document.querySelector('p[contenteditable]').focus()`);
     await waitFor(()=>page.evaluate(`document.querySelector('[data-sol-spelling]')?.dataset.solSpelling === '1'`),'contenteditable spelling');
+    // Éditeur à paragraphes : la fin d'un paragraphe et le début du suivant ne forment pas un mot ; adresses, noms à
+    // majuscule interne et étiquettes non modifiables ne sont pas des fautes ; un mot coupé par une mise en forme reste un mot.
+    await page.evaluate(`document.querySelector('main').innerHTML = ${JSON.stringify('<div id="editor" contenteditable="true" style="font:18px system-ui;width:560px"><p><span contenteditable="false" style="display:inline-block">Adrienn</span></p><p>Vos messages sont chiffrés de bout en bout. La phrase revient dans WhatsApp.</p><p>Commençons par ce que le chiffrement n’est pas.</p><p>Beaucoup de services annoncent que vos données sont protégées, voire piratées.<br>Chaque utilisateur possède deux clés.</p><p>Voir exemple.com ou écrire à steven@sol.dev pour la version v2, une <b>autr</b>e fois. Une vraie fautte ici.</p></div>')}; document.querySelector('#editor').focus()`);
+    await delay(1500); // deux passages du correcteur : les traits du champ précédent ont été remplacés
+    assert.equal(await page.evaluate(`document.querySelector('[data-sol-spelling]')?.dataset.solSpelling`),'1','paragraph editor: only the real mistake is flagged');
+    await writeFile(resolve(base,'spelling-paragraphs.png'),Buffer.from((await page.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    console.log('PASS paragraph editor spelling without false underlines');
     await writeFile(resolve(base,'spelling-editor.png'),Buffer.from((await page.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
     await page.evaluate(`window.__solSpelling.read = () => ({unexpected:true})`);
     await delay(600);

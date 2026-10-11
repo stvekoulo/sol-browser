@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
+using Browser.Core;
 
 namespace Browser.App;
 
@@ -48,7 +49,7 @@ internal sealed class WindowsSpelling
             var other = Errors(checker, text);
             errors = errors.Where(e => other.Any(o => o.Start < e.Start + e.Length && e.Start < o.Start + o.Length)).ToArray();
         }
-        return errors;
+        return errors.Where(e => SpellingFilter.Keep(text, e.Start, e.Length)).ToArray();
     }
     private static Error[] Errors(IChecker checker, string text)
     {
