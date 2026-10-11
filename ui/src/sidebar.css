@@ -1,4 +1,6 @@
 /* Carte latérale flottante (#sidebar) : aucun cadre externe, tout flotte sur --page-bg. */
+/* Fond opaque sous la carte animée : la transparence du moteur peut produire une surface noire. */
+html:has(> .sidebar-body) { background-color: var(--page-bg); }
 .sidebar-body {
   background-color: var(--page-bg); /* la couleur de la page, comme la barre du haut (app.css) */
 }

@@ -22,6 +22,7 @@ import '@fontsource-variable/lora';
 import './theme.css';
 import './app.css';
 import './sidebar.css';
+import './sidebar-interactions.css';
 import './popup.css';
 import './panel.css';
 import './welcome.css';

@@ -69,15 +69,48 @@ export const painted = () => webview?.postMessage('"ui.painted"');
 
 // Le nom sort de la petite vue web de la barre : une infobulle Windows ne sera pas coupée à 52 px.
 export function installTooltips() {
+  const namedFromTitle = new WeakMap<Element, string>();
+  const captureTitle = (element: Element) => {
+    const title = element.getAttribute('title');
+    const previousTitle = element.getAttribute('data-sol-tooltip');
+    const previousLabel = namedFromTitle.get(element);
+    if (previousLabel !== undefined && element.getAttribute('aria-label') !== previousLabel) namedFromTitle.delete(element);
+    if (title) {
+      if (!element.hasAttribute('aria-description') || element.getAttribute('aria-description') === previousTitle) element.setAttribute('aria-description', title);
+      element.setAttribute('data-sol-tooltip', title);
+      if (namedFromTitle.has(element) || (!element.hasAttribute('aria-label') && !element.textContent?.trim())) {
+        element.setAttribute('aria-label', title);
+        namedFromTitle.set(element, title);
+      }
+      // Un titre vide neutralise l'infobulle du moteur et reste observable si React le retire.
+      element.setAttribute('title', '');
+    } else if (title === null) {
+      if (previousTitle && element.getAttribute('aria-description') === previousTitle) element.removeAttribute('aria-description');
+      element.removeAttribute('data-sol-tooltip');
+      if (namedFromTitle.has(element)) element.removeAttribute('aria-label');
+      namedFromTitle.delete(element);
+    }
+  };
+  const captureTree = (element: Element) => {
+    if (element.hasAttribute('title')) captureTitle(element);
+    element.querySelectorAll('[title]').forEach(captureTitle);
+  };
+  captureTree(document.documentElement);
+  new MutationObserver(records => {
+    for (const record of records) {
+      if (record.type === 'attributes') captureTitle(record.target as Element);
+      else record.addedNodes.forEach(node => { if (node instanceof Element) captureTree(node); });
+    }
+  }).observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['title'] });
   let timer = 0;
   let hovered: HTMLElement | null = null;
   const hide = () => { clearTimeout(timer); hovered = null; send({ type: 'ui.tooltip' }); };
   document.addEventListener('pointerover', e => {
-    const button = (e.target as Element).closest<HTMLElement>('button, [role="button"], [title]');
+    const button = (e.target as Element).closest<HTMLElement>('button, [role="button"], [data-sol-tooltip]');
     if (button === hovered) return;
     hide();
     if (!button) return;
-    const title = button.getAttribute('title') || button.getAttribute('aria-label');
+    const title = button.getAttribute('data-sol-tooltip') || button.getAttribute('aria-label');
     if (!title) return;
     hovered = button;
     timer = window.setTimeout(() => {

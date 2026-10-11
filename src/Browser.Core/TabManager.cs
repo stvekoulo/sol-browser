@@ -12,7 +12,7 @@ public sealed record TabGroup(string Id, string Name, string Color, bool Collaps
 /// Onglets ouverts, dans l'ordre de la barre. Les onglets épinglés sont toujours en tête et ne sont jamais
 /// groupés ; les onglets d'un même groupe sont toujours voisins.
 /// </summary>
-public sealed class TabManager
+public sealed partial class TabManager
 {
     /// <summary>Couleurs proposées par défaut, douces ; l'utilisateur peut en choisir n'importe quelle autre.</summary>
     public static readonly IReadOnlyList<string> GroupColors = ["#8fa8e8", "#8ccfa6", "#e3cf7a", "#edb07f", "#eba3c2", "#b9a2ec", "#b3b6bf"];
@@ -210,16 +210,7 @@ public sealed class TabManager
         if (NormalizeColor(color) is { } valid) group = group with { Color = valid };
         // Une icône vide la retire ; une icône invalide (trop longue) est ignorée.
         if (icon is not null && (icon.Trim().Length == 0 || NormalizeIcon(icon).Length > 0)) group = group with { Icon = NormalizeIcon(icon) };
-        if (collapsed is { } fold)
-        {
-            // Replier le groupe de l'onglet actif : un onglet d'ailleurs prend la main. S'il n'y en a pas, on ne replie pas.
-            if (fold && _tabs.FirstOrDefault(t => t.Id == ActiveId)?.GroupId == groupId)
-            {
-                if (_tabs.FirstOrDefault(t => t.GroupId != groupId) is not { } other) return false;
-                ActiveId = other.Id;
-            }
-            group = group with { Collapsed = fold };
-        }
+        if (collapsed is { } fold) group = group with { Collapsed = fold };
         _groups[g] = group;
         Changed?.Invoke();
         return true;
