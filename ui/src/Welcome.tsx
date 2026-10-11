@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { onMessage, send } from './bridge';
+import { fontLabels, onMessage, send } from './bridge';
 import { t, useLang } from './i18n';
 import { Icon } from './Icons';
 import logo from './assets/logo.png';
@@ -126,7 +126,7 @@ export default function Welcome() {
       <h1>{t('Apparence', 'Appearance')}</h1>
       <p className="welcome-lead">{t('Choisissez le thème et la police de l’interface.', 'Choose the theme and the interface font.')}</p>
       <Choice label={t('Thème', 'Theme')} options={[t('Par défaut', 'Default'), t('Clair', 'Light'), t('Sombre', 'Dark'), t('Système', 'System')]} value={setup.theme} onPick={i => set('theme', i, { theme: i })} />
-      <Choice label={t('Police', 'Font')} grid options={[t('Défaut', 'Default'), t('Système', 'System'), 'Inter', 'Inter Bold', 'SF Pro', 'SF Pro Bold']} value={setup.font} onPick={i => set('font', i, { font: i })} />
+      <Choice label={t('Police', 'Font')} grid options={fontLabels(t('Défaut', 'Default'), t('Système', 'System'))} value={setup.font} onPick={i => set('font', i, { font: i })} />
     </>,
 
     <>

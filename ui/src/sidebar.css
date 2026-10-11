@@ -1,6 +1,6 @@
 /* Carte latérale flottante (#sidebar) : aucun cadre externe, tout flotte sur --page-bg. */
 .sidebar-body {
-  background-color: var(--chrome-bg);
+  background-color: var(--page-bg); /* la couleur de la page, comme la barre du haut (app.css) */
 }
 html.painted .sidebar-body:not(.floating) { transition: background-color 220ms var(--ease-out); }
 

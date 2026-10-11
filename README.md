@@ -32,7 +32,8 @@
 **Appearance**
 - Light, dark, Windows or page-driven theme.
 - The interface colour follows the page, including the video that is playing or the part of the page on screen. Each zone can be turned off.
-- Interface fonts: system, Inter or SF Pro.
+- Interface fonts: system, Inter, SF Pro, Geist, Manrope, DM Sans, Plus Jakarta Sans, Outfit, Figtree, Nunito or Lora.
+- New tab background: Sol's image, an Unsplash photo of your choice, or a new one every day.
 
 **Fewer distractions**
 - Floating player: leave a tab where a video plays and it stays on screen in the engine's video window (Picture-in-Picture).
@@ -85,7 +86,8 @@ Get-FileHash .\Sol-0.1.4-win-x64-Setup.exe -Algorithm SHA256
 - Connections Sol makes on its own:
   - search suggestions, sent to your search engine as you type in the address bar (can be turned off);
   - a check for a newer Sol on GitLab at startup (installed copies only);
-  - the site icons of your shortcuts.
+  - the site icons of your shortcuts;
+  - the new tab background photo, if you choose one: it is downloaded from `picsum.photos` (Unsplash photos), along with the thumbnails when you open the selection.
 - Web pages have no channel to the browser's own code.
 
 ## Keyboard shortcuts

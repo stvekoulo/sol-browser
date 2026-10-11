@@ -149,6 +149,14 @@
 @font-face { font-family: "SF Pro Display"; font-weight: 600 900; font-display: swap; src: url('./fonts/SFProDisplay-Bold.otf') format('opentype'); }
 :root[data-font="sf"], :root[data-font="sf-bold"] { --font: "SF Pro Display", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
 /* Versions grasses (Inter Bold, SF Pro Bold) : toute l'interface est écrite en gras. */
+:root[data-font="geist"] { --font: "Geist Variable", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+:root[data-font="manrope"] { --font: "Manrope Variable", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+:root[data-font="dm-sans"] { --font: "DM Sans Variable", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+:root[data-font="jakarta"] { --font: "Plus Jakarta Sans Variable", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+:root[data-font="outfit"] { --font: "Outfit Variable", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+:root[data-font="figtree"] { --font: "Figtree Variable", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+:root[data-font="nunito"] { --font: "Nunito Variable", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+:root[data-font="lora"] { --font: "Lora Variable", Georgia, "Times New Roman", serif; }
 :root[data-font$="-bold"] body, :root[data-font$="-bold"] body * { font-weight: 700 !important; }
 
 /* Un voile léger ; seul l'onglet actif reçoit une teinte plus affirmée. */

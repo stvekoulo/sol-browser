@@ -124,7 +124,7 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
         {
             var wall = ownPage.Source == Settings.DefaultHomePage && on?.StartWallpaper == true;
             var darkStart = wall || on?.Theme == "dark" || (on?.Theme == "system" && IsSystemDark());
-            s_lastProbe = (wall ? "rgb(40, 68, 105)" : darkStart ? "rgb(9, 9, 11)" : "rgb(238, 240, 226)", darkStart, null);
+            s_lastProbe = (wall ? WallpaperTint : darkStart ? "rgb(9, 9, 11)" : "rgb(238, 240, 226)", darkStart, null);
         }
         if (s_lastProbe is not var (bg, dark, accent)) return;
         accent = AmbientAccent ?? accent; // ce que la page montre à l'instant, sinon la couleur annoncée par le site
@@ -267,6 +267,11 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
             catch (JsonException) { }
         }
     }
+
+    /// <summary>Couleur de l'interface autour d'une page d'accueil à fond d'image : celle de l'image affichée.</summary>
+    public static string WallpaperTint { get; set; } = "rgb(40, 68, 105)";
+    /// <summary>La couleur de la page affichée a changé sans navigation (nouveau fond d'accueil) : elle est relue.</summary>
+    public void RefreshPageColor() => _ = SampleOnceAsync();
 
     private async void ProbeActiveThemeAsync(bool withDelays)
     {

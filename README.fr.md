@@ -32,7 +32,8 @@
 **Apparence**
 - Thème clair, sombre, celui de Windows ou celui de la page.
 - La couleur de l'interface suit la page, y compris la vidéo en cours ou la partie de la page à l'écran. Chaque zone peut être désactivée.
-- Polices de l'interface : système, Inter ou SF Pro.
+- Polices de l'interface : système, Inter, SF Pro, Geist, Manrope, DM Sans, Plus Jakarta Sans, Outfit, Figtree, Nunito ou Lora.
+- Fond du nouvel onglet : l'image de Sol, une photo d'Unsplash au choix, ou une nouvelle chaque jour.
 
 **Moins de distractions**
 - Lecteur flottant : quittez un onglet où une vidéo joue, elle reste à l'écran dans la fenêtre vidéo du moteur (Picture-in-Picture).
@@ -85,7 +86,8 @@ Get-FileHash .\Sol-0.1.4-win-x64-Setup.exe -Algorithm SHA256
 - Les connexions que Sol établit de lui-même :
   - les suggestions de recherche, envoyées à votre moteur pendant la saisie dans la barre d'adresse (désactivable) ;
   - la recherche d'une nouvelle version de Sol sur GitLab au démarrage (copies installées seulement) ;
-  - les icônes des sites de vos raccourcis.
+  - les icônes des sites de vos raccourcis ;
+  - la photo du fond du nouvel onglet, si vous en choisissez une : elle est téléchargée depuis `picsum.photos` (photos d'Unsplash), ainsi que les vignettes quand vous ouvrez la sélection.
 - Les pages web n'ont aucun canal vers le code du navigateur.
 
 ## Raccourcis clavier

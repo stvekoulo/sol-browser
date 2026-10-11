@@ -19,6 +19,26 @@
   color: #ffffff;
 }
 
+/* Une photo choisie remplace l'image de Sol : fond uni le temps qu'elle arrive, puis la photo (posée par Start.tsx). */
+:root[data-wallpaper="true"][data-wallpaper-photo="true"] .start-body { background-image: none; }
+.start-credit {
+  position: fixed;
+  right: 14px;
+  bottom: 44px; /* au-dessus de la bande de flou du bas de page */
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.32);
+  color: rgba(255, 255, 255, 0.86);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background-color 150ms var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .start-credit:hover { background: rgba(0, 0, 0, 0.5); color: #fff; }
+}
+
 .start-page {
   min-height: 100%;
   width: 100%;

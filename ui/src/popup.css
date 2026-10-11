@@ -580,3 +580,24 @@ html:has(> .popup-body) { overflow:hidden; }
 @keyframes ai-spin { to { transform:rotate(360deg); } }
 @media(prefers-reduced-motion:reduce) { .ai-spinner { animation:none; } }
 .ai-think-toggle[aria-pressed="true"] { background:var(--bg-pill-solid); font-weight:600; }
+
+/* Fond du nouvel onglet : grille de vignettes au format de l'écran. */
+.wallpaper-settings { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.wallpaper-settings .popup-segment { align-self: stretch; }
+.wallpaper-grid { align-self: stretch; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.wallpaper-tile {
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  background: var(--bg-tab-hover);
+  cursor: pointer;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  transition: outline-color var(--fast) var(--ease-out), transform 120ms var(--ease-out);
+}
+.wallpaper-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.wallpaper-tile.active { outline-color: var(--accent); }
+.wallpaper-tile:active { transform: scale(0.97); }
+.wallpaper-tile:focus-visible { outline-color: var(--text); }

@@ -203,3 +203,7 @@ export function formatDomain(url: string): string {
 export function displayAddress(url: string): string {
   return url === 'https://start.sol/index.html#notes' ? 'sol://notes' : url;
 }
+
+// Polices de l'interface, dans l'ordre du réglage (voir Fonts dans BrowserController.cs).
+export const fontLabels = (fallback: string, system: string) =>
+  [fallback, system, 'Inter', 'Inter Bold', 'SF Pro', 'SF Pro Bold', 'Geist', 'Manrope', 'DM Sans', 'Plus Jakarta Sans', 'Outfit', 'Figtree', 'Nunito', 'Lora'];

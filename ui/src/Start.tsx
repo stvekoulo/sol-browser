@@ -10,6 +10,7 @@ type StartData = {
   event: 'start';
   privateMode: boolean;
   wallpaper?: boolean;
+  wallpaperPhoto?: boolean;
   lang: string;
   favorites: Site[];
   frequent: Site[];
@@ -84,6 +85,7 @@ function HistoryIcon({ site }: { site: Site }) {
 
 export default function Start() {
   const [data, setData] = useState(empty);
+  const [photo, setPhoto] = useState<{ url: string; author?: string; page?: string }>({ url: '' });
   // Favoris : deux rangées, puis « Voir tout ». Le nombre de colonnes suit la largeur de la page.
   const [allFavorites, setAllFavorites] = useState(false);
   const [columns, setColumns] = useState(9);
@@ -103,12 +105,24 @@ export default function Start() {
   useLang();
   useEffect(() => {
     const off = onMessage(value => {
+      const sent = value as { event?: string; url?: string; tint?: string; author?: string; page?: string };
+      if (sent.event === 'start-wallpaper') {
+        // La photo choisie pour le fond. Un voile sombre garde le texte lisible sur une image claire.
+        setPhoto({ url: sent.url ?? '', author: sent.author, page: sent.page });
+        document.body.style.backgroundImage = sent.url ? `linear-gradient(rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.34)), url("${sent.url}")` : '';
+        document.body.style.backgroundColor = (sent.url && sent.tint) || ''; // la couleur de la photo : celle que prend l'interface autour
+        if (!sent.url) delete document.documentElement.dataset.wallpaperPhoto; // photo indisponible : l'image de Sol
+        return;
+      }
       const next = value as StartData;
       if (next.event !== 'start') return;
       setLang(next.lang);
       setData(next);
       document.documentElement.dataset.private = String(next.privateMode);
       document.documentElement.dataset.wallpaper = String(!!next.wallpaper);
+      // En attendant la photo, pas d'image de Sol : la page garde un fond uni, puis la photo arrive.
+      if (next.wallpaper && next.wallpaperPhoto) document.documentElement.dataset.wallpaperPhoto = 'true';
+      else { delete document.documentElement.dataset.wallpaperPhoto; document.body.style.backgroundImage = ''; document.body.style.backgroundColor = ''; }
     });
     send({ type: 'start.ready' });
     document.title = t('Nouvel onglet', 'New tab');
@@ -245,6 +259,11 @@ export default function Start() {
           )}
         </section>
       </div>
+      {data.wallpaper && photo.url && photo.author && (
+        <button className="start-credit" title={photo.page} onClick={() => open(photo.page!)}>
+          {t(`Photo : ${photo.author} · Unsplash`, `Photo: ${photo.author} · Unsplash`)}
+        </button>
+      )}
     </main>
   );
 }

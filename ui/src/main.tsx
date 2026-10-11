@@ -10,6 +10,15 @@ import NotesPage from './NotesPage';
 import Capture from './Capture';
 import { painted, installTooltips } from './bridge';
 import '@fontsource-variable/inter'; // police Inter, livrée avec le navigateur (chargée seulement si elle est choisie)
+// Les autres polices proposées (licence SIL Open Font) : même principe, leurs fichiers ne sont lus que si on les choisit.
+import '@fontsource-variable/geist';
+import '@fontsource-variable/manrope';
+import '@fontsource-variable/dm-sans';
+import '@fontsource-variable/plus-jakarta-sans';
+import '@fontsource-variable/outfit';
+import '@fontsource-variable/figtree';
+import '@fontsource-variable/nunito';
+import '@fontsource-variable/lora';
 import './theme.css';
 import './app.css';
 import './sidebar.css';

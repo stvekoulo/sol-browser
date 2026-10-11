@@ -123,6 +123,7 @@ public sealed partial class BrowserController
             {
                 _bridge.BroadcastTheme();
                 _pages.PostStart(id, _startPosted[id] = StartJson());
+                _ = PostStartWallpaperAsync(id);
                 foreach (var url in _db.Bookmarks().Select(b => b.Url).Take(24)) FetchStartIcon(url);
                 if (!AppPaths.Private)
                     foreach (var visit in _db.RecentHistory(12)) FetchStartIcon(visit.Url);
@@ -421,6 +422,8 @@ public sealed partial class BrowserController
                 if (id == "theme") SetTheme(c.Index!.Value);
                 else if (id == "language") SetLanguage(c.Index!.Value);
                 else if (id == "font") SetFont(c.Index!.Value);
+                else if (id == "wallpaper") SetWallpaper(c.Index!.Value);
+                else if (id == "wallpaperDaily") SetWallpaperDaily(c.Index != 0);
                 else if (id == "engine") SetEngine(c.Index!.Value);
                 else SetSetting(id, c.Index != 0);
                 return;
@@ -855,6 +858,9 @@ public sealed partial class BrowserController
         }),
         home = _settings.HomePage == Settings.DefaultHomePage ? "" : _settings.HomePage,
         font = Math.Max(0, Array.IndexOf(Fonts, _settings.Font)),
+        // Fond du nouvel onglet : photo choisie (0 : image de Sol), ou une nouvelle chaque jour.
+        wallpaperOn = _settings.StartWallpaper, wallpaper = _settings.StartWallpaperPhoto, wallpaperDaily = _settings.StartWallpaperDaily,
+        wallpapers = StartWallpapers.All.Select(w => new { id = w.Id, thumb = w.ThumbUrl, author = w.Author }),
         engine = Math.Max(0, Array.FindIndex(Engines, e => e.Search == _settings.SearchUrlTemplate)),
         engines = Engines.Select(e => e.Name),
         // Réponses retenues, site par site : chacune peut être oubliée séparément.
@@ -1000,7 +1006,9 @@ public sealed partial class BrowserController
         Refresh();
     }
 
-    private static readonly string[] Fonts = ["default", "system", "inter", "inter-bold", "sf", "sf-bold"];
+    // Les nouvelles polices s'ajoutent à la fin : le réglage enregistré garde son sens.
+    private static readonly string[] Fonts = ["default", "system", "inter", "inter-bold", "sf", "sf-bold",
+        "geist", "manrope", "dm-sans", "jakarta", "outfit", "figtree", "nunito", "lora"];
 
     private void SetFont(int index)
     {
@@ -1048,7 +1056,7 @@ public sealed partial class BrowserController
             case "floatingDownloads": _settings.FloatingDownloads = on; break;
             case "onlineSuggestions": _settings.OnlineSuggestions = on; break;
             case "passwords": _settings.SavePasswords = on; break;
-            case "startWallpaper": _settings.StartWallpaper = on; break;
+            case "startWallpaper": _settings.StartWallpaper = on; _ = PostStartWallpaperAsync(null); break;
             case "tint.topbar": _settings.TintTopbar = on; break;
             case "tint.sidebar": _settings.TintSidebar = on; break;
             case "tint.menus": _settings.TintMenus = on; break;
@@ -2968,6 +2976,8 @@ public sealed partial class BrowserController
         return JsonSerializer.Serialize(new
         {
             @event = "start", privateMode = AppPaths.Private, lang = Language.Current, wallpaper = _settings.StartWallpaper,
+            // Une photo va suivre (message « start-wallpaper ») : la page n'affiche pas l'image de Sol en l'attendant.
+            wallpaperPhoto = CurrentWallpaper is not null,
             // Les favoris du profil, tous, dans l'ordre de la bibliothèque : la page en montre deux rangées, puis le reste sur demande.
             favorites = _db.Bookmarks().Take(MaxStartFavorites).Select(b => new { url = b.Url, title = b.Title, icon = StartIcon(b.Url) }),
             frequent = frequent.Select(v => new { url = v.Url, title = v.Title, preview = _startPreviews.GetValueOrDefault(v.Url), previewFailed = _startPreviewFailed.Contains(v.Url) }),

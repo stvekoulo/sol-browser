@@ -12,6 +12,9 @@ body {
 }
 
 html.painted body { transition: background-color 220ms var(--ease-out), color 180ms var(--ease-out); }
+/* La barre du haut n'a pas de bande à elle : elle prend exactement la couleur de la page, et ses pilules semblent
+   posées dessus. La colonne de la carte latérale fait de même (sidebar.css), pour que les deux se rejoignent sans couture. */
+body:has(.topbar) { background-color: var(--page-bg); }
 
 button {
   font: inherit;

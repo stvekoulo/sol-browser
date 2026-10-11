@@ -65,6 +65,10 @@ public sealed class Settings
     }
     /// <summary>Affiche l'image d'arrière-plan sur la page d'accueil d'un nouvel onglet.</summary>
     public bool StartWallpaper { get; set; }
+    /// <summary>Photo choisie pour ce fond (voir StartWallpapers) ; 0 : l'image livrée avec Sol.</summary>
+    public int StartWallpaperPhoto { get; set; }
+    /// <summary>Une photo différente chaque jour, à la place de la photo choisie.</summary>
+    public bool StartWallpaperDaily { get; set; }
     /// <summary>Langue de l'interface : "system" (celle de Windows), "fr" ou "en".</summary>
     public string Language { get; set; } = "system";
     public int Spelling { get; set; } = 3; // 0 : désactivée, 1 : français, 2 : anglais, 3 : les deux

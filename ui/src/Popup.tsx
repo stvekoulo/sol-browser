@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
-import { formatDomain, interfaceScale, onMessage, send } from './bridge';
+import { fontLabels, formatDomain, interfaceScale, onMessage, send } from './bridge';
+import solWallpaper from './assets/start-background.png';
 import { DownloadCard, type Download } from './Downloads';
 import GroupEditor from './GroupEditor';
 import { t, useLang } from './i18n';
@@ -11,6 +12,7 @@ import SolAiAction, { type AiContent } from './SolAiAction';
 
 type Item = { url: string; title: string; kind?: 'search' | 'go' | 'history' | 'site' };
 type PaletteItem = { id: string; title: string; hint: string; shortcut: string; group: string; keywords: string };
+type Wallpaper = { id: number; thumb: string; author: string };
 type Content =
   | { popup: 'palette'; items: PaletteItem[]; listHeight: number }
   | AiContent
@@ -22,7 +24,7 @@ type Content =
   | { popup: 'menu'; items: string[] }
   | { popup: 'split-layout'; ratio: number }
   | { popup: 'downloads'; items: Download[] }
-  | { popup: 'settings'; section?: string; ai: SolAiState; aiPreferences: AiPreferences; version: string; update: { version: string; percent: number; ready: boolean } | null; check: 'idle' | 'checking' | 'current' | 'failed' | 'portable'; zoom: number; uiScale: number; shortcuts: {action:string; title:string; keys:string}[]; theme: number; language: number; spelling: number; spellingLanguages: string[]; home: string; font: number;  engine: number; engines: string[]; sites: { origin: string; host: string; summary: string }[]; permissions: number; siteData: 'idle' | 'clearing' | 'done' | 'failed'; tint: Setting[]; items: Setting[] }
+  | { popup: 'settings'; section?: string; ai: SolAiState; aiPreferences: AiPreferences; version: string; update: { version: string; percent: number; ready: boolean } | null; check: 'idle' | 'checking' | 'current' | 'failed' | 'portable'; zoom: number; uiScale: number; shortcuts: {action:string; title:string; keys:string}[]; theme: number; language: number; spelling: number; spellingLanguages: string[]; home: string; wallpaperOn: boolean; wallpaper: number; wallpaperDaily: boolean; wallpapers: Wallpaper[]; font: number;  engine: number; engines: string[]; sites: { origin: string; host: string; summary: string }[]; permissions: number; siteData: 'idle' | 'clearing' | 'done' | 'failed'; tint: Setting[]; items: Setting[] }
   | { popup: 'profiles'; items: Profile[] }
   | { popup: 'sessions'; id: string; current: string; deleting: string | null; items: {id:string;name:string;count:number}[] }
   | { popup: 'group-edit'; create: boolean; id: string; name: string; color: string; icon: string; presets: string[] }
@@ -355,7 +357,7 @@ export default function Popup() {
         <div className="theme-row" hidden={settingsSection !== 'appearance'}>
           <span className="row-title">{t('Police', 'Font')}</span>
           <div className="popup-segment grid" role="radiogroup" aria-label={t('Police', 'Font')}>
-            {[t('Défaut', 'Default'), t('Système', 'System'), 'Inter', 'Inter Bold', 'SF Pro', 'SF Pro Bold'].map((label, index) => (
+            {fontLabels(t('Défaut', 'Default'), t('Système', 'System')).map((label, index) => (
               <button
                 key={label}
                 role="radio"
@@ -386,6 +388,7 @@ export default function Popup() {
         </div>
         {settingsSection === 'general' && <HomeField key={content.home} home={content.home} />}
         {settingsSection === 'appearance' && <TintSettings items={content.tint} />}
+        {settingsSection === 'appearance' && content.wallpaperOn && <WallpaperSettings photo={content.wallpaper} daily={content.wallpaperDaily} photos={content.wallpapers} />}
         <div className="popup-list">
           {content.items.filter(s => (['startWallpaper','scrollbars','blur'].includes(s.key) ? 'appearance' : ['onlineSuggestions','passwords'].includes(s.key) ? 'privacy' : 'general') === settingsSection).map(s => (
             <button
@@ -713,6 +716,52 @@ function SiteData({ status }: { status: 'idle' | 'clearing' | 'done' | 'failed' 
       }}>{confirm ? t('Confirmer', 'Confirm') : t('Effacer', 'Clear')}</button>
     </span>
   </div>;
+}
+
+// Fond du nouvel onglet : l'image de Sol, une photo choisie, ou une nouvelle chaque jour. Les vignettes viennent du
+// service de photos : elles ne sont demandées que lorsque la grille est ouverte.
+function WallpaperSettings({ photo, daily, photos }: { photo: number; daily: boolean; photos: Wallpaper[] }) {
+  const [choosing, setChoosing] = useState(false);
+  const pick = (id: number) => send({ type: 'settings.set', id: 'wallpaper', index: id });
+  const current = photos.find(p => p.id === photo);
+  return (
+    <div className="theme-row wallpaper-settings">
+      <span className="row-title">{t('Image du nouvel onglet', 'New tab image')}</span>
+      <div className="popup-segment" role="radiogroup" aria-label={t('Image du nouvel onglet', 'New tab image')}>
+        <button role="radio" aria-checked={!daily} className={`popup-seg-btn${!daily ? ' active' : ''}`} onClick={() => send({ type: 'settings.set', id: 'wallpaperDaily', index: 0 })}>
+          {t('Image choisie', 'Chosen image')}
+        </button>
+        <button role="radio" aria-checked={daily} className={`popup-seg-btn${daily ? ' active' : ''}`} onClick={() => send({ type: 'settings.set', id: 'wallpaperDaily', index: 1 })}>
+          {t('Nouvelle chaque jour', 'New every day')}
+        </button>
+      </div>
+      {daily ? (
+        <p className="row-hint">{t('Une photo différente chaque jour, parmi la sélection.', 'A different photo every day, from the selection.')}</p>
+      ) : (
+        <>
+          <p className="row-hint">
+            {current ? t(`Photo de ${current.author}.`, `Photo by ${current.author}.`) : t('Image de Sol.', 'Sol’s image.')}
+          </p>
+          <button className="pill-action" aria-expanded={choosing} onClick={() => setChoosing(!choosing)}>
+            {choosing ? t('Masquer les images', 'Hide images') : t('Choisir une image', 'Choose an image')}
+          </button>
+          {choosing && (
+            <div className="wallpaper-grid" role="radiogroup" aria-label={t('Images proposées', 'Available images')}>
+              <button role="radio" aria-checked={photo === 0} className={`wallpaper-tile${photo === 0 ? ' active' : ''}`} title={t('Image de Sol', 'Sol’s image')} onClick={() => pick(0)}>
+                <img src={solWallpaper} alt={t('Image de Sol', 'Sol’s image')} draggable={false} />
+              </button>
+              {photos.map(p => (
+                <button key={p.id} role="radio" aria-checked={photo === p.id} className={`wallpaper-tile${photo === p.id ? ' active' : ''}`} title={t(`Photo de ${p.author}`, `Photo by ${p.author}`)} onClick={() => pick(p.id)}>
+                  <img src={p.thumb} alt={t(`Photo de ${p.author}`, `Photo by ${p.author}`)} loading="lazy" draggable={false} />
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+      <p className="row-hint">{t('Photos libres de droits d’Unsplash, servies par Lorem Picsum et téléchargées à la demande.', 'Free-to-use photos from Unsplash, served by Lorem Picsum and downloaded on demand.')}</p>
+    </div>
+  );
 }
 
 function TintSettings({ items }: { items: Setting[] }) {
