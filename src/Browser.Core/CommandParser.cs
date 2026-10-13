@@ -59,6 +59,7 @@ public static class CommandParser
         ["device.set"] = ["id", "query"], ["device.rotate"] = ["id"], ["device.compare"] = ["id", "query"],
         ["network.toggle"] = [], ["network.ready"] = [], ["network.clear"] = [], ["network.detail"] = ["id"],
         ["network.replay"] = ["id", "input"], ["network.cancel"] = ["id"], ["network.mock"] = ["id", "input"], ["network.unmock"] = ["id"],
+        ["network.pause"] = ["id", "index"], ["network.preserve"] = ["id", "index"], ["network.export"] = ["id"], ["devtools.open"] = [],
         ["welcome.ready"] = [], ["welcome.open"] = [], ["welcome.done"] = [], ["welcome.name"] = ["title"],
         ["import.run"] = ["id", "query"], ["import.csv"] = [], ["update.restart"] = [], ["update.later"] = [], ["update.check"] = [],
         ["extensions.open"] = [], ["extensions.menu"] = ["x", "y"], ["extension.add"] = ["id"], ["extension.folder"] = [], ["extension.toggle"] = ["id"], ["extension.remove"] = ["id"], ["extension.show"] = ["id"],

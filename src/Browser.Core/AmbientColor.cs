@@ -27,6 +27,25 @@ public static class AmbientColor
         return ((byte)Math.Round(red / total), (byte)Math.Round(green / total), (byte)Math.Round(blue / total));
     }
 
+    /// <summary>
+    /// Couleur des bords d'une page : celle que partagent, à peu de chose près, la plupart des pixels relevés le long de
+    /// ses bords. Null si aucune couleur ne l'emporte (bords en image ou en dégradé marqué) : rien de fiable à prolonger.
+    /// </summary>
+    public static (byte R, byte G, byte B)? Edge(IReadOnlyList<(byte R, byte G, byte B)> samples)
+    {
+        const int near = 18; // un dégradé léger ou le bruit d'une image compressée restent une seule couleur
+        var most = 0;
+        (byte R, byte G, byte B) center = default;
+        foreach (var candidate in samples)
+        {
+            var count = samples.Count(other => Distance(candidate, other) <= near);
+            if (count > most) (most, center) = (count, candidate);
+        }
+        if (most == 0 || most * 2 < samples.Count) return null;
+        var alike = samples.Where(sample => Distance(center, sample) <= near).ToList();
+        return ((byte)Math.Round(alike.Average(c => c.R)), (byte)Math.Round(alike.Average(c => c.G)), (byte)Math.Round(alike.Average(c => c.B)));
+    }
+
     /// <summary>Écart entre deux couleurs, de 0 (identiques) à 765.</summary>
     public static int Distance((byte R, byte G, byte B) a, (byte R, byte G, byte B) b) =>
         Math.Abs(a.R - b.R) + Math.Abs(a.G - b.G) + Math.Abs(a.B - b.B);

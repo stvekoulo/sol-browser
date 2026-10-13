@@ -5,7 +5,6 @@ import { CopyIcon, Icon, LockIcon } from './Icons';
 import { useSidebarDrag } from './useSidebarDrag';
 import { SidebarTabs } from './SidebarTabs';
 import { SidebarPinned } from './SidebarPinned';
-import { sidebarMenu } from './sidebarActions';
 import logo from './assets/logo.png';
 export { useIconLook } from './useIconLook';
 
@@ -23,10 +22,6 @@ export default function Sidebar() {
   const [motion, setMotion] = useState<{ way: '' | 'entering' | 'leaving'; run: number }>({ way: '', run: 0 });
   const [urlText, setUrlText] = useState('');
   const [editingUrl, setEditingUrl] = useState(false);
-  const [searching, setSearching] = useState(false);
-  const [search, setSearch] = useState('');
-  const searchRef = useRef<HTMLInputElement>(null);
-  const query = search.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   const inputRef = useRef<HTMLInputElement>(null);
   useLang();
 
@@ -53,8 +48,6 @@ export default function Sidebar() {
   }, [activeUrl, editingUrl]);
 
   useSidebarDrag();
-
-  useEffect(() => { if (searching) searchRef.current?.focus(); }, [searching]);
 
   if (!state) return null;
   const { tabs, split, activeId } = state;
@@ -136,17 +129,9 @@ export default function Sidebar() {
         </button>
       </div>
 
-      <div className="sidebar-organizer">
-        <button aria-label={t('Rechercher un onglet', 'Find a tab')} title={t('Rechercher un onglet', 'Find a tab')} aria-expanded={searching} onClick={() => { setSearching(!searching); setSearch(''); }}><Icon d="M7 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10M11 11l3 3" size={14} /></button>
-        <button title={t('Organiser les onglets', 'Organize tabs')} aria-label={t('Organiser les onglets', 'Organize tabs')} onClick={e => sidebarMenu('sidebar.menu', '', e)}><Icon d="M3 8h.01M8 8h.01M13 8h.01" size={16} /></button>
-      </div>
-      {searching && <div className="sidebar-search"><Icon d="M7 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10M11 11l3 3" size={14} />
-        <input ref={searchRef} value={search} aria-label={t('Rechercher dans les onglets', 'Search tabs')} placeholder={t('Titre, site ou groupe…', 'Title, site or group…')} onChange={e => setSearch(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') { setSearch(''); setSearching(false); } }} />
-        <button aria-label={t('Fermer la recherche', 'Close search')} onClick={() => { setSearch(''); setSearching(false); }}><Icon d="M4 4l8 8M12 4l-8 8" size={12} /></button>
-      </div>}
       <div className="sidebar-scroll" data-tab-count={tabs.length}>
-        <SidebarPinned state={state} icons={icons} query={query} />
-        <SidebarTabs state={state} icons={icons} query={query} />
+        <SidebarPinned state={state} icons={icons} />
+        <SidebarTabs state={state} icons={icons} />
       </div>
       <div className="sidebar-drag-hint" aria-live="polite" />
 

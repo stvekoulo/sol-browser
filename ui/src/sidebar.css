@@ -66,8 +66,8 @@ html.painted .sidebar-body:not(.floating) { transition: background-color 220ms v
 .pinned-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 10px;
+  gap: 12px;
+  margin-top: 12px;
   flex: none;
   flex-wrap: wrap; /* beaucoup d'onglets épinglés : ils passent à la ligne */
 }

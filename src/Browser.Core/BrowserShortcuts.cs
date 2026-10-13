@@ -39,6 +39,7 @@ public static class BrowserShortcuts
         new(0x58,6,"reader.stop","Arrêter la lecture vocale","Stop reading aloud","X"),
         new(0x59,6,"translation.open","Traduire la page","Translate page","Y"),
         new(0x49,6,"network.toggle","Inspecteur réseau","Network inspector","I"),
+        new(0x7B,0,"devtools.open","DevTools natifs","Native DevTools","F12"),
         new(0x32,6,"split.open","Afficher côte à côte","Show side by side","2"),
         new(0x31,6,"split.close","Quitter la vue côte à côte","Exit side by side","1"),
         new(0x41,6,"profile.menu","Espaces et profils","Spaces and profiles","A"),

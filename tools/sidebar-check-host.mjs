@@ -34,7 +34,8 @@ export async function sidebarHost(executable) {
   };
   const targets = () => fetch(`http://127.0.0.1:${port}/json/list`).then(r=>r.json()).catch(()=>[]);
   const connect = async hash => {
-    const target = await wait(async()=> (await targets()).find(t=>t.url === `https://ui.navigateur/index.html${hash}`), `target ${hash}`);
+    const url=hash.includes('://')?hash:`https://ui.navigateur/index.html${hash}`;
+    const target = await wait(async()=> (await targets()).find(t=>t.url === url), `target ${hash}`);
     const ws = new WebSocket(target.webSocketDebuggerUrl); await once(ws,'open'); connections.push(ws);
     let seq=0; const pending=new Map();
     ws.addEventListener('message', e=> { const m=JSON.parse(e.data); const p=pending.get(m.id); if(p) {pending.delete(m.id);clearTimeout(p.timer);if(m.error)p.reject(new Error(m.error.message));else p.resolve(m.result);} });
@@ -56,5 +57,5 @@ export async function sidebarHost(executable) {
     if(app && app.exitCode===null) { const exited=once(app,'exit');await sidebar.evaluate(`chrome.webview.postMessage('{"type":"window.close"}')`);await exited; }
     connections.splice(0).forEach(ws=>ws.close());
   };
-  return {base,profile,origin,launch,close,connect,wait,dispose:()=>new Promise(r=>server.close(r))};
+  return {base,profile,origin,launch,close,connect,wait,targets,dispose:()=>new Promise(r=>server.close(r))};
 }

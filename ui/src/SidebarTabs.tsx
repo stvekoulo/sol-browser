@@ -5,22 +5,18 @@ import { t } from './i18n';
 import { focusTab, middleClose, sidebarMenu } from './sidebarActions';
 import { startSlotDrag } from './useSidebarDrag';
 
-export const tabMatches = (tab: Pick<Tab, 'title' | 'url'>, query: string, groupName = '') =>
-  `${tab.title} ${tab.url} ${groupName}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(query);
-
-export function SidebarTabs({ state, icons, query }: { state: State; icons: Record<string, string | null | undefined>; query: string }) {
+export function SidebarTabs({ state, icons }: { state: State; icons: Record<string, string | null | undefined> }) {
   const { tabs, split, activeId } = state;
-  const rows = (from: number, to: number, name = '') => {
+  const rows = (from: number, to: number) => {
     const items: ReactNode[] = [];
     for (let i = from; i <= to; i++) {
       const tab = tabs[i], next = i < to ? tabs[i + 1] : undefined;
-      if (query && !tabMatches(tab, query, name)) continue;
-      if (!query && next && tab.id === split.primaryId && next.id === split.secondaryId) {
+      if (next && tab.id === split.primaryId && next.id === split.secondaryId) {
         items.push(<div key={tab.id} className={`sidebar-split-group${split.visible ? ' active' : ''}`} data-kind="tab" data-id={tab.id} data-first={i} data-last={i + 1}>
           <TabRow tab={tab} index={i} icon={icons[tab.id]} active={tab.id === activeId} paired />
           <TabRow tab={next} index={i + 1} icon={icons[next.id]} active={next.id === activeId} paired />
         </div>); i++;
-      } else items.push(<TabRow key={tab.id} tab={tab} index={i} icon={icons[tab.id]} active={tab.id === activeId} filtered={!!query} />);
+      } else items.push(<TabRow key={tab.id} tab={tab} index={i} icon={icons[tab.id]} active={tab.id === activeId} />);
     }
     return items;
   };
@@ -30,20 +26,19 @@ export function SidebarTabs({ state, icons, query }: { state: State; icons: Reco
     let end = i;
     const group = state.groups.find(g => g.id === tabs[i].groupId);
     if (!group) {
-      if (!query && tabs[i].id === split.primaryId && tabs[i + 1]?.id === split.secondaryId) end++;
+      if (tabs[i].id === split.primaryId && tabs[i + 1]?.id === split.secondaryId) end++;
       items.push(...rows(i, end));
     } else {
       while (tabs[end + 1]?.groupId === group.id) end++;
-      const members = rows(i, end, group.name);
-      if (query && !members.length) { i = end; continue; }
-      const expanded = !group.collapsed || !!query;
+      const members = rows(i, end);
+      const expanded = !group.collapsed;
       const active = tabs.slice(i, end + 1).some(tab => tab.id === activeId);
       items.push(<div key={group.id} className={`tab-group-block${expanded ? '' : ' collapsed'}${active ? ' has-active' : ''}`}
         data-kind="group" data-id={group.id} data-first={i} data-last={end} style={{ '--group': group.color } as CSSProperties}>
         <div className="tab-group-heading" onContextMenu={e => sidebarMenu('group.menu', group.id, e)}>
           <button className="tab-group-header" aria-expanded={expanded}
             title={t('Cliquer pour replier · Glisser pour déplacer le groupe', 'Click to collapse · Drag to move group')}
-            onPointerDown={e => { if (!query) startSlotDrag(e.currentTarget.parentElement!.parentElement, e); }}
+            onPointerDown={e => startSlotDrag(e.currentTarget.parentElement!.parentElement, e)}
             onKeyDown={e => { if (e.key === 'F2') { e.preventDefault(); send({ type: 'group.edit', id: group.id }); } }}
             onClick={() => send({ type: 'group.toggle', id: group.id })}>
             {group.icon ? <span className="tab-group-icon" aria-hidden>{group.icon}</span> : <span className="tab-group-dot" aria-hidden />}
@@ -62,14 +57,13 @@ export function SidebarTabs({ state, icons, query }: { state: State; icons: Reco
   }
   return <div className="sidebar-tabs" role="tablist" aria-label={t('Onglets', 'Tabs')} aria-orientation="vertical">
     {items}
-    {query && !items.length && <p className="sidebar-empty">{t('Aucun onglet trouvé', 'No matching tabs')}</p>}
     <button className="sidebar-new-tab" title={t('Nouvel onglet · Ctrl+T', 'New tab · Ctrl+T')} onClick={() => send({ type: 'tab.open' })}>
       <Icon d="M8 3.5v9M3.5 8h9" size={14} /><span>{t('Nouvel onglet', 'New tab')}</span>
     </button>
   </div>;
 }
 
-function TabRow({ tab, index, icon, active, paired = false, filtered = false }: { tab: Tab; index: number; icon: string | null | undefined; active: boolean; paired?: boolean; filtered?: boolean }) {
+function TabRow({ tab, index, icon, active, paired = false }: { tab: Tab; index: number; icon: string | null | undefined; active: boolean; paired?: boolean }) {
   const label = tab.title && tab.title !== 'about:blank' ? tab.title : t('Nouvel onglet', 'New tab');
   return <div role="tab" tabIndex={0} aria-selected={active} className={`sidebar-tab${active ? ' active' : ''}${tab.asleep ? ' asleep' : ''}`}
     title={`${label}\n${tab.url}${tab.asleep ? t('\nEn veille · Cliquer pour reprendre', '\nSleeping · Click to resume') : ''}`}
@@ -77,7 +71,7 @@ function TabRow({ tab, index, icon, active, paired = false, filtered = false }: 
     onContextMenu={e => sidebarMenu('tab.menu', tab.id, e)} onClick={() => send({ type: 'tab.activate', id: tab.id })}
     onKeyDown={e => { focusTab(e); if (e.target !== e.currentTarget) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); send({ type: 'tab.activate', id: tab.id }); } if (e.key === 'Delete') send({ type: 'tab.close', id: tab.id }); }}
     onMouseDown={e => middleClose(e, tab.id)} onAuxClick={e => e.preventDefault()}
-    onPointerDown={e => { if (!filtered) startSlotDrag(e.currentTarget.closest<HTMLElement>('[data-kind="tab"]'), e); }}>
+    onPointerDown={e => startSlotDrag(e.currentTarget.closest<HTMLElement>('[data-kind="tab"]'), e)}>
     {tab.loading ? <span className="spinner" aria-hidden /> : icon ? <img className="favicon" src={icon} alt="" draggable={false} /> : <span className="favicon letter" aria-hidden>{label[0]?.toUpperCase()}</span>}
     <span className="sidebar-tab-title">{label}</span>
     {tab.sessionId && <span className="sidebar-session-badge" title={t(`Session : ${tab.sessionName}`, `Session: ${tab.sessionName}`)}>{tab.sessionName}</span>}

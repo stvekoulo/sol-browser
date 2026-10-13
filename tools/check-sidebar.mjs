@@ -12,6 +12,20 @@ const command = c => ui.evaluate(`chrome.webview.postMessage(${JSON.stringify(JS
 const click = selector => ui.evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
 const box = (selector, fraction=.5) => ui.evaluate(`(()=>{const el=document.querySelector(${JSON.stringify(selector)});el.scrollIntoView({block:'nearest'});const r=el.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height*${fraction}}})()`);
 const mouse = (type, point, buttons=0) => ui.call('Input.dispatchMouseEvent',{type,...point,button:type==='mouseMoved'?'none':'left',buttons,clickCount:1});
+async function checkPinnedSpacing() {
+  const spaced=await ui.evaluate(`(()=>{
+    const strip=document.querySelector('.pinned-strip').getBoundingClientRect(),gap=10*Number(getComputedStyle(document.body).zoom);
+    const rows=[...document.querySelectorAll('.pinned-row')];
+    return rows.every((row,i)=>{
+      const boxes=[...row.children].map(el=>el.getBoundingClientRect());
+      return (!i||row.getBoundingClientRect().top-rows[i-1].getBoundingClientRect().bottom>=gap-1)
+        && boxes.every((r,j)=>r.left>=strip.left-1&&r.right<=strip.right+1&&(!j||
+          (Math.abs(r.top-boxes[j-1].top)<1?r.left-boxes[j-1].right:r.top-boxes[j-1].bottom)>=gap-1));
+    });
+  })()`);
+  assert.ok(spaced,'pinned items have breathing room horizontally and vertically without overflowing');
+  assert.equal(await ui.evaluate('document.querySelectorAll(".sidebar-organizer,.sidebar-search").length'),0,'sidebar search and organizer buttons are removed');
+}
 async function drag(source, target, fraction=.5, cancel=false) {
   const a=await box(source);
   await mouse('mousePressed',a,1);
@@ -50,11 +64,13 @@ try {
   await toolbar.evaluate(`document.querySelector('#tooltip-check').remove()`);
   for (const index of [0,1,2]) {
     await command({type:'settings.set',id:'uiScale',index});
+    await host.wait(()=>ui.evaluate(`Number(getComputedStyle(document.body).zoom)===${[.92,.89,.86][index]}`),'requested UI scale applied before dragging');
     await ui.evaluate(`(()=>{window.__sidebarFrames=[];const record=()=>{window.__sidebarFrames.push(getComputedStyle(document.documentElement).backgroundColor);if(window.__sidebarFrames.length<40)requestAnimationFrame(record)};requestAnimationFrame(record)})()`);
     await toolbar.evaluate(`chrome.webview.postMessage('{"type":"sidebar.toggle"}');setTimeout(()=>chrome.webview.postMessage('{"type":"sidebar.toggle"}'),70);setTimeout(()=>chrome.webview.postMessage('{"type":"sidebar.toggle"}'),110);setTimeout(()=>chrome.webview.postMessage('{"type":"sidebar.toggle"}'),160)`);
     await host.wait(()=>ui.evaluate('window.__sidebarFrames.length===40'),'sidebar animation frames');
     assert.ok(await ui.evaluate(`window.__sidebarFrames.every(bg=>bg!=='rgba(0, 0, 0, 0)')`),'opaque page-colored backdrop throughout rapid toggles');
     await host.wait(()=>ui.evaluate(`!document.body.classList.contains('floating') && getComputedStyle(document.querySelector('.sidebar-card')).opacity==='1'`),'sidebar animation settles after interruption');
+    await checkPinnedSpacing();
     const beforeDrag=(await state()).tabs.map(tab=>tab.id);
     for (const selector of ['.sidebar-tab', '.tab-group-header']) {
       const a=await box(selector);
@@ -62,7 +78,7 @@ try {
       const b={x:a.x+60,y:a.y+48};
       await mouse('mousePressed',a,1);await mouse('mouseMoved',{x:a.x+7,y:a.y+7},1);await mouse('mouseMoved',b,1);await delay(100);
       const preview=await ui.evaluate(`(()=>{const el=document.querySelector('.sidebar-drag-ghost'),r=el.getBoundingClientRect(),c=document.querySelector('.sidebar-card').getBoundingClientRect();return {left:r.left,top:r.top,right:r.right,width:r.width,height:r.height,cardLeft:c.left,cardRight:c.right,detail:el.querySelector('.favicon,.tab-group-name').getBoundingClientRect().height,group:getComputedStyle(el).getPropertyValue('--group')}})()`);
-      assert.ok(Math.abs(preview.left-origin.left)<1,'vertical drag keeps the original horizontal alignment');
+      assert.ok(Math.abs(preview.left-origin.left)<1,`vertical drag keeps the original horizontal alignment: ${JSON.stringify({index,selector,origin,preview})}`);
       assert.ok(Math.abs(preview.top-origin.top-48)<1,'drag keeps the pointer anchor without jumping');
       assert.ok(Math.abs(preview.width-origin.width)<1 && Math.abs(preview.height-origin.height)<1,'drag keeps the original size at every UI scale');
       assert.ok(Math.abs(preview.detail-origin.detail)<1,'preview icons and text keep the sidebar scale');
@@ -80,14 +96,6 @@ try {
   await host.wait(async()=>(await state()).groups[0].collapsed, 'collapse group');
   assert.equal((await state()).activeId,active,'collapse keeps active page');
   assert.ok(await ui.evaluate(`document.querySelector('${group(work)}').classList.contains('has-active')`),'collapsed group shows active state');
-  await click('.sidebar-organizer button');
-  await ui.evaluate(`const input=document.querySelector('.sidebar-search input');input.value='projet';input.dispatchEvent(new Event('input',{bubbles:true}))`);
-  // React tracks native input values; use the prototype setter as a user input would.
-  await ui.evaluate(`(()=>{const el=document.querySelector('.sidebar-search input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,'alpha');el.dispatchEvent(new Event('input',{bubbles:true}))})()`);
-  await host.wait(()=>ui.evaluate('document.querySelectorAll(".sidebar-tab").length===1'),'filter finds collapsed tab');
-  assert.equal((await state()).groups[0].collapsed,true,'search does not modify saved collapse');
-  await ui.call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
-  await host.wait(()=>ui.evaluate('!document.querySelector(".sidebar-search")'),'Escape closes search');
   await click(`${group(work)} .tab-group-header`);
   const before=(await state()).tabs.map(t=>t.id);
   await drag(slot(before[6]),slot(before[8]),.8,true);
@@ -115,6 +123,8 @@ try {
   await host.wait(async()=>(await state()).tabs.length===13,'new tab belongs to group');
   const opened=await state();
   assert.equal(opened.tabs.find(t=>t.id===opened.activeId).groupId,work);
+  const groupedPage=await host.connect(`${host.origin}/home`);
+  await host.wait(()=>groupedPage.evaluate(`document.readyState==="complete"&&location.href===${JSON.stringify(`${host.origin}/home`)}`),'new group page loaded before opening its menu');
   await click(`${group(work)} .sidebar-item-action:last-child`);
   const popup=await host.connect('#popup');
   await host.wait(()=>popup.evaluate('document.body.textContent.includes("Modifier le groupe")'),'group menu follows Sol popup');
@@ -165,6 +175,9 @@ try {
   await command({type:'tab.activate',id:resumed.tabs.find(t=>t.url===initial.tabs[2].url).id});
   await command({type:'group.toggle',id:work});
   await host.wait(async()=>(await state()).groups.find(g=>g.id===work).collapsed,'collapse active group before save');
+  const extraPins=(await state()).tabs.filter(tab=>tab.url.includes('/extra-')).slice(-4);
+  for(const tab of extraPins) await command({type:'tab.pin',id:tab.id,index:1});
+  await host.wait(async()=>(await state()).tabs.filter(tab=>tab.pinned).length===6,'enough pinned tabs to check wrapping');
   await host.close(ui);ui=null;
   for(const width of [220,520]) {
     const settings=JSON.parse(await readFile(resolve(host.profile,'settings.json'),'utf8'));
@@ -172,10 +185,13 @@ try {
     await writeFile(resolve(host.profile,'settings.json'),JSON.stringify(settings));
     ui=await host.launch(380);
     assert.equal((await state()).groups.find(g=>g.id===work).collapsed,true,'active group collapse restored');
-    await command({type:'split.open',id:before[8]});
+    const restoredSplit=(await state()).tabs.find(tab=>tab.url===initial.tabs[8].url);
+    await command({type:'split.open',id:restoredSplit.id});
     await host.wait(async()=>(await state()).split.visible,'split in small window');
     for(const index of [0,1,2]) {
       await command({type:'settings.set',id:'uiScale',index});await delay(180);
+      await ui.evaluate('document.querySelector(".sidebar-scroll").scrollTop=0');
+      await checkPinnedSpacing();
       const small=await ui.evaluate(`(()=>{const card=document.querySelector('.sidebar-card').getBoundingClientRect(),footer=document.querySelector('.sidebar-quick-actions').getBoundingClientRect(),list=document.querySelector('.sidebar-scroll');return {bottom:footer.bottom,card:card.bottom,height:list.clientHeight,overflow:list.scrollWidth-list.clientWidth,buttons:[...document.querySelectorAll('.sidebar-quick-btn')].every(e=>{const r=e.getBoundingClientRect();return r.left>=card.left && r.right<=card.right+1})}})()`);
       assert.ok(small.bottom<=small.card+1 && small.height>30 && small.buttons,'footer and scroll list fit in small window');
       assert.ok(small.overflow<=1,'wide and narrow lists have no horizontal overflow');

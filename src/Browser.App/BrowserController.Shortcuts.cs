@@ -47,6 +47,7 @@ public sealed partial class BrowserController
             {
                 Add(T("Capture d’écran", "Screenshot"), new("capture.menu"), keywords: "capture screenshot image");
                 Add(T("Inspecteur réseau", "Network inspector"), new("network.toggle"), keywords: "network reseau requetes");
+                Add(T("DevTools natifs", "Native DevTools"), new("devtools.open"), keywords: "devtools debug elements css storage performance f12");
             }
             if (IsWebAddress(active.Url) && !active.Url.StartsWith("https://start.sol/", StringComparison.OrdinalIgnoreCase) && !_pages.IsPdf(active.Id))
             {

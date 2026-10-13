@@ -79,6 +79,11 @@ public sealed partial class BrowserController
             case "shortcut.update": UpdateShortcut(id, c.Title!, c.Input!); break;
             case "shortcut.open": OpenShortcut(c.Index!.Value); break;
             case "network.toggle": ToggleNetwork(); return true;
+            case "devtools.open": OpenDevTools(); return true;
+            case "network.pause" or "network.preserve":
+                if (_network.Shown == id && c.Index is 0 or 1) _network.Configure(id, c.Type == "network.pause" ? "pause" : "preserve", c.Index == 1);
+                return true;
+            case "network.export": if (_network.Shown == id) _ = ExportNetworkAsync(id); return true;
             // Le panneau vient d'être créé : il reçoit les couleurs de la page (envoyées avant qu'il n'écoute), puis sa liste.
             case "network.ready": _bridge.BroadcastTheme(); _network.Post(); return true;
             case "network.clear": if (_network.Shown is { } listed) _network.Clear(listed); return true;

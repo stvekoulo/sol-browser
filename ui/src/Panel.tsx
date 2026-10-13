@@ -1,18 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { onMessage, send } from './bridge';
 import { t, useLang } from './i18n';
 import { Icon } from './Icons';
+import { CopyAction, DetailPane, Pairs, pretty, type Detail } from './NetworkDetail';
+import { matchesRequest } from './networkFormat';
 
 type Req = { id: string; method: string; url: string; type: string; status: number; mime: string; size: number; ms: number | null; failed: string | null };
-type Detail = {
-  tabId: string;
-  id: string; url: string; method: string; status: number; mime: string; failed: string | null;
-  requestHeaders: Record<string, string>; responseHeaders: Record<string, string>; postData: string; body: string; note: string;
-};
+
 type Filter = 'all' | 'api' | 'errors';
 type Draft = { Url:string; Method:string; Headers:Record<string,string>; Body:string; Status:number; Delay:number; Mode:string };
 type Result = { error?:string; reason?:string; status?:number; body?:string; headers?:Record<string,string>; truncated?:boolean };
-type Tools = { tabId:string; console:{level:string;text:string}[]; mock:Draft|null; result:Result|null; busy:boolean; mockBusy?:boolean };
+type Tools = { tabId:string; console:{level:string;text:string}[]; mock:Draft|null; result:Result|null; busy:boolean; mockBusy?:boolean; paused?:boolean; preserve?:boolean };
 const emptyDraft = ():Draft=>({Url:'',Method:'GET',Headers:{'Content-Type':'application/json'},Body:'',Status:200,Delay:0,Mode:'response'});
 
 const isApi = (r: Req) => r.type === 'XHR' || r.type === 'Fetch';
@@ -41,6 +39,8 @@ export default function Panel() {
   const [mode,setMode]=useState<'network'|'console'|'compose'>('network');
   const [draft,setDraft]=useState<Draft>(emptyDraft);
   const [draftTab,setDraftTab]=useState('');
+  const [query,setQuery]=useState(''), [sort,setSort]=useState<'recent'|'duration'|'size'>('recent');
+  const activeTab=useRef(''), selectedRequest=useRef<string|null>(null);
 
   useEffect(() => {
     const off = onMessage(data => {
@@ -48,15 +48,19 @@ export default function Panel() {
       if (message.panel === 'network') {
         setItems(message.items ?? []);
         const next=data as Tools;
-        setTools(old=>{if(old.tabId && old.tabId!==next.tabId){setDetail(null);setMode('network');setDraft(emptyDraft());setDraftTab('')}return next});
+        if(activeTab.current && activeTab.current!==next.tabId){setDetail(null);selectedRequest.current=null;setMode('network');setDraft(emptyDraft());setDraftTab('');setQuery('')}
+        activeTab.current=next.tabId;setTools(next);
+        if(selectedRequest.current && !message.items?.some(item=>item.id===selectedRequest.current)){setDetail(null);selectedRequest.current=''}
       }
-      if (message.panel === 'network-detail') setDetail(data as Detail);
+      if (message.panel === 'network-detail') {const next=data as Detail;if(next.tabId===activeTab.current&&(selectedRequest.current===null||next.id===selectedRequest.current)){selectedRequest.current=next.id;setDetail(next)}}
     });
     send({ type: 'network.ready' });
     return off;
   }, []);
 
-  const shown = items.filter(r => (filter === 'api' ? isApi(r) : filter === 'errors' ? isError(r) : true)).reverse(); // la plus récente en haut
+  const shown = items.filter(r => matchesRequest(r,query) && (filter === 'api' ? isApi(r) : filter === 'errors' ? isError(r) : true)).reverse();
+  if(sort!=='recent')shown.sort((a,b)=>sort==='duration'?(b.ms??0)-(a.ms??0):b.size-a.size);
+  const lines=tools.console.filter(line=>line.text.toLowerCase().includes(query.toLowerCase())&&(filter!=='errors'||line.level==='error'||line.level==='warning'));
   const filters: [Filter, string, number][] = [
     ['all', t('Tout', 'All'), items.length],
     ['api', 'API', items.filter(isApi).length],
@@ -66,28 +70,39 @@ export default function Panel() {
   return (
     <div className="net">
       <header className="net-bar">
-        <span className="net-title">{t('Réseau', 'Network')}</span>
+        <span className="net-title">{t('Outils dev', 'Dev tools')}</span>
         <div className="popup-segment net-filters" aria-label={t('Outils réseau','Network tools')}>
           {(['network','console','compose'] as const).map(key=><button key={key} className={'popup-seg-btn'+(mode===key?' active':'')} aria-pressed={mode===key} onClick={()=>{setMode(key);if(key==='compose'&&!draftTab)setDraftTab(tools.tabId)}}>{key==='network'?t('Requêtes','Requests'):key==='console'?'Console':t('Rejeu / Simulation','Replay / Mock')}</button>)}
         </div>
-        {mode==='network' && <div className="popup-segment net-filters" role="radiogroup" aria-label={t('Filtre', 'Filter')}>
+        <span className="net-space" />
+        <button className={'net-icon'+(tools.paused?' on':'')} data-action="pause" aria-pressed={!!tools.paused} title={tools.paused?t('Reprendre la capture','Resume capture'):t('Mettre la capture en pause','Pause capture')} onClick={()=>send({type:'network.pause',id:tools.tabId,index:tools.paused?0:1})}><Icon d={tools.paused?'M5 3l8 5-8 5z':'M5 3v10M11 3v10'} size={16}/></button>
+        <button className="net-icon" data-action="reload" title={t('Recharger la page','Reload page')} onClick={()=>send({type:'nav.reload',id:tools.tabId})}><Icon d="M12 5a5 5 0 1 0 1 6M12 2v4H8" size={16}/></button>
+        <button className="net-icon" data-action="export" title={t('Exporter le journal JSON · requêtes, en-têtes et console','Export JSON log · requests, headers and console')} disabled={!items.length&&!tools.console.length} onClick={()=>send({type:'network.export',id:tools.tabId})}><Icon d="M8 2v8M4 7l4 4 4-4M3 12v2h10v-2" size={16}/></button>
+        <button className="net-icon" data-action="devtools" title={t('DevTools natifs · F12','Native DevTools · F12')} onClick={()=>send({type:'devtools.open'})}><Icon d="M5 3L1 8l4 5M11 3l4 5-4 5M9 2L7 14" size={16}/></button>
+        <button className="net-icon" data-action="clear" title={t('Vider le journal','Clear log')} onClick={() => {setDetail(null);selectedRequest.current='';send({ type: 'network.clear' })}}><Icon d="M3 4h10M6 2h4M4 4l1 10h6l1-10M7 7v4M9 7v4" size={16}/></button>
+        <button className="net-close" aria-label={t('Fermer le panneau', 'Close panel')} title={t('Fermer le panneau', 'Close panel')} onClick={() => send({ type: 'network.toggle' })}>
+          <Icon d="M4.5 4.5l7 7M11.5 4.5l-7 7" size={13} />
+        </button>
+      </header>
+      {mode!=='compose'&&<div className="net-controls">
+        <label className="net-search"><Icon d="M7 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10M11 11l3 3" size={14}/><input aria-label={t('Rechercher dans le journal','Search log')} placeholder={mode==='network'?t('URL, méthode, type ou statut…','URL, method, type or status…'):t('Rechercher un message…','Find a message…')} value={query} onChange={e=>setQuery(e.target.value)}/></label>
+        {mode==='network' ? <div className="popup-segment net-filters" role="radiogroup" aria-label={t('Filtre', 'Filter')}>
           {filters.map(([key, label, count]) => (
             <button key={key} role="radio" aria-checked={filter === key} className={`popup-seg-btn${filter === key ? ' active' : ''}`} onClick={() => setFilter(key)}>
               <span>{label}</span>
               <span className="popup-seg-count">{count}</span>
             </button>
           ))}
-        </div>}
-        <span className="net-space" />
-        <button className="pill-action" onClick={() => (setDetail(null), send({ type: 'network.clear' }))}>{t('Vider', 'Clear')}</button>
-        <button className="net-close" aria-label={t('Fermer le panneau', 'Close panel')} title={t('Fermer le panneau', 'Close panel')} onClick={() => send({ type: 'network.toggle' })}>
-          <Icon d="M4.5 4.5l7 7M11.5 4.5l-7 7" size={13} />
-        </button>
-      </header>
+        </div>:<button className={'pill-action'+(filter==='errors'?' on':'')} aria-pressed={filter==='errors'} onClick={()=>setFilter(filter==='errors'?'all':'errors')}>{t('Erreurs et alertes','Errors and warnings')}</button>}
+        {mode==='network'&&<div className="popup-segment net-filters" aria-label={t('Trier les requêtes','Sort requests')}>{(['recent','duration','size'] as const).map(key=><button key={key} className={'popup-seg-btn'+(sort===key?' active':'')} aria-pressed={sort===key} onClick={()=>setSort(key)}>{key==='recent'?t('Récentes','Recent'):key==='duration'?t('Durée','Duration'):t('Taille','Size')}</button>)}</div>}
+        <label className="net-preserve"><input type="checkbox" checked={tools.preserve??true} onChange={e=>send({type:'network.preserve',id:tools.tabId,index:e.target.checked?1:0})}/>{t('Conserver au rechargement','Keep across reloads')}</label>
+      </div>}
+      <div className="net-summary"><span>{tools.paused?t('Capture en pause','Capture paused'):t('Capture active','Capturing')}</span><span>{shown.length} / {items.length} {t('requêtes','requests')}</span><span>{bytes(items.reduce((sum,item)=>sum+item.size,0))}</span>{mode==='console'&&<CopyAction label={t('Copier les messages','Copy messages')} text={lines.map(line=>`${line.level} · ${line.text}`).join('\n')}/>}</div>
 
       {tools.mock && <div className="net-mock-banner"><span>{t('Simulation active sur cet onglet :','Active mock in this tab:')} {tools.mock.Method} {tools.mock.Url}</span><button className="pill-action" disabled={tools.mockBusy} onClick={()=>send({type:'network.unmock',id:tools.tabId})}>{t('Désactiver','Disable')}</button></div>}
-      {mode==='console' ? <div className="net-console" aria-label="Console">{!tools.console.length&&<p className="net-note">{t('Les messages apparaissent après l’ouverture du panneau.','Messages are captured after opening this panel.')}</p>}{tools.console.map((line,i)=><pre className={'net-body console-'+line.level} key={i}>{line.level} · {line.text}</pre>)}</div> : mode==='compose' ? <Composer draft={draft} setDraft={setDraft} tools={tools} tabId={draftTab} /> : <div className="net-main">
+      {mode==='console' ? <div className="net-console" aria-label="Console">{!lines.length&&<p className="net-note">{tools.console.length?t('Aucun message ne correspond au filtre.','No matching messages.'):t('Les messages apparaissent après l’ouverture du panneau.','Messages are captured after opening this panel.')}</p>}{lines.map((line,i)=><pre className={'net-body console-'+line.level} key={i}>{line.level} · {line.text}</pre>)}</div> : mode==='compose' ? <Composer draft={draft} setDraft={setDraft} tools={tools} tabId={draftTab} /> : <div className="net-main">
         <div className="net-list" role="table" aria-label={t('Requêtes', 'Requests')}>
+          <div className="net-columns" role="row">{[t('État','Status'),t('Méthode','Method'),t('Requête','Request'),t('Type','Type'),t('Taille','Size'),t('Durée','Duration')].map(label=><span role="columnheader" key={label}>{label}</span>)}</div>
           {shown.length === 0 && (
             <p className="net-empty">
               {items.length === 0
@@ -99,7 +114,7 @@ export default function Panel() {
             const [name, where] = parts(r.url);
             const state = r.failed ? 'bad' : r.status === 0 ? 'wait' : r.status >= 400 ? 'bad' : r.status >= 300 ? 'dim' : 'ok';
             return (
-              <button key={r.id} role="row" className={`net-row${detail?.id === r.id ? ' selected' : ''}`} title={r.url} onClick={() => send({ type: 'network.detail', id: r.id })}>
+              <button key={r.id} role="row" className={`net-row${selectedRequest.current === r.id ? ' selected' : ''}`} title={r.url} onClick={() => {selectedRequest.current=r.id;send({ type: 'network.detail', id: r.id })}}>
                 <span className={`net-status ${state}`}>{r.failed ? '✕' : r.status || '…'}</span>
                 <span className="net-method">{r.method}</span>
                 <span className="net-name">
@@ -113,47 +128,9 @@ export default function Panel() {
             );
           })}
         </div>
-        {detail && <DetailPane detail={detail} onClose={() => setDetail(null)} onEdit={()=>{setDraft({...emptyDraft(),Url:detail.url,Method:detail.method,Headers:Object.fromEntries(Object.entries(detail.requestHeaders).filter(([key,value])=>!/(cookie|authorization|token|secret|api[-_]?key|host|content-length|connection|sec-)/i.test(key)&&!value.includes('[masqué]'))),Body:detail.postData.includes('[masqué]')?'':detail.postData});setDraftTab(detail.tabId);setMode('compose')}} />}
+        {detail && <DetailPane detail={detail} onClose={() => {setDetail(null);selectedRequest.current=''}} onEdit={()=>{setDraft({...emptyDraft(),Url:detail.url,Method:detail.method,Headers:Object.fromEntries(Object.entries(detail.requestHeaders).filter(([key,value])=>!/(cookie|authorization|token|secret|api[-_]?key|host|content-length|connection|sec-)/i.test(key)&&!value.includes('[masqué]'))),Body:detail.postData.includes('[masqué]')?'':detail.postData});setDraftTab(detail.tabId);setMode('compose')}} />}
       </div>}
     </div>
-  );
-}
-
-function DetailPane({ detail, onClose, onEdit }: { detail: Detail; onClose: () => void; onEdit:()=>void }) {
-  const note =
-    detail.note === 'binary' ? t('Contenu binaire (image, police, fichier) : non affiché.', 'Binary content (image, font, file): not shown.')
-    : detail.note === 'truncated' ? t('Réponse longue : seul le début est affiché.', 'Long response: only the beginning is shown.')
-    : detail.note === 'unavailable' ? t('Pas de corps, ou réponse que le moteur n’a plus en mémoire.', 'No body, or a response the engine no longer keeps.')
-    : '';
-  return (
-    <aside className="net-detail" aria-label={t('Détail de la requête', 'Request detail')}>
-      <div className="net-detail-head">
-        <span className="net-method">{detail.method}</span>
-        <span className="net-detail-url">{detail.url}</span>
-        <button className="net-close" aria-label={t('Fermer le détail', 'Close detail')} onClick={onClose}>
-          <Icon d="M4.5 4.5l7 7M11.5 4.5l-7 7" size={12} />
-        </button>
-      </div>
-      <button className="pill-action net-edit" onClick={onEdit}>{t('Modifier et renvoyer','Edit and resend')}</button>
-      <Section title={t('Général', 'General')}>
-        <Pairs pairs={{ [t('État', 'Status')]: detail.failed ? `${t('Échec', 'Failed')} (${detail.failed})` : String(detail.status || '…'), [t('Type', 'Type')]: detail.mime || '—' }} />
-      </Section>
-      <Section title={t('Réponse', 'Response')}>
-        {note && <p className="net-note">{note}</p>}
-        {detail.body && <pre className="net-body">{pretty(detail.body, detail.mime)}</pre>}
-      </Section>
-      {detail.postData && (
-        <Section title={t('Corps envoyé', 'Request body')}>
-          <pre className="net-body">{pretty(detail.postData, 'json')}</pre>
-        </Section>
-      )}
-      <Section title={t('En-têtes de la réponse', 'Response headers')}>
-        <Pairs pairs={detail.responseHeaders} />
-      </Section>
-      <Section title={t('En-têtes de la requête', 'Request headers')}>
-        <Pairs pairs={detail.requestHeaders} />
-      </Section>
-    </aside>
   );
 }
 
@@ -180,38 +157,4 @@ function Composer({draft,setDraft,tools,tabId}:{draft:Draft;setDraft:(draft:Draf
     {error&&<p role="alert" className="net-note">{error}</p>}
     {!!tools.result&&<section className="net-section" aria-label={t('Résultat','Result')}><h3>{t('Résultat du rejeu','Replay result')} {tools.result.status&&`· ${tools.result.status}`}</h3>{resultError?<p role="alert" className="net-note">{resultError}</p>:<><pre className="net-body">{pretty(tools.result.body??'',Object.entries(tools.result.headers??{}).find(([key])=>key.toLowerCase()==='content-type')?.[1]??'')}</pre>{tools.result.truncated&&<p className="net-note">{t('Seul le début de la réponse est affiché.','Only the beginning of the response is shown.')}</p>}<details><summary>{t('En-têtes de la réponse','Response headers')}</summary><Pairs pairs={tools.result.headers??{}}/></details></>}</section>}
   </div>;
-}
-
-// Du JSON est remis en forme pour être lu ; tout le reste est affiché tel quel.
-function pretty(text: string, mime: string) {
-  if (!mime.includes('json')) return text;
-  try {
-    return JSON.stringify(JSON.parse(text), null, 2);
-  } catch {
-    return text;
-  }
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="net-section">
-      <h3>{title}</h3>
-      {children}
-    </section>
-  );
-}
-
-function Pairs({ pairs }: { pairs: Record<string, string> }) {
-  const entries = Object.entries(pairs);
-  if (entries.length === 0) return <p className="net-note">—</p>;
-  return (
-    <dl className="net-pairs">
-      {entries.map(([name, value]) => (
-        <div key={name}>
-          <dt>{name}</dt>
-          <dd>{value}</dd>
-        </div>
-      ))}
-    </dl>
-  );
 }

@@ -89,7 +89,8 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
           for (const entry of votes.values()) if (!best || entry.w > best.w) best = entry;
 
           const rgb = c => `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
-          return { bg: rgb(bg), dark: lum(bg) < 0.42, accent: best ? rgb(best.c) : null };
+          // sx, sy, vw, vh : où en est le défilement et ce que mesure la zone visible, pour relire les bords de la page (UiEdge.cs).
+          return { bg: rgb(bg), dark: lum(bg) < 0.42, accent: best ? rgb(best.c) : null, sx: scrollX, sy: scrollY, vw: innerWidth, vh: innerHeight };
         })()
         """;
 
@@ -192,46 +193,7 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
         core.NewWindowRequested += (_, e) => e.Handled = true;
         core.NavigationCompleted += (_, _) => { if (s_lastThemeMsg is not null) core.PostWebMessageAsJson(s_lastThemeMsg); };
 
-        var tooltip = new ToolTip { PlacementTarget = target, Placement = Microsoft.UI.Xaml.Controls.Primitives.PlacementMode.Bottom };
-        target.PointerExited += (_, _) => { tooltip.IsOpen = false; ToolTipService.SetToolTip(target, null); };
-        target.Unloaded += (_, _) => tooltip.IsOpen = false;
-        core.WebMessageReceived += (_, e) =>
-        {
-            string json;
-            try { json = e.TryGetWebMessageAsString(); }
-            catch (ArgumentException) { return; }
-            if (!e.Source.StartsWith(Origin, StringComparison.Ordinal)) return;
-
-            if (json == "\"ui.painted\"") { target.Opacity = 1; return; }
-
-            if (SidebarHost is { } host && json.Contains("\"sidebar.toggle\"", StringComparison.Ordinal))
-            {
-                var open = host.Toggle();
-                view.CoreWebView2?.PostWebMessageAsJson($$"""{"event":"sidebar","open":{{(open ? "true" : "false")}}}""");
-                return;
-            }
-            if (CommandParser.Parse(json) is { } command)
-            {
-                if (command.Type == "ui.tooltip")
-                {
-                    tooltip.IsOpen = false;
-                    ToolTipService.SetToolTip(target, null);
-                    if (command.Title is { Length: > 0 and <= 500 } text && command.X is { } x && command.Y is { } y &&
-                        command.Width is > 0 && command.Height is > 0 && x >= 0 && y >= 0 && x < target.ActualWidth && y < target.ActualHeight)
-                    {
-                        tooltip.Content = new TextBlock { Text = text, MaxWidth = 300, TextWrapping = TextWrapping.Wrap };
-                        tooltip.PlacementRect = new Windows.Foundation.Rect(x, y, Math.Min(command.Width.Value, target.ActualWidth - x), Math.Min(command.Height.Value, target.ActualHeight - y));
-                        ToolTipService.SetToolTip(target, tooltip);
-                        tooltip.IsOpen = true;
-                        DebugLog.Write("ui.tooltip shown");
-                    }
-                    return;
-                }
-                tooltip.IsOpen = false;
-                ToolTipService.SetToolTip(target, null);
-                onCommand(command);
-            }
-        };
+        BindCommands(target, core, onCommand);
 
         core.Navigate(Origin + targetPage);
     }
@@ -305,6 +267,14 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
             if (doc.RootElement.ValueKind != JsonValueKind.Object) return;
             var bg = doc.RootElement.GetProperty("bg").GetString() ?? "rgb(245, 246, 238)";
             var dark = doc.RootElement.GetProperty("dark").GetBoolean();
+            // Ce que la page montre à ses bords l'emporte sur la couleur qu'elle déclare : c'est là que l'interface la touche.
+            var edge = await EdgeColorAsync(core, id, source, bg, doc.RootElement);
+            if (request != _themeRequest || _activeId != id || core.Source != source || pages.CoreOf(id) != core) return;
+            if (edge is not null && System.Text.RegularExpressions.Regex.Match(edge, @"rgb\((\d+), (\d+), (\d+)\)") is { Success: true } shown)
+            {
+                bg = edge;
+                dark = (0.299 * int.Parse(shown.Groups[1].Value) + 0.587 * int.Parse(shown.Groups[2].Value) + 0.114 * int.Parse(shown.Groups[3].Value)) / 255 < 0.42;
+            }
             // Le fond de la fenêtre suit aussi la page : pas d'éclair sombre derrière une vue en cours de chargement.
             if (System.Text.RegularExpressions.Regex.Match(bg, @"rgb\((\d+), (\d+), (\d+)\)") is { Success: true } m)
                 PageColorChanged?.Invoke(byte.Parse(m.Groups[1].Value), byte.Parse(m.Groups[2].Value), byte.Parse(m.Groups[3].Value));

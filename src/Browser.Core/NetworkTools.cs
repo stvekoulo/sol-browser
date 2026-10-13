@@ -1,6 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using System.Text.Encodings.Web;
+using System.Text.Unicode;
 
 namespace Browser.Core;
 
@@ -9,6 +11,7 @@ public sealed record NetworkDraft(string Url, string Method, Dictionary<string,s
 public static class NetworkTools
 {
     public const string Mask = "[masqué]";
+    private static readonly JsonSerializerOptions RedactedJson = new() { Encoder = JavaScriptEncoder.Create(UnicodeRanges.All) };
     public static bool Secret(string name) => Regex.IsMatch(name, "password|passwd|secret|token|authorization|cookie|api[-_]?key", RegexOptions.IgnoreCase);
     public static string Redact(string text)
     {
@@ -19,13 +22,26 @@ public static class NetworkTools
             void Visit(JsonNode? item)
             {
                 if (item is JsonObject obj) foreach (var key in obj.Select(p => p.Key).ToArray())
-                { if (Secret(key)) obj[key] = Mask; else Visit(obj[key]); }
-                else if (item is JsonArray array) foreach (var child in array) Visit(child);
+                {
+                    if (Secret(key)) obj[key] = Mask;
+                    else if (obj[key] is JsonValue value && value.TryGetValue<string>(out var textValue)) obj[key] = MaskText(textValue);
+                    else Visit(obj[key]);
+                }
+                else if (item is JsonArray array) for (var i = 0; i < array.Count; i++)
+                {
+                    if (array[i] is JsonValue value && value.TryGetValue<string>(out var textValue)) array[i] = MaskText(textValue);
+                    else Visit(array[i]);
+                }
             }
-            Visit(node); text = node?.ToJsonString() ?? text;
+            if (node is JsonValue scalar && scalar.TryGetValue<string>(out var stringValue)) return JsonSerializer.Serialize(MaskText(stringValue), RedactedJson);
+            Visit(node); return node?.ToJsonString(RedactedJson) ?? text;
         }
         catch (JsonException) { }
-        text = Regex.Replace(text, @"(?i)((?:password|passwd|secret|token|authorization|cookie|api[-_]?key)\s*[=:]\s*)[^\s&;,]+", "$1" + Mask);
+        return MaskText(text);
+    }
+    private static string MaskText(string text)
+    {
+        text = Regex.Replace(text, @"(?i)((?:password|passwd|secret|token|authorization|cookie|api[-_]?key)[""']?\s*[=:]\s*)(?:""(?:\\[\s\S]|[^""\\])*""?|'(?:\\[\s\S]|[^'\\])*'?|[^\s&;,]+)", "$1" + Mask);
         return Regex.Replace(text, @"(?i)Bearer\s+[A-Za-z0-9._~+/=-]+", "Bearer " + Mask);
     }
     public static string SafeUrl(string url)

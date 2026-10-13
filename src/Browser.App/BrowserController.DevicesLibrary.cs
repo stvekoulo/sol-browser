@@ -61,7 +61,7 @@ public sealed partial class BrowserController
     private void FollowNetwork()
     {
         if (!_tools.IsOpen || _tabs.ActiveId is not { } active || _pages.CoreOf(active) is not { } core) return;
-        if (_network.Shown == active) return;
+        if (_network.Shown == active && _network.Listening) return;
         _network.Shown = active;
         _ = _network.ListenAsync(active, core);
         _network.Post();
@@ -125,6 +125,7 @@ public sealed partial class BrowserController
             if (PermissionStore.OriginOf(_pages.CoreOf(tabId)?.Source ?? "") is not null && !_pages.CoreOf(tabId)!.Source.StartsWith("https://start.sol/"))
                 items.Add((T("Vider la session de ce site…", "Clear this site's session…"), () => _afterMenu = () => AskResetSite(tabId)));
             items.Add((_tools.IsOpen ? T("Masquer l'inspecteur réseau", "Hide network inspector") : T("Inspecter le réseau", "Inspect network"), () => _afterMenu = ToggleNetwork));
+            items.Add((T("DevTools natifs · F12", "Native DevTools · F12"), () => _afterMenu = OpenDevTools));
 
             // Le moteur attend notre réponse : il est toujours libéré à la fermeture du menu, avec ou sans choix.
             ShowMenu(x, y, items, deferral.Complete);

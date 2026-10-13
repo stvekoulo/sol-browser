@@ -9,7 +9,7 @@
     const host = document.createElement('div');
     const root = host.attachShadow({ mode: 'closed' });
     const band = document.createElement('div');
-    band.style.cssText = `position:fixed;left:0;right:0;bottom:0;height:${HEIGHT}px;pointer-events:none;z-index:2147483647`;
+    band.style.cssText = `position:fixed;left:0;right:0;bottom:0;height:${HEIGHT}px;pointer-events:none;z-index:2147483646`;
     STEPS.forEach((px, i) => {
       const layer = document.createElement('div');
       const from = (i * 100) / STEPS.length, to = ((i + 1) * 100) / STEPS.length;
