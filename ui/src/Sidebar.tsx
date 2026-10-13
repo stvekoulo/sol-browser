@@ -5,6 +5,7 @@ import { CopyIcon, Icon, LockIcon } from './Icons';
 import { useSidebarDrag } from './useSidebarDrag';
 import { SidebarTabs } from './SidebarTabs';
 import { SidebarPinned } from './SidebarPinned';
+import { useAddressSuggestions } from './useAddressSuggestions';
 import logo from './assets/logo.png';
 export { useIconLook } from './useIconLook';
 
@@ -41,6 +42,7 @@ export default function Sidebar() {
   }, []);
 
   const activeTab = state?.tabs.find(t => t.id === state.activeId);
+  const suggestions=useAddressSuggestions(activeTab?.id,setUrlText,inputRef);
   const activeUrl = !activeTab || (activeTab.url === 'about:blank' || isStartPage(activeTab.url)) ? '' : displayAddress(activeTab.url);
 
   useEffect(() => {
@@ -92,19 +94,22 @@ export default function Sidebar() {
             aria-label={t('Adresse ou recherche', 'Address or search')}
             placeholder={t('Rechercher ou saisir une adresse', 'Search or enter an address')}
             spellCheck={false}
+            role="combobox" aria-autocomplete="list" aria-expanded={editingUrl&&suggestions.count>0}
             value={urlText}
-            onChange={e => setUrlText(e.target.value)}
+            onChange={e => {suggestions.changed(e.target.value);const box=e.currentTarget.closest('.sidebar-url-pill')!.getBoundingClientRect();if(activeId)send({type:'suggest',id:activeId,query:e.target.value,x:box.left+OFFSET_X,y:box.bottom+OFFSET_Y()+6,width:box.width})}}
             onFocus={e => {
               setEditingUrl(true);
+              suggestions.remember(urlText);
               e.target.select();
             }}
             onKeyDown={e => {
+              if(suggestions.key(e))return;
               if (e.key === 'Escape') {
                 setUrlText(activeUrl);
                 e.currentTarget.blur();
               }
             }}
-            onBlur={() => setEditingUrl(false)}
+            onBlur={() => {setEditingUrl(false);suggestions.clear();if(activeId)send({type:'suggest',id:activeId,query:'',x:0,y:0,width:0})}}
           />
         </form>
         <button
@@ -138,11 +143,14 @@ export default function Sidebar() {
       <div className="sidebar-quick-actions" role="group" aria-label={t('Actions rapides', 'Quick actions')}>
         {[
           { type: 'window.private', label: t('Navigation privée', 'Private browsing'), path: 'M6.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0M14.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0M6.5 8h3' },
+          { type: 'notes.manage', label: t('Notes', 'Notes'), path: 'M4 2.5h8v11H4zM6 5h4M6 8h4M6 11h2' },
           { type: split.visible ? 'split.close' : 'split.open', label: split.visible ? t('Fermer la vue scindée', 'Close split view') : t('Afficher deux pages côte à côte', 'Show two pages side by side'), path: 'M2 3h12v10H2zM8 3v10' },
           ...(split.visible ? [{ type: 'split.menu', label: t('Disposition des pages', 'Page layout'), path: 'M2 3h12v10H2zM6 3v10M4 6v4M10 6v4' }] : []),
           { type: 'history.open', label: t('Historique', 'History'), path: 'M2 7a6 6 0 1 1 1.5 5M2 3v4h4M8 4.5V8l2.5 1.5' },
           { type: 'downloads.open', label: t('Téléchargements', 'Downloads'), path: 'M8 2.5v8M4.5 7.5L8 11l3.5-3.5M3 13.5h10' },
-        ].map(action => <button key={action.type} data-action={action.type} className={`sidebar-quick-btn${action.type === 'window.private' ? ' private-action' : ''}${action.type === 'split.menu' ? ' split-proportions' : ''}${action.type === 'split.close' ? ' on' : ''}`} aria-label={action.label} title={action.label} aria-pressed={action.type === 'split.open' || action.type === 'split.close' ? split.visible : undefined} onClick={e => {
+        ].map(action => <button key={action.type} data-action={action.type} className={`sidebar-quick-btn${action.type === 'window.private' ? ' private-action' : ''}${action.type === 'split.menu' ? ' split-proportions' : ''}${action.type === 'split.close' || action.type==='notes.manage'&&activeTab?.url==='https://start.sol/index.html#notes' ? ' on' : ''}`} aria-label={action.label} title={action.label} aria-pressed={action.type === 'split.open' || action.type === 'split.close' ? split.visible : undefined} onContextMenu={e=>{
+          if(action.type!=='notes.manage')return;e.preventDefault();const box=e.currentTarget.getBoundingClientRect();send({type:'notes.menu',id:activeId??undefined,x:box.right+OFFSET_X,y:box.top+OFFSET_Y()-6});
+        }} onClick={e => {
           const box = e.currentTarget.getBoundingClientRect();
           // Le panneau s'ouvre au-dessus du bouton : dessous, il n'y a plus de place et il recouvrirait cette rangée.
           send({ type: action.type, x: box.right + OFFSET_X, y: box.top + OFFSET_Y() - 6 });

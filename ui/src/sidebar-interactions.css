@@ -21,7 +21,7 @@
 .tab-group-block.has-active .tab-group-dot { box-shadow: 0 0 0 3px color-mix(in srgb, var(--group) 18%, transparent); }
 .tab-group-block.has-active.collapsed .tab-group-heading { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--group) 48%, transparent); }
 .tab-group-block.has-active .tab-group-name { font-weight: 600; }
-.sidebar-quick-actions { gap: 4px; }
+.sidebar-quick-actions { gap: 4px; flex-wrap:wrap; row-gap:6px; }
 .sidebar-quick-btn { flex: 0 1 34px; min-width: 28px; }
 .sidebar-status { display: none; }
 .sidebar-status.shown { display: flex; }

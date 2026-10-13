@@ -44,12 +44,14 @@ public sealed partial class BrowserController
     private int _paletteGeneration;
     private List<object>? _paletteItems;
     private readonly QuickNotes _notes = new(AppPaths.Private ? null : Path.Combine(AppPaths.DataDir, "notes.json"));
+    private readonly NoteFiles _noteFiles = new(AppPaths.Private ? null : Path.Combine(AppPaths.DataDir, "notes-assets.json"));
     private QuickNote _noteDraft = new("", "", "", "", DateTimeOffset.UtcNow);
     private string? _noteError;
     private QuickNote? _noteSelection;
     private bool _notesPopup;
-    private bool NoteDraftChanged => (_noteDraft.Text.Length > 0 || _noteDraft.Title.Length > 0)
-        && !_notes.Items.Any(n => n.Id == _noteDraft.Id && n.Text == _noteDraft.Text && n.Title == _noteDraft.Title);
+    private bool NoteDraftChanged => (_noteDraft.Id.Length > 0 || _noteDraft.Text.Length > 0 || _noteDraft.Title.Length > 0 || _noteDraft.Files.Length > 0)
+        && !_notes.Items.Any(n => n.Id == _noteDraft.Id && n.Text == _noteDraft.Text && n.Title == _noteDraft.Title && n.Kind == _noteDraft.Kind &&
+            n.Tags.SequenceEqual(_noteDraft.Tags) && n.Files.SequenceEqual(_noteDraft.Files) && n.Due == _noteDraft.Due);
 
     private readonly DockHost _dock;
 
@@ -66,6 +68,7 @@ public sealed partial class BrowserController
         _pages.PagePressed += DismissAiPopup;
         _network = new NetworkInspector(panel.Post);
         _sessionSave.Tick += (_, _) => { _sessionSave.Stop(); SaveSession(); };
+        StartNoteMaintenance();
         Directory.CreateDirectory(AppPaths.DataDir);
         // Sol AI reste désactivé pendant cette phase, y compris après une mise à jour.
         if (_settings.SolAiEnabled)
@@ -110,7 +113,12 @@ public sealed partial class BrowserController
             Refresh();
             return tab;
         };
-        _pages.PopupClosed += id => { Close(id); Refresh(); };
+        _pages.PopupClosed += id =>
+        {
+            // Le moteur referme la fenêtre devenue téléchargement : sa vue pilote encore le transfert.
+            if(_downloads.Any(d=>d.TabId==id&&DownloadPending(d.Id,d.Op))){DebugLog.Write($"popup.close.deferred {id}");return;}
+            Close(id);Refresh();
+        };
         _pages.SessionFailed += id => Notice(T("Session indisponible", "Session unavailable"), T("Sol n’a pas pu ouvrir cette session. Réessayez en activant l’onglet ; aucune autre session n’a été utilisée.", "Sol could not open this session. Activate the tab to retry; no other session was used."));
         _pages.Loaded += RecordVisit;
         _pages.StoreInstallRequested += url => _ = InstallStoreExtensionAsync(url);
@@ -152,7 +160,7 @@ public sealed partial class BrowserController
             foreach (var tab in _tabs.Tabs.Where(t => t.Url is Settings.DefaultHomePage or QuickNotes.PageUrl)) _pages.PostStart(tab.Id, json);
         };
         _pages.Discarded += id => { _restored.Add(id); _network.Forget(id); Refresh(); }; // son rechargement ne sera pas une nouvelle visite
-        _pages.KeepAwake = id => _split.Contains(id) || _downloads.Any(d => d.TabId == id && d.Op.State == Microsoft.Web.WebView2.Core.CoreWebView2DownloadState.InProgress);
+        _pages.KeepAwake = id => _split.Contains(id) || _downloads.Any(d => d.TabId == id && DownloadPending(d.Id,d.Op));
         _pages.PipReturnRequested += id => {
             Activate(id); Refresh();
             if (Presenter?.State == OverlappedPresenterState.Minimized) Presenter.Restore();
@@ -192,6 +200,7 @@ public sealed partial class BrowserController
         _window.Closed += (_, _) =>
         {
             _closingWindow = true;
+            _noteMaintenance.Stop();
             _ai.Dispose();
             _pages.StopSpelling();
             _capture.Cancel();
@@ -227,52 +236,4 @@ public sealed partial class BrowserController
         HidePopup(); Refresh();
     }
 
-    // Téléchargements de la session, du plus récent au plus ancien.
-    private readonly List<(string Id, Microsoft.Web.WebView2.Core.CoreWebView2DownloadOperation Op, string TabId)> _downloads = new();
-    private bool _downloadsOpen;
-    private DateTime _downloadsPosted;
-
-    private Microsoft.Web.WebView2.Core.CoreWebView2DownloadOperation? FindDownload(string id) =>
-        _downloads.FirstOrDefault(d => d.Id == id).Op;
-
-    private void OnDownloadStarting(string tabId, Microsoft.Web.WebView2.Core.CoreWebView2DownloadStartingEventArgs e)
-    {
-        e.Handled = true; // pas de fenêtre de téléchargement du moteur : le navigateur affiche la sienne
-        // Vérification dans un profil jetable : les fichiers de test restent avec ses données.
-        if (Environment.GetEnvironmentVariable("NAVIGATEUR_TEST_DOWNLOAD_DIR") is { Length: > 0 } dir && Directory.Exists(dir))
-            e.ResultFilePath = Path.Combine(dir, Path.GetFileName(e.ResultFilePath));
-        var op = e.DownloadOperation;
-        _downloads.Insert(0, ($"d{_downloads.Count + 1}", op, tabId));
-        var id = _downloads[0].Id;
-        op.BytesReceivedChanged += (_, _) => DownloadsChanged(throttle: true);
-        op.StateChanged += async (_, _) =>
-        {
-            _finishedAt[id] = DateTime.UtcNow;
-            // Un onglet ouvert seulement pour ce téléchargement n'a rien à afficher : il se referme une fois le fichier arrivé.
-            // Pas avant : fermer la vue d'origine interrompt le téléchargement (constaté).
-            if (op.State != Microsoft.Web.WebView2.Core.CoreWebView2DownloadState.InProgress
-                && _tabs.Tabs.Count > 1 && _pages.CoreOf(tabId) is { CanGoBack: false, Source: "about:blank" })
-                Close(tabId);
-            DownloadsChanged(throttle: false);
-            await Task.Delay(DockLinger + TimeSpan.FromMilliseconds(200));
-            UpdateDock(); // le fichier terminé quitte l'encart
-        };
-        DownloadsChanged(throttle: false);
-    }
-
-    private void DownloadsChanged(bool throttle)
-    {
-        // La progression arrive très souvent : quatre mises à jour par seconde suffisent.
-        if (throttle && (DateTime.UtcNow - _downloadsPosted).TotalMilliseconds < 250) return;
-        _downloadsPosted = DateTime.UtcNow;
-        Refresh();
-        if (_downloadsOpen) _popup.Post(DownloadsJson(_downloads));
-        UpdateDock();
-    }
-
-    // Encart en bas à droite : les téléchargements en cours, et ceux qui viennent de finir pendant quelques secondes.
-    private static readonly TimeSpan DockLinger = TimeSpan.FromSeconds(6);
-    private readonly Dictionary<string, DateTime> _finishedAt = new();
-    private bool _dockShown;
-    private bool _updateDismissed; // « Plus tard » : l'encart ne reparle plus de la mise à jour, les réglages si
 }

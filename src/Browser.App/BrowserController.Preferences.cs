@@ -12,7 +12,7 @@ public sealed partial class BrowserController
     private void UpdateDock()
     {
         var shown = _settings.FloatingDownloads
-            ? _downloads.Where(d => d.Op.State == Microsoft.Web.WebView2.Core.CoreWebView2DownloadState.InProgress
+            ? _downloads.Where(d => DownloadPending(d.Id,d.Op)
                 || (_finishedAt.TryGetValue(d.Id, out var at) && DateTime.UtcNow - at < DockLinger)).ToList()
             : [];
         var changed = _dockShown != shown.Count > 0;
@@ -32,7 +32,7 @@ public sealed partial class BrowserController
         if (changed) Refresh(); // le bouton de la barre apparaît quand l'encart disparaît, et inversement
     }
 
-    private static string DownloadsJson(IEnumerable<(string Id, Microsoft.Web.WebView2.Core.CoreWebView2DownloadOperation Op, string TabId)> downloads) => JsonSerializer.Serialize(new
+    private string DownloadsJson(IEnumerable<(string Id, Microsoft.Web.WebView2.Core.CoreWebView2DownloadOperation Op, string TabId)> downloads) => JsonSerializer.Serialize(new
     {
         popup = "downloads",
         items = downloads.Select(d => new
@@ -40,8 +40,10 @@ public sealed partial class BrowserController
             id = d.Id,
             name = Path.GetFileName(d.Op.ResultFilePath),
             received = d.Op.BytesReceived,
-            total = d.Op.TotalBytesToReceive,
+            total = d.Op.TotalBytesToReceive>0?(long?)d.Op.TotalBytesToReceive:null,
             state = d.Op.State.ToString(),
+            paused=DownloadPaused(d.Id,d.Op),canceled=_canceledDownloads.Contains(d.Id)||d.Op.State==Microsoft.Web.WebView2.Core.CoreWebView2DownloadState.Interrupted&&d.Op.InterruptReason==Microsoft.Web.WebView2.Core.CoreWebView2DownloadInterruptReason.UserCanceled&&!DownloadPaused(d.Id,d.Op),
+            canResume=!_canceledDownloads.Contains(d.Id)&&d.Op.CanResume,reason=d.Op.InterruptReason.ToString(),
         }),
     });
 
@@ -132,7 +134,7 @@ public sealed partial class BrowserController
         if (_resettingSite || _siteReset is not var (id, origin, session)) return;
         _siteReset = null;
         if (!_popup.IsOpen || _tabs.Tabs.FirstOrDefault(t => t.Id == id)?.SessionId != session || PermissionStore.OriginOf(_pages.CoreOf(id)?.Source ?? "") != origin) return;
-        if (_downloads.Any(d => d.TabId == id && d.Op.State == Microsoft.Web.WebView2.Core.CoreWebView2DownloadState.InProgress))
+        if (_downloads.Any(d => d.TabId == id && DownloadPending(d.Id,d.Op)))
         { Notice(T("Téléchargement en cours", "Download in progress"), T("Attendez sa fin avant de vider les données de ce site.", "Wait for it to finish before clearing this site's data.")); return; }
         _resettingSite = true;
         HidePopup();

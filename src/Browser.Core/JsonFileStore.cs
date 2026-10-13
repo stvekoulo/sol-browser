@@ -4,6 +4,7 @@ namespace Browser.Core;
 
 public sealed class Settings
 {
+    public int NotesArchiveDays { get; set; }
     public bool SolAiEnabled { get; set; }
     private string _solAiModel = "";
     public string SolAiModel { get => _solAiModel; set => _solAiModel = value ?? ""; }

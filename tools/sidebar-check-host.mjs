@@ -5,10 +5,11 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
-export async function sidebarHost(executable) {
-  const base = resolve(`bin/sidebar-check-${Date.now()}`), profile = resolve(base, 'profiles/sidebar-check');
+export async function sidebarHost(executable,{serve=null,downloads=false}={}) {
+  const profileName=`sidebar-check-${Date.now()}`,base = resolve(`bin/${profileName}`), profile = resolve(base, 'profiles',profileName);
   await mkdir(profile, {recursive: true});
   const server = createServer((req, res) => {
+    if(serve?.(req,res))return;
     res.writeHead(200, {'Content-Type': 'text/html'});
     res.end(`<html><head><title>${req.url==='/2'?'Projet Alpha':`Page ${req.url}`}</title></head><body style="background:#edf2e7;font:24px system-ui"><h1>Sol · Sidebar</h1><p>${req.url}</p></body></html>`);
   }).listen(0, '127.0.0.1');
@@ -24,6 +25,7 @@ export async function sidebarHost(executable) {
     Icons: Array(12).fill(icon), PinnedCount:2, ActiveIndex:2,
     Groups:[{Name:'Travail',Color:'#8fa8e8',Icon:'',Collapsed:false},{Name:'Lecture',Color:'#e3cf7a',Icon:'📖',Collapsed:false}], GroupOf:[null,null,0,0,1,1]}));
   const env = {...process.env, NAVIGATEUR_DATA_DIR:base, NAVIGATEUR_DEBUG:'1', WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS:`--remote-debugging-port=${port} --disable-background-timer-throttling --disable-backgrounding-occluded-windows`};
+  if(downloads){env.NAVIGATEUR_TEST_DOWNLOAD_DIR=resolve(base,'downloads');await mkdir(env.NAVIGATEUR_TEST_DOWNLOAD_DIR,{recursive:true});}
   delete env.WEBVIEW2_USER_DATA_FOLDER;
   let app, failure='';
   const connections = [];
@@ -45,7 +47,7 @@ export async function sidebarHost(executable) {
   };
   const launch = async(height=950)=> {
     failure='';
-    app = spawn(resolve(executable),['--profile=sidebar-check',`--bounds=-9000,-9000,1000,${height}`],{windowsHide:true,env,stdio:['ignore','pipe','pipe']});
+    app = spawn(resolve(executable),[`--profile=${profileName}`,`--bounds=-9000,-9000,1000,${height}`],{windowsHide:true,env,stdio:['ignore','pipe','pipe']});
     app.stderr.on('data',data=>failure+=data);app.stdout.on('data',data=>failure+=data);
     const sidebar=await connect('#sidebar');
     await wait(()=>sidebar.evaluate('!!document.querySelector(".sidebar-card")').catch(()=>false),'sidebar ready');

@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {sidebarSortOrder} from '../ui/src/sidebarSortOrder.ts';
+const blocks=[{id:'a',kind:'tab',first:2,last:2},{id:'g',kind:'group',first:3,last:5},{id:'pair',kind:'tab',first:6,last:7},{id:'d',kind:'tab',first:8,last:8}];
+const plan=ids=>sidebarSortOrder(blocks,ids.map(id=>blocks.find(b=>b.id===id)));
+assert.deepEqual(plan(['a','pair','d','g']),{type:'group.move',id:'g',index:9});
+assert.deepEqual(plan(['d','a','g','pair']),{type:'tab.move',id:'d',index:2});
+assert.deepEqual(plan(['a','g','d','pair']),{type:'tab.move',id:'pair',index:8});
+assert.equal(plan(['a','g','pair','d']),null);
+assert.equal(sidebarSortOrder(blocks,[blocks[0],blocks[0],blocks[2],blocks[3]]),null);
+assert.equal(sidebarSortOrder(blocks,blocks.slice(1)),null);
+console.log('PASS sidebar sortable plans: whole groups, split pairs, upward moves, unchanged and stale permutations');

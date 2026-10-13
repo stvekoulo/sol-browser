@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {matchesNote,inView,toggleTask,tagsFrom,references,dirtyNote} from '../ui/src/notesModel.ts';
+const note={id:'a',title:'Note française',text:'Texte #projet/web',tags:['projet/web'],kind:'task',files:['f'],pinned:true,reviewed:false,archived:false,deleted:null,due:null,updated:'2026-10-13T00:00:00Z'};
+assert.equal(matchesNote(note,'"note française" #projet type:task has:file is:pinned after:2026-10-01'),true);
+assert.equal(matchesNote(note,'is:done'),false);assert.equal(matchesNote(note,'before:2026-10-01'),false);
+assert.equal(inView(note,'review'),true);assert.equal(inView({...note,deleted:'today'},'all'),false);assert.equal(inView({...note,deleted:'today'},'trash'),true);
+const source='```md\n- [ ] code\n```\n- [ ] vrai\n1. [ ] second';
+assert.equal(toggleTask(source,0,true),'```md\n- [ ] code\n```\n- [x] vrai\n1. [ ] second');
+assert.equal(toggleTask(source,1,true),'```md\n- [ ] code\n```\n- [ ] vrai\n1. [x] second');
+assert.deepEqual(tagsFrom('Une #idée #projet/web #idée'),['idée','projet/web']);
+assert.deepEqual(references({...note,text:'[[a]] [[inconnu]]'},[note]).map(n=>n.id),['a']);
+assert.equal(dirtyNote({items:[note],draft:note}),false);assert.equal(dirtyNote({items:[note],draft:{...note,tags:['autre']}}),true);
+console.log('Notes: search, filters, references, dirty metadata and checklist source mapping passed');

@@ -29,7 +29,7 @@ public sealed partial class BrowserController
         if (_tabs.Tabs.FirstOrDefault(t => t.Id == tabId) is not { } tab || sessionId == _deletingSession
             || sessionId.Length > 0 && _sessions.Resolve(sessionId).Length == 0) return;
         if (tab.SessionId == sessionId) { if (url is null) _sessions.SetSite(tab.Url, sessionId); HidePopup(); return; }
-        if (_downloads.Any(d => d.TabId == tabId && d.Op.State == Microsoft.Web.WebView2.Core.CoreWebView2DownloadState.InProgress))
+        if (_downloads.Any(d => d.TabId == tabId && DownloadPending(d.Id,d.Op)))
         { Notice(T("Téléchargement en cours", "Download in progress"), T("Attendez sa fin avant de changer la session de cet onglet.", "Wait for it to finish before changing this tab's session.")); return; }
         if (url is null) _sessions.SetSite(tab.Url, sessionId);
         _sessionTargets.Remove(tabId);
@@ -194,7 +194,7 @@ public sealed partial class BrowserController
                 popup = "suggestions",
                 items = items.Select(v => new { url = v.Url, title = v.Title, kind = v.Kind }),
             }), focus: false); // le curseur reste dans la barre d'adresse
-            _bridge.Post(JsonSerializer.Serialize(new { @event = "suggestions", id = tabId, count = items.Count }));
+            _bridge.Post(JsonSerializer.Serialize(new { @event = "suggestions", id = tabId, count = items.Count,items=items.Select(v=>new{url=v.Url,value=v.Kind=="search"?v.Title:v.Url}) }));
         }
 
         async Task AddOnlineSuggestionsAsync(int forSeq, string text, IReadOnlyList<Visit> local)

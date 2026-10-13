@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import MarkdownImage from './MarkdownImage';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -10,13 +10,6 @@ import { send } from './bridge';
 import { t } from './i18n';
 import 'katex/dist/katex.min.css';
 import './markdown.css';
-
-function MarkdownImage({src,alt}:{src?:string;alt?:string}) {
-  const [show,setShow]=useState(false);
-  // Une image distante générée ne contacte son serveur qu'après le choix de l'utilisateur.
-  if(!src || !/^https?:\/\//i.test(src))return <span>{alt}</span>;
-  return show ? <img src={src} alt={alt||''} loading="lazy" referrerPolicy="no-referrer"/> : <button className="pill-action" onClick={()=>setShow(true)}>{t('Afficher l’image','Show image')}{alt?` · ${alt}`:''}</button>;
-}
 
 const schema = {...defaultSchema,attributes:{...defaultSchema.attributes,code:[['className',/^language-./,'math-inline','math-display']]}};
 export default function SolMarkdown({text,onOpen=(url:string)=>send({type:'tab.open',url})}:{text:string;onOpen?:(url:string)=>void}) {

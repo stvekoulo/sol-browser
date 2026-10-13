@@ -4,23 +4,24 @@ import { Icon } from './Icons';
 import { t } from './i18n';
 import { focusTab, middleClose, sidebarMenu } from './sidebarActions';
 import { startSlotDrag } from './useSidebarDrag';
+import {SidebarSort,type SidebarBlock} from './SidebarSort';
 
 export function SidebarTabs({ state, icons }: { state: State; icons: Record<string, string | null | undefined> }) {
   const { tabs, split, activeId } = state;
   const rows = (from: number, to: number) => {
-    const items: ReactNode[] = [];
+    const items: SidebarBlock[] = [];
     for (let i = from; i <= to; i++) {
       const tab = tabs[i], next = i < to ? tabs[i + 1] : undefined;
       if (next && tab.id === split.primaryId && next.id === split.secondaryId) {
-        items.push(<div key={tab.id} className={`sidebar-split-group${split.visible ? ' active' : ''}`} data-kind="tab" data-id={tab.id} data-first={i} data-last={i + 1}>
+        items.push({id:tab.id,kind:"tab",first:i,last:i+1,label:tab.title+" · "+next.title,node:<div key={tab.id} className={`sidebar-split-group${split.visible ? ' active' : ''}`} data-kind="tab" data-id={tab.id} data-first={i} data-last={i + 1}>
           <TabRow tab={tab} index={i} icon={icons[tab.id]} active={tab.id === activeId} paired />
           <TabRow tab={next} index={i + 1} icon={icons[next.id]} active={next.id === activeId} paired />
-        </div>); i++;
-      } else items.push(<TabRow key={tab.id} tab={tab} index={i} icon={icons[tab.id]} active={tab.id === activeId} />);
+        </div>}); i++;
+      } else items.push({id:tab.id,kind:"tab",first:i,last:i,label:tab.title,node:<TabRow key={tab.id} tab={tab} index={i} icon={icons[tab.id]} active={tab.id === activeId} />});
     }
     return items;
   };
-  const items: ReactNode[] = [];
+  const items: SidebarBlock[] = [];
   for (let i = 0; i < tabs.length; i++) {
     if (tabs[i].pinned) continue;
     let end = i;
@@ -33,7 +34,7 @@ export function SidebarTabs({ state, icons }: { state: State; icons: Record<stri
       const members = rows(i, end);
       const expanded = !group.collapsed;
       const active = tabs.slice(i, end + 1).some(tab => tab.id === activeId);
-      items.push(<div key={group.id} className={`tab-group-block${expanded ? '' : ' collapsed'}${active ? ' has-active' : ''}`}
+      items.push({id:group.id,kind:"group",first:i,last:end,label:group.name,node:<div key={group.id} className={`tab-group-block${expanded ? '' : ' collapsed'}${active ? ' has-active' : ''}`}
         data-kind="group" data-id={group.id} data-first={i} data-last={end} style={{ '--group': group.color } as CSSProperties}>
         <div className="tab-group-heading" onContextMenu={e => sidebarMenu('group.menu', group.id, e)}>
           <button className="tab-group-header" aria-expanded={expanded}
@@ -50,13 +51,13 @@ export function SidebarTabs({ state, icons }: { state: State; icons: Record<stri
           <button className="sidebar-item-action" aria-label={t(`Options du groupe ${group.name}`, `Options for group ${group.name}`)} title={t('Options du groupe', 'Group options')}
             onClick={e => sidebarMenu('group.menu', group.id, e)}><Icon d="M3 8h.01M8 8h.01M13 8h.01" size={15} /></button>
         </div>
-        {expanded && <div className="tab-group-tabs">{members}</div>}
-      </div>);
+        {expanded && <div className="tab-group-tabs"><SidebarSort blocks={members}/></div>}
+      </div>});
     }
     i = end;
   }
   return <div className="sidebar-tabs" role="tablist" aria-label={t('Onglets', 'Tabs')} aria-orientation="vertical">
-    {items}
+    <SidebarSort blocks={items}/>
     <button className="sidebar-new-tab" title={t('Nouvel onglet · Ctrl+T', 'New tab · Ctrl+T')} onClick={() => send({ type: 'tab.open' })}>
       <Icon d="M8 3.5v9M3.5 8h9" size={14} /><span>{t('Nouvel onglet', 'New tab')}</span>
     </button>

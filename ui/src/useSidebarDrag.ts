@@ -46,7 +46,7 @@ function targetAt(d: Drag): Drop | undefined {
     {type: 'tab.move', id, index: Number(hit.dataset.tabCount) - 1}, {type: 'group.remove', id}],
     label: t('Ranger hors des groupes', 'Move outside groups')};
   const candidates = kind === 'group'
-    ? [...hit.querySelectorAll<HTMLElement>('.sidebar-tabs > [data-kind]')]
+    ? [...hit.querySelectorAll<HTMLElement>('.sidebar-tabs [data-kind]')].filter(el=>!el.closest('.tab-group-tabs'))
     : slots('tab').filter(el => !el.dataset.pinned && !d.el.contains(el));
   if (kind === 'tab') candidates.push(...hit.querySelectorAll<HTMLElement>('.tab-group-block.collapsed'));
   const valid = candidates.filter(el => el !== d.el && !d.el.contains(el));

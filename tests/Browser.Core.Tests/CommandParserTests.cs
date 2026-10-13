@@ -15,6 +15,15 @@ public class CommandParserTests
         Assert.Equal(new Command("tab.open"), CommandParser.Parse("""{"type":"tab.open"}"""));
         Assert.Equal("https://a.test", CommandParser.Parse("""{"type":"tab.open","url":"https://a.test"}""")!.Url);
     }
+    [Theory]
+    [InlineData("download.pause")]
+    [InlineData("download.resume")]
+    [InlineData("notes.split")]
+    public void Context_actions_require_their_target(string type)
+    {
+        Assert.Null(CommandParser.Parse($$"""{"type":"{{type}}"}"""));
+        Assert.Equal("target",CommandParser.Parse($$"""{"type":"{{type}}","id":"target"}""")!.Id);
+    }
 
     [Fact]
     public void Accepts_host_lifecycle_commands()

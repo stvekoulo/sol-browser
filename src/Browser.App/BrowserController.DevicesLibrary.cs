@@ -168,40 +168,6 @@ public sealed partial class BrowserController
         }), focus: true);
     }
 
-    private string NotesJson() => JsonSerializer.Serialize(new { popup = "notes", items = _notes.Items,
-        draft = _noteDraft, error = _noteError, privateMode = AppPaths.Private, aiEnabled = _settings.SolAiEnabled && _ai.Available }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-
-    private void OpenNotes(double x, double y)
-    {
-        HidePopup();
-        _notesPopup = true;
-        _popup.ShowCentered(430, NotesJson());
-    }
-
-    private void PublishNotes()
-    {
-        var json = NotesJson();
-        if (_notesPopup) _popup.Post(json);
-        foreach (var tab in _tabs.Tabs.Where(t => t.Url == QuickNotes.PageUrl)) _pages.PostStart(tab.Id, json);
-    }
-
-    private async Task ExportNotesAsync()
-    {
-        var text = _notes.Export();
-        if (text.Length == 0) return;
-        HidePopup();
-        try
-        {
-            var picker = new Windows.Storage.Pickers.FileSavePicker
-            { SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary, SuggestedFileName = "Sol notes" };
-            picker.FileTypeChoices.Add(T("Texte", "Text"), [".txt"]);
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(_window));
-            if (await picker.PickSaveFileAsync() is { } file) await Windows.Storage.FileIO.WriteTextAsync(file, text);
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or COMException)
-        { Notice(T("Export impossible", "Export failed"), T("Les notes sont conservées. Choisissez un autre emplacement.", "Your notes are kept. Choose another location.")); }
-    }
-
     private void OpenLibrary(double x, double y, bool history = false)
     {
         // Recliquer l'icône referme le panneau : le clic lui fait d'abord perdre le curseur, donc il vient de se fermer.

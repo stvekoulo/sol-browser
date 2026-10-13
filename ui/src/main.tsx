@@ -20,6 +20,7 @@ import '@fontsource-variable/figtree';
 import '@fontsource-variable/nunito';
 import '@fontsource-variable/lora';
 import './theme.css';
+import './beui.css';
 import './app.css';
 import './sidebar.css';
 import './sidebar-interactions.css';
@@ -27,6 +28,8 @@ import './popup.css';
 import './panel.css';
 import './welcome.css';
 import './motion.css';
+import './beui-sol.css';
+import './beui-workspace.css';
 
 // Le même bundle sert la barre supérieure, la carte latérale (#sidebar), les menus (#popup) et l'encart (#dock).
 const hash = location.hash;

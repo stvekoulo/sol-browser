@@ -1,0 +1,35 @@
+import {useEffect,useRef} from 'react';
+import {useReducedMotion} from 'motion/react';
+import {DownloadIcon} from '@/components/ui/download';
+import {SettingsIcon} from '@/components/ui/settings';
+import {BookTextIcon} from '@/components/ui/book-text';
+import {HistoryIcon} from '@/components/ui/history';
+import {SearchIcon} from '@/components/ui/search';
+import {RefreshCWIcon} from '@/components/ui/refresh-cw';
+import {PanelLeftOpenIcon} from '@/components/ui/panel-left-open';
+import {CopyIcon} from '@/components/ui/copy';
+import {ArrowLeftIcon} from '@/components/ui/arrow-left';
+import {ArrowRightIcon} from '@/components/ui/arrow-right';
+import {XIcon} from '@/components/ui/x';
+import {ArchiveIcon} from '@/components/ui/archive';
+import {PlusIcon} from '@/components/ui/plus';
+import {CheckIcon} from '@/components/ui/check';
+import {AttachFileIcon} from '@/components/ui/attach-file';
+const icons={download:DownloadIcon,settings:SettingsIcon,notes:BookTextIcon,history:HistoryIcon,search:SearchIcon,reload:RefreshCWIcon,sidebar:PanelLeftOpenIcon,copy:CopyIcon,back:ArrowLeftIcon,forward:ArrowRightIcon,close:XIcon,archive:ArchiveIcon,plus:PlusIcon,check:CheckIcon,attach:AttachFileIcon};
+export type IconName=keyof typeof icons;
+type Handle={startAnimation:()=>void;stopAnimation:()=>void};
+export default function AnimatedIcon({name,size=16,className=''}:{name:IconName;size?:number;className?:string}){
+  const root=useRef<HTMLSpanElement>(null),api=useRef<Handle>(null),reduce=useReducedMotion();
+  useEffect(()=>{
+    const el=root.current;if(!el)return;const owner=el.closest<HTMLElement>('button,[role="button"],[role="tab"],summary,a')??el;
+    let reset=0;const preference=window.matchMedia('(prefers-reduced-motion: reduce)');
+    const stop=()=>{clearTimeout(reset);api.current?.stopAnimation();el.dataset.animating='false';};
+    const start=()=>{if(preference.matches||owner.matches(':disabled,[aria-disabled="true"]'))return;clearTimeout(reset);api.current?.startAnimation();el.dataset.animating='true';};
+    const pulse=()=>{start();reset=window.setTimeout(stop,600);};
+    const preferenceChanged=()=>{if(preference.matches)stop();};preference.addEventListener('change',preferenceChanged);
+    owner.addEventListener('mouseenter',start);owner.addEventListener('mouseleave',stop);owner.addEventListener('focusin',start);owner.addEventListener('focusout',stop);owner.addEventListener('pointerdown',pulse);window.addEventListener('blur',stop);
+    return()=>{stop();preference.removeEventListener('change',preferenceChanged);owner.removeEventListener('mouseenter',start);owner.removeEventListener('mouseleave',stop);owner.removeEventListener('focusin',start);owner.removeEventListener('focusout',stop);owner.removeEventListener('pointerdown',pulse);window.removeEventListener('blur',stop);};
+  },[name,reduce]);
+  const Component=icons[name];
+  return <span ref={root} aria-hidden="true" data-icon={name} className={`sol-animated-icon ${className}`} style={{width:size,height:size}}><Component ref={api} size={size}/></span>;
+}

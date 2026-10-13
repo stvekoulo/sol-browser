@@ -137,7 +137,7 @@ try {
     assert.ok(layout.footer<=layout.card+1,'footer visible at every scale');
     assert.ok(layout.overflow<=1,'no horizontal scroll');
     assert.ok(layout.buttons.every(b=>b.left>=layout.left && b.right<=layout.right+1),'footer buttons within sidebar');
-    assert.equal(layout.buttons.length,5,'split menu available in footer');
+    assert.equal(layout.buttons.length,6,'notes and split menu available in footer');
   }
   await command({type:'split.close'});
   await command({type:'settings.set',id:'theme',index:2}); await delay(200);
