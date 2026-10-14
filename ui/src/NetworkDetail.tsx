@@ -1,3 +1,5 @@
+import {Button} from '@/components/motion/button/base';
+import SolTabs from './SolTabs';
 import { useEffect, useState } from 'react';
 import { t } from './i18n';
 import { Icon } from './Icons';
@@ -21,19 +23,21 @@ export function DetailPane({ detail, onClose, onEdit }: { detail: Detail; onClos
       <div className="net-detail-head">
         <span className="net-method">{detail.method}</span>
         <span className="net-detail-url">{detail.url}</span>
-        <button className="net-close" aria-label={t('Fermer le détail', 'Close detail')} onClick={onClose}>
-          <Icon d="M4.5 4.5l7 7M11.5 4.5l-7 7" size={12} />
-        </button>
+        <Button variant="ghost" size="sm" whileHover={undefined} className="net-close" aria-label={t('Fermer le détail', 'Close detail')} onClick={onClose}>
+          <Icon name="close" size={12} />
+        </Button>
       </div>
       <div className="net-detail-actions">
-        <button className="pill-action net-edit" onClick={onEdit}>{t('Modifier et renvoyer','Edit and resend')}</button>
+        <Button variant="ghost" size="sm" whileHover={undefined} className="pill-action net-edit" onClick={onEdit}><Icon name="edit" size={14}/>{t('Modifier et renvoyer','Edit and resend')}</Button>
         <CopyAction label={t('Copier l’URL','Copy URL')} text={detail.url}/>
         <CopyAction label="cURL (Bash)" text={toCurl(detail)}/>
       </div>
       <Section title={t('Général', 'General')}>
         <Pairs pairs={{ [t('État', 'Status')]: detail.failed ? `${t('Échec', 'Failed')} (${detail.failed})` : String(detail.status || '…'), [t('Type', 'Type')]: detail.mime || '—' }} />
       </Section>
-      <div className="popup-segment net-filters net-detail-tabs">{(['response','headers','request'] as const).map(key=><button key={key} className={'popup-seg-btn'+(tab===key?' active':'')} aria-pressed={tab===key} onClick={()=>setTab(key)}>{key==='response'?t('Réponse','Response'):key==='headers'?t('En-têtes','Headers'):t('Corps envoyé','Request body')}</button>)}</div>
+      <SolTabs className="net-filters net-detail-tabs" value={tab} change={value=>setTab(value as typeof tab)} label={t('Détail de la requête','Request detail')} items={[
+        {value:'response',label:t('Réponse','Response')},{value:'headers',label:t('En-têtes','Headers')},{value:'request',label:t('Corps envoyé','Request body')}
+      ]}/>
       {tab==='response'&&<Section title={t('Réponse', 'Response')}>
         {note && <p className="net-note">{note}</p>}
         {detail.body&&<CopyAction label={t('Copier la réponse','Copy response')} text={pretty(detail.body,detail.mime)}/>}
@@ -60,10 +64,10 @@ export function DetailPane({ detail, onClose, onEdit }: { detail: Detail; onClos
 export function CopyAction({text,label}:{text:string;label:string}) {
   const [copied,setCopied]=useState(false),[failed,setFailed]=useState(false);
   useEffect(()=>{setCopied(false);setFailed(false)},[text]);
-  return <button className="pill-action net-copy" disabled={!text} title={label} onClick={async()=>{
+  return <Button variant="ghost" size="sm" whileHover={undefined} className="pill-action net-copy" disabled={!text} title={label} onClick={async()=>{
     try {await navigator.clipboard.writeText(text);setCopied(true);setFailed(false)}
     catch {setFailed(true)}
-  }}>{failed?t('Copie indisponible','Copy unavailable'):copied?t('Copié','Copied'):label}</button>;
+  }}><Icon name={copied?'check':'copy'} size={14}/>{failed?t('Copie indisponible','Copy unavailable'):copied?t('Copié','Copied'):label}</Button>;
 }
 
 // Du JSON est remis en forme pour être lu ; tout le reste est affiché tel quel.

@@ -35,7 +35,11 @@ import {PauseIcon} from '@/components/ui/pause';
 import {PlayIcon} from '@/components/ui/play';
 import {FileTextIcon} from '@/components/ui/file-text';
 import {FolderOpenIcon} from '@/components/ui/folder-open';
-const icons={download:DownloadIcon,settings:SettingsIcon,notes:BookTextIcon,history:HistoryIcon,search:SearchIcon,reload:RefreshCWIcon,sidebar:PanelLeftOpenIcon,copy:CopyIcon,back:ArrowLeftIcon,forward:ArrowRightIcon,close:XIcon,archive:ArchiveIcon,plus:PlusIcon,check:CheckIcon,attach:AttachFileIcon,
+import {UserIcon} from '@/components/ui/user';
+import {UserPlusIcon} from '@/components/ui/user-plus';
+import {FingerprintIcon} from '@/components/ui/fingerprint';
+import {DeleteIcon} from '@/components/ui/delete';
+const icons={user:UserIcon,userAdd:UserPlusIcon,private:FingerprintIcon,delete:DeleteIcon,download:DownloadIcon,settings:SettingsIcon,notes:BookTextIcon,history:HistoryIcon,search:SearchIcon,reload:RefreshCWIcon,sidebar:PanelLeftOpenIcon,copy:CopyIcon,back:ArrowLeftIcon,forward:ArrowRightIcon,close:XIcon,archive:ArchiveIcon,plus:PlusIcon,check:CheckIcon,attach:AttachFileIcon,
   save:HardDriveDownloadIcon,group:LayersIcon,groupAdd:FolderPlusIcon,ungroup:FolderMinusIcon,tab:LayoutPanelTopIcon,edit:SquarePenIcon,session:BriefcaseBusinessIcon,select:FrameIcon,undo:UndoIcon,redo:RedoIcon,sleep:MoonIcon,expand:ChevronsUpDownIcon,collapse:ChevronsDownUpIcon,tools:TerminalIcon,ai:SparklesIcon,network:ChartNoAxesColumnIncreasingIcon,pause:PauseIcon,play:PlayIcon,file:FileTextIcon,folder:FolderOpenIcon};
 export type IconName=keyof typeof icons;
 type Handle={startAnimation:()=>void;stopAnimation:()=>void};

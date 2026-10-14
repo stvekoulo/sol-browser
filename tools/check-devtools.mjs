@@ -55,7 +55,7 @@ try{
   await host.wait(async()=>(await network()).items.some(r=>r.status===404&&r.ms!==null),'network rows captured');
   assert.ok(!JSON.stringify(await network()).includes('fixture-secret'),'known secrets redacted from list and console');
   await query('GET 404');assert.equal(await panel.evaluate('document.querySelectorAll(".net-row").length'),1,'URL/method/status search');
-  await query('');await panel.evaluate(`document.querySelectorAll('.net-controls .net-filters')[1].querySelectorAll('button')[1].click()`);
+  await query('');await panel.evaluate(`document.querySelectorAll('.net-controls .net-filters')[1].querySelectorAll('[role=tab]')[1].click()`);
   await panel.evaluate(`document.querySelector('.net-row').click()`);
   await host.wait(()=>panel.evaluate('!!document.querySelector(".net-detail")'),'detail opens');
   await panel.evaluate(`Array.from(document.querySelectorAll('.net-detail .net-copy')).find(b=>b.textContent.includes('cURL')).click()`);
@@ -68,7 +68,7 @@ try{
   assert.ok(!(await network()).console.some(line=>line.text.includes('not captured')),'paused console does not add messages');
   await click('[data-action="pause"]');await host.wait(async()=>!(await network()).paused,'capture resumed');
   await page.evaluate(`fetch('/resumed').then(r=>r.text())`);await host.wait(async()=>(await network()).items.some(r=>r.url.endsWith('/resumed')),'resumed capture records requests');
-  await panel.evaluate(`document.querySelector('.net-preserve input').click()`);await host.wait(async()=>(await network()).preserve===false,'preserve toggle');
+  await panel.evaluate(`document.querySelector('.net-preserve [role=checkbox]').click()`);await host.wait(async()=>(await network()).preserve===false,'preserve toggle');
   await click('[data-action="reload"]');await host.wait(()=>page.evaluate('!!document.querySelector("#design-target")').catch(()=>false),'reload done');
   await host.wait(async()=>(await network()).items.length>0&&!(await network()).items.some(r=>r.url.includes('/resumed')),'reload clears unpreserved requests');
   await command({type:'network.replay',id,input:JSON.stringify({Url:origin+'/replay',Method:'POST',Headers:{'Content-Type':'application/json'},Body:'{"ok":true}',Status:200,Delay:0,Mode:'response'})});
@@ -77,6 +77,10 @@ try{
     await command({type:'settings.set',id:'theme',index:theme});await command({type:'settings.set',id:'uiScale',index:scale});await delay(100);
     assert.ok(await panel.evaluate('document.documentElement.scrollWidth<=innerWidth'),'network fits both themes and all scales');
   }
+  await panel.call('Emulation.setDeviceMetricsOverride',{width:480,height:420,deviceScaleFactor:1,mobile:false});
+  assert.ok(await panel.evaluate('document.documentElement.scrollWidth<=innerWidth'),'network fits a narrow viewport');
+  assert.ok(await panel.evaluate('getComputedStyle(document.querySelector(".net-preserve [role=checkbox]")).borderTopWidth!=="0px"'),'checkbox remains visible');
+  await panel.call('Emulation.clearDeviceMetricsOverride');
   const shot=await panel.call('Page.captureScreenshot',{format:'png'});await writeFile(resolve(host.base,'devtools-network.png'),Buffer.from(shot.data,'base64'));
   await command({type:'network.toggle'});
   await command({type:'design.toggle',id});await host.wait(()=>page.evaluate('!!document.getElementById("sol-design-view")'),'design enabled');

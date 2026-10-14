@@ -1,3 +1,5 @@
+import {Button} from '@/components/motion/button/base';
+import SolTabs from './SolTabs';
 import SettingToggle from './SettingToggle';
 import {useState,useRef,useEffect,type RefObject} from 'react';
 import {send,formatDomain} from './bridge';
@@ -55,14 +57,9 @@ export function WallpaperSettings({ photo, daily, photos }: { photo: number; dai
   return (
     <div className="theme-row wallpaper-settings">
       <span className="row-title">{t('Image du nouvel onglet', 'New tab image')}</span>
-      <div className="popup-segment" role="radiogroup" aria-label={t('Image du nouvel onglet', 'New tab image')}>
-        <button role="radio" aria-checked={!daily} className={`popup-seg-btn${!daily ? ' active' : ''}`} onClick={() => send({ type: 'settings.set', id: 'wallpaperDaily', index: 0 })}>
-          {t('Image choisie', 'Chosen image')}
-        </button>
-        <button role="radio" aria-checked={daily} className={`popup-seg-btn${daily ? ' active' : ''}`} onClick={() => send({ type: 'settings.set', id: 'wallpaperDaily', index: 1 })}>
-          {t('Nouvelle chaque jour', 'New every day')}
-        </button>
-      </div>
+      <SolTabs value={daily?'daily':'chosen'} label={t('Image du nouvel onglet','New tab image')} change={value=>send({type:'settings.set',id:'wallpaperDaily',index:value==='daily'?1:0})} items={[
+        {value:'chosen',label:t('Image choisie','Chosen image')},{value:'daily',label:t('Nouvelle chaque jour','New every day')}
+      ]}/>
       {daily ? (
         <p className="row-hint">{t('Une photo différente chaque jour, parmi la sélection.', 'A different photo every day, from the selection.')}</p>
       ) : (
@@ -70,18 +67,18 @@ export function WallpaperSettings({ photo, daily, photos }: { photo: number; dai
           <p className="row-hint">
             {current ? t(`Photo de ${current.author}.`, `Photo by ${current.author}.`) : t('Image de Sol.', 'Sol’s image.')}
           </p>
-          <button className="pill-action" aria-expanded={choosing} onClick={() => setChoosing(!choosing)}>
+          <Button variant="ghost" size="sm" whileHover={undefined} className="pill-action" aria-expanded={choosing} onClick={() => setChoosing(!choosing)}>
             {choosing ? t('Masquer les images', 'Hide images') : t('Choisir une image', 'Choose an image')}
-          </button>
+          </Button>
           {choosing && (
             <div className="wallpaper-grid" role="radiogroup" aria-label={t('Images proposées', 'Available images')}>
-              <button role="radio" aria-checked={photo === 0} className={`wallpaper-tile${photo === 0 ? ' active' : ''}`} title={t('Image de Sol', 'Sol’s image')} onClick={() => pick(0)}>
+              <Button variant="ghost" size="sm" whileHover={undefined} role="radio" aria-checked={photo === 0} className={`wallpaper-tile${photo === 0 ? ' active' : ''}`} title={t('Image de Sol', 'Sol’s image')} onClick={() => pick(0)}>
                 <img src={solWallpaper} alt={t('Image de Sol', 'Sol’s image')} draggable={false} />
-              </button>
+              </Button>
               {photos.map(p => (
-                <button key={p.id} role="radio" aria-checked={photo === p.id} className={`wallpaper-tile${photo === p.id ? ' active' : ''}`} title={t(`Photo de ${p.author}`, `Photo by ${p.author}`)} onClick={() => pick(p.id)}>
+                <Button variant="ghost" size="sm" whileHover={undefined} key={p.id} role="radio" aria-checked={photo === p.id} className={`wallpaper-tile${photo === p.id ? ' active' : ''}`} title={t(`Photo de ${p.author}`, `Photo by ${p.author}`)} onClick={() => pick(p.id)}>
                   <img src={p.thumb} alt={t(`Photo de ${p.author}`, `Photo by ${p.author}`)} loading="lazy" draggable={false} />
-                </button>
+                </Button>
               ))}
             </div>
           )}

@@ -22,3 +22,23 @@
 .sol-extension-available{display:flex!important;flex-direction:row!important;align-items:center}.sol-extension-available .setting-text{flex:1;min-width:0}
 .sol-extension-update{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.sol-extension-update .row-sub{flex:1;min-width:120px}
 .sol-remove-extension{color:var(--text-dim)!important}.sol-remove-extension:hover{color:#e5484d!important}
+
+.profiles-popup .popup-header{justify-content:flex-start;display:flex;align-items:center;gap:8px;padding:8px 10px 12px}
+.sol-account-list>.sol-profile-card{padding:4px!important;gap:0!important;border-radius:18px!important;background:transparent;border-color:transparent;box-shadow:none}
+.sol-account-list>.sol-profile-card.current{background:var(--bg-pill-solid);border-color:var(--border-card);box-shadow:var(--shadow-pill-elevated)}
+.sol-profile-card .profile-pick{padding:8px 6px!important;gap:9px!important;min-width:0}
+.sol-profile-card .profile-avatar{width:30px;height:30px;flex:none;display:grid;place-items:center;border-radius:11px;background:var(--bg-tab-hover);font-size:14px}
+.profiles-popup>.row{margin-top:4px;min-height:38px}
+.wallpaper-grid .wallpaper-tile{padding:0!important;height:auto!important;min-width:0;overflow:hidden}
+.net .net-row{display:grid;justify-content:normal;height:auto;white-space:normal;font:inherit;border-radius:10px}
+.net .net-icon,.net .net-close{padding:0;min-width:32px;max-width:34px;display:flex}
+.net .pill-action{height:auto;min-height:28px;font:inherit;white-space:normal}
+.net .sol-tabs{min-width:0;max-width:100%}.net .sol-tab{font-size:12px;gap:6px;padding:6px 10px;min-height:30px}
+.net-bar{flex-wrap:wrap;gap:6px}.net-bar>.sol-tabs{flex:1;min-width:240px}.net-bar>.net-space{display:none}
+.net-controls .sol-tabs-wrap{max-width:100%}.net-controls>.sol-tabs{flex:none}
+@media(max-width:700px){.net-bar>.sol-tabs{order:2;flex-basis:100%;min-width:0}.net-title{flex:1}.net-detail{width:48%;padding:8px}.net-detail-actions>*{max-width:100%}.net-row,.net-columns{grid-template-columns:34px 48px minmax(90px,1fr) 50px 56px 55px;gap:5px}.net-list{overflow:auto}.net-row,.net-columns{min-width:420px}}
+
+.net .net-search{background:none;padding:0;border-radius:0;min-width:150px}
+.net .net-search .sol-popup-input-field{height:34px!important;background:var(--bg-tab-hover)!important}
+.net-preserve [role=checkbox]{width:18px;height:18px;min-width:18px;padding:0;border:1px solid var(--text-dim);border-radius:6px;background:transparent;color:var(--text)}
+.net-preserve [role=checkbox][aria-checked=true]{background:var(--accent);border-color:var(--accent);color:var(--page-bg)}
