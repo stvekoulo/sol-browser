@@ -54,3 +54,5 @@ const firstPaint = new MutationObserver(() => {
 firstPaint.observe(container, { childList: true });
 const root = createRoot(container);
 root.render(hash === '#notes' ? <NotesPage /> : hash === '#capture' ? <Capture /> : hash === '#start' ? <Start /> : hash === '#welcome' ? <Welcome /> : hash === '#panel' ? <Panel /> : hash === '#popup' ? <Popup /> : hash === '#dock' ? <Dock /> : hash === '#sidebar' ? <Sidebar /> : <App />);
+import './beui-panels.css';
+import './notes-responsive.css';

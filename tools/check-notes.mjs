@@ -11,10 +11,11 @@ let sidebar,page;
 const cmd=(target,c)=>target.evaluate(`chrome.webview.postMessage(${JSON.stringify(JSON.stringify(c))})`);
 const state=()=>page.evaluate('window.__notes');
 const click=selector=>page.evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
-const button=text=>page.evaluate(`(()=>{const b=[...document.querySelectorAll('button')].find(b=>[...b.childNodes].filter(n=>n.nodeType===Node.TEXT_NODE||n.nodeType===Node.ELEMENT_NODE&&n.getAttribute('aria-hidden')!=='true').map(n=>n.textContent).join('').trim()===${JSON.stringify(text)}&&b.getBoundingClientRect().height);if(!b)throw Error('button '+${JSON.stringify(text)});b.click()})()`);
+const button=text=>page.evaluate(`(()=>{const b=[...document.querySelectorAll('button')].find(b=>[...b.childNodes].filter(n=>n.nodeType===Node.TEXT_NODE||n.nodeType===Node.ELEMENT_NODE&&n.getAttribute('aria-hidden')!=='true').map(n=>n.textContent).join('').trim()===${JSON.stringify(text)}&&b.getBoundingClientRect().height&&!b.closest('details:not([open])'));if(!b)throw Error('button '+${JSON.stringify(text)});b.click()})()`);
 const input=(selector,value)=>page.evaluate(`(()=>{const el=document.querySelector(${JSON.stringify(selector)});el.focus();Object.getOwnPropertyDescriptor(el instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:HTMLInputElement.prototype,'value').set.call(el,${JSON.stringify(value)});el.dispatchEvent(new Event('input',{bubbles:true}))})()`);
 const connect=async()=>{
   page=await host.connect('https://start.sol/index.html#notes');
+  await page.call('Emulation.setDeviceMetricsOverride',{width:1280,height:800,deviceScaleFactor:1,mobile:false});
   await host.wait(()=>page.evaluate(`document.readyState==='complete'&&document.title==='Notes — Sol'`).catch(()=>false),'notes document loaded');
   await page.evaluate(`chrome.webview.addEventListener('message',e=>{if(e.data.popup==='notes')window.__notes=e.data});chrome.webview.postMessage('{"type":"notes.ready"}')`);
   await host.wait(()=>state().then(s=>s?.items.length),'notes hydrated');

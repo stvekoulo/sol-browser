@@ -25,11 +25,12 @@ public sealed class SidebarHost(WebView2 sidebar, ColumnDefinition column, Actio
     private const float CardRadius = 22; // rayon de la carte (--radius-card)
     private const double CardMargin = 10; // marge de la carte dans sa colonne (sidebar.css)
     private const double EdgeZone = 16; // largeur de la bande, au bord gauche, qui fait apparaître la carte fermée
-    private static readonly TimeSpan In = TimeSpan.FromMilliseconds(220), Out = TimeSpan.FromMilliseconds(180); // durées de motion.css
+    private static readonly TimeSpan MotionFallback = TimeSpan.FromMilliseconds(1500);
 
     private bool _pinned = true; // au démarrage, la carte est ouverte dans sa colonne
     private bool _peeking;
     private int _step; // invalide une fin d'animation dépassée par une nouvelle action
+    private string? _pending;
 
     /// <summary>Bouton de la barre : épingle ou ferme. Renvoie le nouvel état.</summary>
     public bool Toggle()
@@ -55,12 +56,10 @@ public sealed class SidebarHost(WebView2 sidebar, ColumnDefinition column, Actio
         var step = ++_step;
         Float();
         sidebar.Visibility = Visibility.Visible;
-        post("""{"event":"sidebar-enter"}""");
-        if (!dockAfter) return;
-        await Task.Delay(In);
-        if (step != _step) return;
-        Dock();
-        column.Width = new GridLength(Width); // la page se réduit une fois, la carte déjà en place
+        _pending = dockAfter ? "dock" : "peek";
+        post($$"""{"event":"sidebar-enter","count":{{step}}}""");
+        await Task.Delay(MotionFallback); // la vue peut ne pas être encore prête au premier lancement
+        AnimationFinished(step);
     }
 
     private async void Leave()
@@ -68,11 +67,20 @@ public sealed class SidebarHost(WebView2 sidebar, ColumnDefinition column, Actio
         var step = ++_step;
         Float();
         column.Width = new GridLength(0); // la page s'étend tout de suite sous la carte qui s'en va
-        post("""{"event":"sidebar-leave"}""");
-        await Task.Delay(Out);
-        if (step != _step) return;
-        sidebar.Visibility = Visibility.Collapsed;
+        _pending = "hide";
+        post($$"""{"event":"sidebar-leave","count":{{step}}}""");
+        await Task.Delay(MotionFallback);
+        AnimationFinished(step);
+    }
+
+    public void AnimationFinished(int step)
+    {
+        if (step != _step || _pending is not { } pending) return;
+        _pending = null;
+        if (pending == "peek") return;
+        if (pending == "hide") sidebar.Visibility = Visibility.Collapsed;
         Dock();
+        if (pending == "dock") column.Width = new GridLength(Width);
     }
 
     private void Float()
@@ -90,6 +98,7 @@ public sealed class SidebarHost(WebView2 sidebar, ColumnDefinition column, Actio
 
     private void Dock()
     {
+        _pending = null;
         Grid.SetColumnSpan(sidebar, 1);
         Canvas.SetZIndex(sidebar, 0);
         sidebar.HorizontalAlignment = HorizontalAlignment.Stretch;

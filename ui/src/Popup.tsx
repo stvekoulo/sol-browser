@@ -3,6 +3,7 @@ import {interfaceScale,onMessage,send} from './bridge';
 import {useLang} from './i18n';
 import type {Content} from './PopupTypes';
 import PopupViews from './PopupViews';
+import {MorphingModal} from '@/components/motion/morphing-modal';
 export default function Popup() {
   const [content, setContent] = useState<Content | null>(null);
   const [selected, setSelected] = useState(-1);
@@ -61,5 +62,5 @@ export default function Popup() {
   }, [content, settingsSection]);
 
 
-return content?<PopupViews content={content} rootRef={root} opening={opening} selected={selected} settingsSection={settingsSection} setSettingsSection={setSettingsSection}/>:null;
+return content?<MorphingModal embedded viewId={`${content.popup}:${opening}`} onClose={()=>send({type:'popup.close'})} className="beui-native-panel"><PopupViews content={content} rootRef={root} opening={opening} selected={selected} settingsSection={settingsSection} setSettingsSection={setSettingsSection}/></MorphingModal>:null;
 }

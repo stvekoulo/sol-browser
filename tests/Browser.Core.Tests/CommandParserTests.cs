@@ -3,6 +3,13 @@ using Browser.Core;
 public class CommandParserTests
 {
     [Fact]
+    public void Sidebar_completion_requires_an_integer_step()
+    {
+        Assert.Equal(new Command("sidebar.motion.done", Index: 3), CommandParser.Parse("""{"type":"sidebar.motion.done","index":3}"""));
+        Assert.Null(CommandParser.Parse("""{"type":"sidebar.motion.done"}"""));
+        Assert.Null(CommandParser.Parse("""{"type":"sidebar.motion.done","index":1.5}"""));
+    }
+    [Fact]
     public void Parses_a_valid_command()
     {
         var c = CommandParser.Parse("""{"type":"tab.move","id":"t3","index":1}""");

@@ -20,6 +20,8 @@ export interface MorphingModalProps {
   /** "bottom" anchors to the viewport bottom (mobile-like). "center" centers vertically. */
   placement?: "bottom" | "center";
   className?: string;
+  /** Use the native host's measured frame instead of a second viewport overlay. */
+  embedded?: boolean;
 }
 
 export function MorphingModal({
@@ -28,6 +30,7 @@ export function MorphingModal({
   children,
   placement = "bottom",
   className,
+  embedded = false,
 }: MorphingModalProps) {
   const open = viewId !== null;
   const reduce = useReducedMotion();
@@ -35,13 +38,17 @@ export function MorphingModal({
   const enterScale = reduce ? 1 : 0.97;
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || embedded) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = prev;
     };
-  }, [open]);
+  }, [open, embedded]);
+
+  if (embedded) return open ? <motion.div key={viewId} data-slot="morphing-modal" className={className}
+    initial={reduce ? {opacity:0} : {opacity:0,y:8,scale:0.985}}
+    animate={{opacity:1,y:0,scale:1}} transition={{duration:reduce?0.08:0.18,ease:EASE_OUT}}>{children}</motion.div> : null;
 
   // Mounted only while open, and while open the chrome is two fixed siblings
   // rather than one wrapper: the backdrop spans the viewport edges but carries

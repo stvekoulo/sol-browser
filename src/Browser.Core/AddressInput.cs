@@ -8,8 +8,9 @@ public static class AddressInput
 
     public static string Resolve(string input, string searchUrlTemplate)
     {
-        if (input.Trim().TrimEnd('/').Equals("sol://notes", StringComparison.OrdinalIgnoreCase)) return QuickNotes.PageUrl;
         var text = input.Trim();
+        if (text.Equals("/notes", StringComparison.OrdinalIgnoreCase) || text.Equals(":notes", StringComparison.OrdinalIgnoreCase)
+            || text.TrimEnd('/').Equals("sol://notes", StringComparison.OrdinalIgnoreCase)) return QuickNotes.PageUrl;
         if (Schemes.Any(s => text.StartsWith(s, StringComparison.OrdinalIgnoreCase))) return text;
 
         // « :3000 » : le serveur de développement de cet ordinateur.

@@ -42,16 +42,7 @@
 }
 .dock { animation: rise 240ms var(--ease-out) both; }
 
-/* Carte latérale : elle glisse depuis le bord gauche à l'ouverture, et y retourne à la fermeture.
-   Durées reprises par SidebarHost.cs, qui attend la fin du mouvement. */
-@keyframes slide-in {
-  from { opacity: 0; transform: translateX(-18px); }
-}
-@keyframes slide-out {
-  to { opacity: 0; transform: translateX(-18px); }
-}
-.sidebar-card.entering { animation: slide-in 220ms var(--ease-out) both; }
-.sidebar-card.leaving { animation: slide-out 180ms var(--ease-out) both; }
+/* beUI anime la carte ; l'hôte attend son accusé de fin avant de la masquer. */
 /* Pendant ces mouvements, les onglets ne rejouent pas leur propre apparition. */
 .sidebar-card:is(.entering, .leaving) :is(.sidebar-tab, .sidebar-split-group) { transition: none; }
 
@@ -69,8 +60,6 @@
   .pinned-pill:hover { transform: none; }
   @keyframes arrive { from { opacity: 0; } }
   @keyframes rise { from { opacity: 0; } }
-  @keyframes slide-in { from { opacity: 0; } }
-  @keyframes slide-out { to { opacity: 0; } }
   @starting-style { .sidebar-tab, .sidebar-split-group { translate: 0 0; } }
 }
 

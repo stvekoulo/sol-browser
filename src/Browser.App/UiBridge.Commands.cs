@@ -29,6 +29,11 @@ public sealed partial class UiBridge
             }
             if (CommandParser.Parse(json) is { } command)
             {
+                if (command.Type == "sidebar.motion.done")
+                {
+                    if (target == sidebar && command.Index is { } step) SidebarHost?.AnimationFinished(step);
+                    return;
+                }
                 if (command.Type == "ui.tooltip")
                 {
                     tooltip.IsOpen = false;

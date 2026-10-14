@@ -61,6 +61,20 @@ try{
   await page.evaluate(`document.querySelector(${JSON.stringify('.sol-note-actions button[aria-label="Actions de la note"]')}).click()`);await delay(400);
   assert.equal(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),true,'notes and expanded actions fit narrow view');
   await screenshot(page,'notes-actions-small');
+  await page.evaluate(`document.querySelector('.notes-filter-toggle').focus();document.querySelector('.notes-filter-toggle').click()`);
+  await host.wait(()=>page.evaluate('!!document.querySelector("[role=dialog] .notes-browser")'),'notes organization accessible from narrow editor');
+  await host.wait(()=>page.evaluate('document.querySelector("[role=dialog]")?.contains(document.activeElement)'),'navigation modal takes focus');
+  await screenshot(page,'notes-navigation-small');
+  await page.evaluate(`document.querySelector('[role=dialog] .note-tag-row summary').click();[...document.querySelectorAll('[role=dialog] .note-tag-row button')].find(b=>b.textContent.includes('Changer l’icône')).click()`);
+  await host.wait(()=>page.evaluate('document.activeElement.getAttribute("aria-label")==="Emoji ou symbole"'),'nested tag icon modal focus');
+  await press(page,'Escape',27);await host.wait(()=>page.evaluate('document.querySelectorAll("[role=dialog]").length===1'),'Escape closes only nested modal');
+  await press(page,'Escape',27);await host.wait(()=>page.evaluate('!document.querySelector("[role=dialog]")'),'notes navigation Escape');
+  assert(await page.evaluate('document.activeElement.classList.contains("notes-filter-toggle")'),'focus returned to note editor');
+  await page.call('Emulation.setDeviceMetricsOverride',{width:960,height:700,deviceScaleFactor:1,mobile:false});
+  await host.wait(()=>page.evaluate('getComputedStyle(document.querySelector(".notes-collection")).display!=="none"'),'medium notes shows list and editor');
+  assert(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),'medium notes fits');
+  assert(await page.evaluate('(()=>{const card=document.querySelector(".notes-preview");return card.scrollHeight<=card.clientHeight+1})()'),'note preview content fits its card');
+  await screenshot(page,'notes-editor-medium');
   const icon='[data-action="notes.manage"] [data-icon="notes"]';
   await sidebar.evaluate(`document.querySelector('${icon}').closest('button').dispatchEvent(new MouseEvent('mouseenter'))`);
   assert.equal(await sidebar.evaluate(`document.querySelector('${icon}').dataset.animating`),'true');
@@ -69,5 +83,5 @@ try{
   assert.equal(await sidebar.evaluate(`document.querySelector('${icon}').dataset.animating`),'false','reduced motion stops icon animation');
   assert((await readFile('ui/dist/licenses/third-party.txt','utf8')).includes('pqoqubbw'));
   console.log(JSON.stringify({passed:'native sortable keyboard and focus; beUI command search and settings transition; settings tabs keyboard; notes layouts and actions; morphing modal focus/Escape/rename; mobile action rail; animated icons and reduced motion; licenses',evidence:host.base}));
-}catch(error){if(popup)console.error('POPUP',await popup.evaluate('document.body.innerText').catch(()=>null));if(page)console.error('NOTES',await page.evaluate('({text:document.body.innerText,focus:document.activeElement.tagName,label:document.activeElement.getAttribute("aria-label")})').catch(()=>null));throw error;}
+}catch(error){if(popup)console.error('POPUP',await popup.evaluate('document.body.innerText').catch(()=>null));if(page)console.error('NOTES',await page.evaluate('({focus:document.activeElement.tagName,label:document.activeElement.getAttribute("aria-label"),dialogs:[...document.querySelectorAll("[role=dialog]")].map(d=>({label:d.getAttribute("aria-label"),inert:!!d.closest("[inert]"),fields:[...d.querySelectorAll("input,button")].slice(0,5).map(el=>({tag:el.tagName,box:el.getClientRects().length,visible:el.checkVisibility(),label:el.getAttribute("aria-label"),type:el.type}))}))})').catch(()=>null));throw error;}
 finally{if(sidebar)await host.close(sidebar).catch(()=>{});await host.dispose();}

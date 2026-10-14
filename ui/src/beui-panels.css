@@ -1,0 +1,23 @@
+.beui-native-panel{width:100%;min-width:0;transform-origin:top center}
+.beui-native-panel .popup.arriving>*,.beui-native-panel .popup.arriving>.popup-list>*{animation:none}
+.beui-native-panel button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.beui-native-panel .row,.beui-native-panel .profile-pick{justify-content:flex-start;white-space:normal;font:inherit}
+.beui-native-panel .pill-action{font:500 12px var(--font);height:auto;min-height:28px;white-space:normal}
+.sol-account-list{gap:6px;padding:2px;max-height:min(400px,65vh)}
+.sol-account-list>.profile-row>.relative.z-10{display:flex;align-items:center;gap:6px;width:100%;min-width:0}
+.sol-account-list .profile-row{min-width:0;gap:6px}
+.sol-account-list .profile-edit,.sol-account-list .profile-delete{padding:0;min-width:26px}
+.sol-account-hover{background:var(--bg-tab-hover)!important;border-radius:16px!important}
+.profile-pick:disabled{opacity:1}.session-entry.current>.relative.z-10>.profile-row>.row{background:var(--bg-pill-solid);box-shadow:var(--shadow-pill-elevated)}
+.sol-account-list .row{flex:1;min-width:0}.sol-account-list .row-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.session-avatar{background:var(--bg-tab-hover);border-radius:9px;padding:4px;box-sizing:content-box}
+.sol-popup-input{width:100%;min-width:0}.session-edit>.sol-popup-input{flex:1 1 100%}
+.sol-popup-input-field{height:38px!important;background:var(--bg-pill-solid)!important;border:1px solid var(--border-strong)!important;box-shadow:none!important}
+.sol-popup-input-field[data-state=focused]{outline:2px solid var(--accent);outline-offset:-2px}
+.sol-popup-input input{width:100%;height:100%!important;min-width:0;border:0!important;background:transparent!important;box-shadow:none!important;outline:none!important;padding:0 14px!important;font:inherit!important;box-sizing:border-box}
+.sol-extension-card{padding:12px!important;gap:10px!important;border-radius:16px!important;background:var(--bg-tab-hover)!important;border-color:var(--border-card)!important;min-width:0}
+.sol-extension-heading{display:flex;align-items:center;gap:12px}.sol-extension-heading>.setting-text{flex:1;min-width:0}.sol-extension-heading .extension-title{white-space:normal;overflow-wrap:anywhere}
+.sol-extension-card .row-actions{display:flex;flex-wrap:wrap;flex-direction:row;gap:6px}.sol-extension-card .row-actions>*{flex:none}
+.sol-extension-available{display:flex!important;flex-direction:row!important;align-items:center}.sol-extension-available .setting-text{flex:1;min-width:0}
+.sol-extension-update{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.sol-extension-update .row-sub{flex:1;min-width:120px}
+.sol-remove-extension{color:var(--text-dim)!important}.sol-remove-extension:hover{color:#e5484d!important}

@@ -2,6 +2,16 @@
 
 Intégration des composants beUI aux réglages, menus, téléchargements, notes et au rangement des onglets. Les commandes du pont C#, les profils et les données restent gérés par leurs services existants.
 
+Les menus de profil et de session utilisent aussi `button-base`, `input` et `shared-layout-bg`. Les commandes de modification et la protection des sessions occupées sont conservées. Le gestionnaire d'extensions emploie les cartes et interrupteurs beUI ; les popups fournis par les extensions restent leurs propres pages.
+
+Le mode `embedded` de `morphing-modal` compose les panneaux dans le flux mesuré par l'hôte natif, sans créer un second fond ou une autre fenêtre. Les formulaires, demandes d'accès et confirmations d'installation utilisent les boutons beUI.
+
+`AnimatedSidebarPanel` est l'adaptation du panneau du composant `animated-sidebar` installé depuis le registre officiel. WinUI conserve le placement, la largeur et l'apparition au bord de la fenêtre ; beUI anime le contenu avec sa courbe `EASE_DRAWER`. L'accusé `sidebar.motion.done` porte le numéro de l'animation : une fin dépassée est ignorée. L'hôte attend la fin effective du mouvement, avec un repli de 1,5 seconde si la vue web n'est pas prête.
+
+`check-beui-panels.mjs` contrôle le renommage d'un profil, les sessions (création, choix, renommage, annulation de suppression), le focus et le panneau d'extensions sur une petite vue. Les commandes d'extensions sont contrôlées avec des données de test dans la WebView native ; aucune extension réelle n'est installée par ce test.
+
+Notes : en fenêtre moyenne, liste et éditeur restent côte à côte ; en petite fenêtre, l'éditeur occupe la largeur. L'organisation des notes s'ouvre avec `morphing-modal` depuis la liste ou l'éditeur, avec restitution du focus. Les onglets, champs et commandes d'export utilisent les composants beUI, et les barres d'outils se replient sur plusieurs lignes.
+
 Les sources sont installées depuis le registre public officiel `https://beui.dev/r/registry.json`, par `shadcn add @beui/select @beui/switch @beui/checkbox @beui/button-base @beui/context-menu`.
 
 - `button-base` : actions et choix compacts des réglages.

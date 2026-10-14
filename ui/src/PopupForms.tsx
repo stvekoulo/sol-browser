@@ -1,3 +1,5 @@
+import {Input} from '@/components/motion/input';
+import {Button} from '@/components/motion/button/base';
 import {Checkbox} from '@/components/motion/checkbox';
 import {useState,useRef,useEffect,type RefObject} from 'react';
 import {send,formatDomain} from './bridge';
@@ -17,10 +19,10 @@ export function NameForm({ rootRef, ask }: { rootRef: RefObject<HTMLDivElement |
       >
         <label htmlFor="name-input" className="name-form-title">{ask.title}</label>
         {ask.hint && <p className="row-sub">{ask.hint}</p>}
-        <input id="name-input" type={ask.secret ? 'password' : 'text'} autoFocus maxLength={ask.secret ? 128 : 40} placeholder={ask.placeholder} spellCheck={false} value={name} onChange={e => setName(e.target.value)} onFocus={e => e.target.select()} />
+        <Input className="sol-popup-input" classNames={{field:"sol-popup-input-field"}} id="name-input" type={ask.secret ? 'password' : 'text'} autoFocus maxLength={ask.secret ? 128 : 40} placeholder={ask.placeholder} spellCheck={false} value={name} onChange={setName} onFocus={e => e.target.select()} />
         <div className="name-form-actions">
-          <button type="button" className="pill-action" onClick={() => send({ type: 'popup.close' })}>{t('Annuler', 'Cancel')}</button>
-          <button type="submit" className="pill-action primary" disabled={!name.trim()}>{ask.submit}</button>
+          <Button variant="ghost" size="sm" pressScale={0.98} whileHover={undefined} type="button" className="pill-action" onClick={() => send({ type: 'popup.close' })}>{t('Annuler', 'Cancel')}</Button>
+          <Button variant="ghost" size="sm" pressScale={0.98} whileHover={undefined} type="submit" className="pill-action primary" disabled={!name.trim()}>{ask.submit}</Button>
         </div>
       </form>
     </div>
@@ -42,12 +44,12 @@ export function ShortcutForm({ rootRef, ask }: { rootRef: RefObject<HTMLDivEleme
       >
         <span className="name-form-title">{t('Modifier le raccourci', 'Edit shortcut')}</span>
         <label htmlFor="name-input" className="row-sub">{t('Nom (vide : celui du site)', "Name (empty: the site's own)")}</label>
-        <input id="name-input" autoFocus maxLength={24} spellCheck={false} value={name} onChange={e => setName(e.target.value)} onFocus={e => e.target.select()} />
+        <Input className="sol-popup-input" classNames={{field:"sol-popup-input-field"}} id="name-input" autoFocus maxLength={24} spellCheck={false} value={name} onChange={setName} onFocus={e => e.target.select()} />
         <label htmlFor="url-input" className="row-sub">{t('Adresse', 'Address')}</label>
-        <input id="url-input" type="text" inputMode="url" maxLength={2000} placeholder="https://…" spellCheck={false} value={url} onChange={e => setUrl(e.target.value)} />
+        <Input className="sol-popup-input" classNames={{field:"sol-popup-input-field"}} id="url-input" type="text" inputMode="url" maxLength={2000} placeholder="https://…" spellCheck={false} value={url} onChange={setUrl} />
         <div className="name-form-actions">
-          <button type="button" className="pill-action" onClick={() => send({ type: 'popup.close' })}>{t('Annuler', 'Cancel')}</button>
-          <button type="submit" className="pill-action primary" disabled={!url.trim()}>{t('Enregistrer', 'Save')}</button>
+          <Button variant="ghost" size="sm" pressScale={0.98} whileHover={undefined} type="button" className="pill-action" onClick={() => send({ type: 'popup.close' })}>{t('Annuler', 'Cancel')}</Button>
+          <Button variant="ghost" size="sm" pressScale={0.98} whileHover={undefined} type="submit" className="pill-action primary" disabled={!url.trim()}>{t('Enregistrer', 'Save')}</Button>
         </div>
       </form>
     </div>
@@ -78,8 +80,8 @@ export function ComparePicker({ rootRef, ask }: { rootRef: RefObject<HTMLDivElem
           })}
         </div>
         <div className="name-form-actions">
-          <button type="button" className="pill-action" onClick={() => send({ type: 'popup.close' })}>{t('Annuler', 'Cancel')}</button>
-          <button type="submit" className="pill-action primary" disabled={!valid}>{t('Comparer', 'Compare')}</button>
+          <Button variant="ghost" size="sm" pressScale={0.98} whileHover={undefined} type="button" className="pill-action" onClick={() => send({ type: 'popup.close' })}>{t('Annuler', 'Cancel')}</Button>
+          <Button variant="ghost" size="sm" pressScale={0.98} whileHover={undefined} type="submit" className="pill-action primary" disabled={!valid}>{t('Comparer', 'Compare')}</Button>
         </div>
       </form>
     </div>

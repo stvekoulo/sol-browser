@@ -15,7 +15,7 @@ public static class CommandParser
         ["session.new"] = [], ["session.create"] = ["title"], ["session.rename"] = ["id", "title"],
         ["session.delete"] = ["id"], ["site.reset"] = [],
         ["tab.move"] = ["id", "index"], ["tab.pin"] = ["id", "index"], ["tab.reopen"] = [],
-        ["sidebar.menu"] = ["x", "y"],
+        ["sidebar.menu"] = ["x", "y"], ["sidebar.motion.done"] = ["index"],
         ["nav.go"] = ["id", "input"], ["nav.back"] = ["id"], ["nav.forward"] = ["id"],
         ["nav.reload"] = ["id"], ["nav.stop"] = ["id"],
         ["split.open"] = [], ["split.close"] = [], ["split.resize"] = ["ratio"], ["split.menu"] = ["x", "y"],
