@@ -256,6 +256,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 @media (max-width:760px) { .topbar-right.pill-surface { max-width:32vw; overflow-x:auto; scrollbar-width:none; } .topbar-right .pill-icon-btn, .private-chip { flex:none; } .topbar { gap:6px; padding:0 8px; } }
 @media (max-width:560px) { .topbar { grid-template-columns:auto minmax(60px,1fr) minmax(52px,110px); gap:4px; } .topbar-right.pill-surface { max-width:100%; width:100%; } .topbar-left { gap:4px; } .navigation-actions .sidebar-toggle { width:28px; } .nav-segment .segment-btn { width:23px; } .lights { gap:6px; margin-right:0; } }
 .pill-icon-btn.translation-active { color: var(--accent); background: var(--bg-pill-solid-hover); }
-.sidebar-session { display:flex; align-items:center; gap:6px; flex-shrink:0; padding:5px 10px; margin:0 4px 6px; border-radius:999px; border:1px solid var(--border-card); background:var(--bg-tab-hover); color:inherit; font:inherit; font-size:11px; cursor:pointer; }
-.sidebar-session span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left; }
+.sidebar-session { display:flex; align-items:center; gap:6px; flex-shrink:0; min-width:0; padding:5px 10px; margin:0 4px 6px; border-radius:999px; border:1px solid var(--border-card); background:var(--bg-tab-hover); color:inherit; font:inherit; font-size:11px; cursor:pointer; }
+.sidebar-session > span:not(.sol-animated-icon) { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left; }
+.sidebar-session > .sol-animated-icon,.sidebar-session > svg { flex:none; }
 .sidebar-session-badge { flex-shrink:0; max-width:54px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:9px; padding:2px 5px; border-radius:999px; background:var(--bg-tab-hover); opacity:.8; }
