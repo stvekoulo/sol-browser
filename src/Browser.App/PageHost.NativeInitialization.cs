@@ -106,6 +106,13 @@ public sealed partial class PageHost
         core.WebMessageReceived += (_, e) =>
         {
             if (e.Source == core.Source && e.WebMessageAsJson == "\"sol.page.pointer\"") { PagePressed?.Invoke(); return; }
+            // During hash history navigation, WebView2 may still report the previous internal fragment.
+            if (e.Source is Settings.DefaultHomePage or QuickNotes.PageUrl && core.Source is Settings.DefaultHomePage or QuickNotes.PageUrl
+                && CommandParser.Parse(e.TryGetWebMessageAsString()) is { } ready)
+            {
+                if (ready.Type == "notes.ready") { NotesRequested?.Invoke(tab.Id, ready); return; }
+                if (ready.Type == "start.ready") { StartRequested?.Invoke(tab.Id, ready); return; }
+            }
             if (e.Source == QuickNotes.PageUrl && core.Source == QuickNotes.PageUrl)
             {
                 if (CommandParser.Parse(e.TryGetWebMessageAsString()) is { } notes && notes.Type is

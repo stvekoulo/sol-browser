@@ -1,5 +1,5 @@
 import { useEffect,useRef,useState,type RefObject,type KeyboardEvent } from 'react';
-import { onMessage,send } from './bridge';
+import { displayAddress,onMessage,send } from './bridge';
 type Choice={url:string;value:string};
 export function useAddressSuggestions(id:string|undefined,setText:(value:string)=>void,input:RefObject<HTMLInputElement|null>){
   const choices=useRef<Choice[]>([]),selected=useRef(-1),typed=useRef(''),[count,setCount]=useState(0);
@@ -16,7 +16,7 @@ export function useAddressSuggestions(id:string|undefined,setText:(value:string)
     event.preventDefault();
     if(event.key==='Tab'){selected.current=-1;send({type:'suggest.select',index:-1});return true;}
     const next=((selected.current+1+(event.key==='ArrowDown'?1:-1)+choices.current.length+1)%(choices.current.length+1))-1;
-    selected.current=next;const value=next<0?typed.current:choices.current[next].value;setText(value);
+    selected.current=next;const value=next<0?typed.current:displayAddress(choices.current[next].value);setText(value);
     requestAnimationFrame(()=>input.current?.setSelectionRange(value.length,value.length));send({type:'suggest.select',index:next});return true;
   };
   return {changed,remember,clear,key,count};

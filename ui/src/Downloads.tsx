@@ -1,6 +1,7 @@
 import { send } from './bridge';
 import { t } from './i18n';
 import { Icon } from './Icons';
+import {Button} from '@/components/motion/button/base';
 import './downloads.css';
 
 export type Download = { id: string; name: string; received: number; total: number | null; state: 'InProgress' | 'Interrupted' | 'Completed';paused?:boolean;canceled?:boolean;canResume?:boolean;reason?:string };
@@ -37,19 +38,19 @@ export function DownloadCard({ d }: { d: Download }) {
         </div>
         <div className="download-actions">
           {pendingDownload(d) && <>
-            <button className="pill-action" disabled={(d.paused||d.state==='Interrupted')&&!d.canResume} aria-label={d.paused||d.state==='Interrupted'?t(`Reprendre ${d.name}`,`Resume ${d.name}`):t(`Mettre en pause ${d.name}`,`Pause ${d.name}`)} onClick={()=>send({type:d.paused||d.state==='Interrupted'?'download.resume':'download.pause',id:d.id})}>{d.paused||d.state==='Interrupted'?t('Reprendre','Resume'):t('Pause','Pause')}</button>
-            <button className="pill-action" aria-label={t(`Annuler ${d.name}`,`Cancel ${d.name}`)} onClick={() => send({ type: 'download.cancel', id: d.id })}>
-              {t('Annuler', 'Cancel')}
-            </button>
+            <Button variant="ghost" size="sm" whileHover={undefined} pressScale={0.98} className="pill-action" disabled={(d.paused||d.state==='Interrupted')&&!d.canResume} aria-label={d.paused||d.state==='Interrupted'?t(`Reprendre ${d.name}`,`Resume ${d.name}`):t(`Mettre en pause ${d.name}`,`Pause ${d.name}`)} onClick={()=>send({type:d.paused||d.state==='Interrupted'?'download.resume':'download.pause',id:d.id})}><Icon name={d.paused||d.state==='Interrupted'?'play':'pause'} size={14}/>{d.paused||d.state==='Interrupted'?t('Reprendre','Resume'):t('Pause','Pause')}</Button>
+            <Button variant="ghost" size="sm" whileHover={undefined} pressScale={0.98} className="pill-action" aria-label={t(`Annuler ${d.name}`,`Cancel ${d.name}`)} onClick={() => send({ type: 'download.cancel', id: d.id })}>
+              <Icon name="close" size={14}/>{t('Annuler', 'Cancel')}
+            </Button>
           </>}
           {d.state === 'Completed' && (
             <>
-              <button className="pill-action primary" onClick={() => send({ type: 'download.open', id: d.id })}>
-                {t('Ouvrir', 'Open')}
-              </button>
-              <button className="pill-action" onClick={() => send({ type: 'download.reveal', id: d.id })}>
-                {t('Dossier', 'Folder')}
-              </button>
+              <Button variant="ghost" size="sm" whileHover={undefined} pressScale={0.98} className="pill-action primary" aria-label={t(`Ouvrir ${d.name}`,`Open ${d.name}`)} onClick={() => send({ type: 'download.open', id: d.id })}>
+                <Icon name="file" size={14}/>{t('Ouvrir', 'Open')}
+              </Button>
+              <Button variant="ghost" size="sm" whileHover={undefined} pressScale={0.98} className="pill-action" aria-label={t(`Afficher ${d.name} dans le dossier`,`Show ${d.name} in folder`)} onClick={() => send({ type: 'download.reveal', id: d.id })}>
+                <Icon name="folder" size={14}/>{t('Dossier', 'Folder')}
+              </Button>
             </>
           )}
         </div>

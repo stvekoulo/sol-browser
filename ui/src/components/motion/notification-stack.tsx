@@ -2,7 +2,8 @@
 "use client";
 // beui.dev/components/blocks/notification-stack
 
-import { ChevronDown, BellOff } from "lucide-react";
+import { BellOff } from "lucide-react";
+import AnimatedIcon from '@/AnimatedIcon';
 import { motion, type Transition, useReducedMotion } from "motion/react";
 import {
   type FocusEvent,
@@ -11,12 +12,10 @@ import {
   type ReactNode,
   useCallback,
   useRef,
-  useState,
 } from "react";
 import { ActionSwapText } from "@/components/motion/action-swap";
 import { EASE_OUT, SPRING_LAYOUT } from "@/lib/ease";
 import { useDismiss } from "@/lib/hooks/use-dismiss";
-import { useHoverGesture } from "@/lib/hooks/use-hover-gesture";
 import { useTapGesture } from "@/lib/hooks/use-tap-gesture";
 import { cn } from "@/lib/utils";
 
@@ -37,9 +36,7 @@ export function NotificationStack({
   classNames,
 }: NotificationStackProps) {
   const reduce = useReducedMotion();
-  const hasFocus = useRef(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const hover = useHoverGesture();
   // What the last gesture on the stack was, and whether it was already
   // expanded when that gesture started. A click reports neither.
   const tap = useTapGesture<boolean>();
@@ -48,22 +45,12 @@ export function NotificationStack({
     defaultExpanded,
     onExpandedChange,
   });
-  // Set by the tap that expands the stack, and the reason the outside-tap
-  // dismisser exists at all — a hovering pointer has its own way out.
-  const [tapExpanded, setTapExpanded] = useState(false);
-
   const collapse = useCallback(() => {
-    setTapExpanded(false);
     setIsExpanded(false);
   }, [setIsExpanded]);
 
-  // A pointer leaving the stack is what collapses it, and a finger never
-  // leaves: without this the stack stays open for good once tapped, and when
-  // `onViewAll` is set the next tap follows the link instead of closing. The
-  // tap that lands somewhere else stands in for the pointer leaving, and it is
-  // consumed rather than passed through — the expanded stack covers the page,
-  // so the tap that dismisses it is aimed at nothing else.
-  useDismiss(tapExpanded && isExpanded, collapse, rootRef, {
+  // Resizing the native download window creates hover events; only explicit activation expands it.
+  useDismiss(isExpanded, collapse, rootRef, {
     behavior: "consume",
   });
 
@@ -93,7 +80,6 @@ export function NotificationStack({
 
   const handleBlur = (event: FocusEvent<HTMLDivElement>) => {
     if (event.currentTarget.contains(event.relatedTarget)) return;
-    hasFocus.current = false;
     collapse();
   };
 
@@ -117,7 +103,6 @@ export function NotificationStack({
 
     if (!wasExpanded) {
       setIsExpanded(true);
-      if (gesture && gesture.pointerType !== "mouse") setTapExpanded(true);
       return;
     }
 
@@ -141,25 +126,14 @@ export function NotificationStack({
           ? `${items.length} notifications. ${expandedLabel}.`
           : `${items.length} notifications. Expand notifications.`
       )}
-      // A tap reports as a hover on its way past — enter, leave, then click —
-      // so an unfiltered hover path expands, collapses and expands again in
-      // the space of one tap, springs and all. The tap has its own route
-      // through `handleClick`.
-      onPointerEnter={(event: PointerEvent<HTMLDivElement>) => {
-        if (hover.enter(event)) setIsExpanded(true);
-      }}
-      onPointerLeave={(event: PointerEvent<HTMLDivElement>) => {
-        if (hover.leave(event) && !hasFocus.current) collapse();
-      }}
       onPointerDown={(event: PointerEvent<HTMLDivElement>) => {
         tap.start(event, isExpanded);
       }}
       // The platform can take the gesture away mid-press — a scroll, a system
       // swipe — and no click follows it.
       onPointerCancel={tap.drop}
-      onFocus={() => {
-        hasFocus.current = true;
-        setIsExpanded(true);
+      onFocus={(event) => {
+        if(event.target===event.currentTarget)setIsExpanded(true);
       }}
       onBlur={handleBlur}
       onKeyDown={handleKeyDown}
@@ -252,7 +226,7 @@ export function NotificationStack({
               {isExpanded ? (
                 <span className="inline-flex items-center gap-1">
                   {expandedLabel}
-                  <ChevronDown className="size-4" aria-hidden="true" />
+                  <AnimatedIcon name="collapse" size={14}/>
                 </span>
               ) : (
                 collapsedLabel

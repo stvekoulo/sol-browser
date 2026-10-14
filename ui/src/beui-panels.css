@@ -1,4 +1,5 @@
 .beui-native-panel{width:100%;min-width:0;transform-origin:top center}
+.sol-menu-item .menu-icon-empty{background:none}
 .beui-native-panel .popup.arriving>*,.beui-native-panel .popup.arriving>.popup-list>*{animation:none}
 .beui-native-panel button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .beui-native-panel .row,.beui-native-panel .profile-pick{justify-content:flex-start;white-space:normal;font:inherit}

@@ -8,9 +8,9 @@ export default function SolMenu({items,rootRef}:{items:string[];rootRef:RefObjec
   return <div ref={rootRef} className="popup beui-menu-popup">
     <ContextMenu open embedded onOpenChange={open=>{if(!open)send({type:'popup.close'});}}>
       <ContextMenuContent className="sol-menu-surface" ariaLabel={t('Actions','Actions')}>
-        {items.map((label,index)=>label===''?<ContextMenuSeparator key={index}/>:<ContextMenuItem key={index} textValue={label} className="sol-menu-item" tone={isClosing(label)?'destructive':'default'} closeOnSelect={false} onSelect={()=>send({type:'menu.pick',index})}>
-          <span className="row-badge" aria-hidden><Icon d={menuIconPath(label)} size={14}/></span><span className="row-title">{label}</span>
-        </ContextMenuItem>)}
+        {items.map((label,index)=>{const path=menuIconPath(label);return label===''?<ContextMenuSeparator key={index}/>:<ContextMenuItem key={index} textValue={label} className="sol-menu-item" tone={isClosing(label)?'destructive':'default'} closeOnSelect={false} onSelect={()=>send({type:'menu.pick',index})}>
+          <span className={`row-badge${path?'':' menu-icon-empty'}`} aria-hidden>{path&&<Icon d={path} size={14}/>}</span><span className="row-title">{label}</span>
+        </ContextMenuItem>})}
       </ContextMenuContent>
     </ContextMenu>
   </div>;

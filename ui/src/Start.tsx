@@ -126,7 +126,12 @@ export default function Start() {
     });
     send({ type: 'start.ready' });
     document.title = t('Nouvel onglet', 'New tab');
-    return off;
+    return () => {
+      off();
+      document.body.style.backgroundImage = '';
+      document.body.style.backgroundColor = '';
+      delete document.documentElement.dataset.wallpaperPhoto;
+    };
   }, []);
 
   return (

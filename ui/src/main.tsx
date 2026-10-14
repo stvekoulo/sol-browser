@@ -34,8 +34,6 @@ import './beui-workspace.css';
 // Le même bundle sert la barre supérieure, la carte latérale (#sidebar), les menus (#popup) et l'encart (#dock).
 const hash = location.hash;
 if (location.hostname === 'ui.navigateur') installTooltips();
-if (hash === '#start') document.body.classList.add('start-body');
-if (hash === '#notes') document.body.classList.add('notes-body');
 if (hash === '#popup' || hash === '#dock' || hash === '#capture') document.body.classList.add('popup-body');
 if (hash === '#sidebar') document.body.classList.add('sidebar-body');
 if (hash === '#panel') document.body.classList.add('panel-body');
@@ -53,6 +51,13 @@ const firstPaint = new MutationObserver(() => {
 });
 firstPaint.observe(container, { childList: true });
 const root = createRoot(container);
-root.render(hash === '#notes' ? <NotesPage /> : hash === '#capture' ? <Capture /> : hash === '#start' ? <Start /> : hash === '#welcome' ? <Welcome /> : hash === '#panel' ? <Panel /> : hash === '#popup' ? <Popup /> : hash === '#dock' ? <Dock /> : hash === '#sidebar' ? <Sidebar /> : <App />);
+const render = () => {
+  const page = location.hash;
+  document.body.classList.toggle('start-body', page === '#start');
+  document.body.classList.toggle('notes-body', page === '#notes');
+  root.render(page === '#notes' ? <NotesPage /> : page === '#capture' ? <Capture /> : page === '#start' ? <Start /> : page === '#welcome' ? <Welcome /> : page === '#panel' ? <Panel /> : page === '#popup' ? <Popup /> : page === '#dock' ? <Dock /> : page === '#sidebar' ? <Sidebar /> : <App />);
+};
+render();
+if (location.hostname === 'start.sol') window.addEventListener('hashchange', render);
 import './beui-panels.css';
 import './notes-responsive.css';

@@ -1,4 +1,5 @@
 .notes-filter-toggle{display:none!important}.note-focus .notes-filter-toggle{display:inline-flex!important}
+.notes-workspace.has-editor.note-focus{grid-template-columns:minmax(0,1fr)}
 .notes-body button.notes-tool{padding:6px;min-height:32px;min-width:32px;justify-content:center}.notes-body button.pill-action{height:auto;min-height:30px;font:500 12px var(--font);white-space:normal}
 .notes-navigation button{justify-content:flex-start!important;padding:10px!important;height:auto!important;font:500 12px var(--font)}.notes-tags button{height:auto;font:inherit;justify-content:flex-start}.notes-tags button.notes-tool{justify-content:center}
 .notes-body .notes-preview{height:auto!important;min-height:82px;align-items:flex-start!important;justify-content:flex-start!important;white-space:normal}.notes-menu>div button{justify-content:flex-start!important}.note-history-item button{height:auto!important;white-space:normal!important;text-align:left}

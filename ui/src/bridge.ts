@@ -162,6 +162,10 @@ function applyTheme(ev: HostEvent) {
     document.body.style.zoom = String(scale);
     document.body.style.height = '100%';
     if (changed) window.dispatchEvent(new Event('ui-scale'));
+  } else if (location.hostname === 'start.sol') {
+    root.removeProperty('--ui-scale');
+    document.body.style.zoom = '';
+    document.body.style.height = '';
   }
   document.documentElement.dataset.private = String(!!ev.privateMode);
   document.documentElement.dataset.font = ev.font ?? 'default';

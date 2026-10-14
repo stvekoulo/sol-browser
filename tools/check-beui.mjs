@@ -3,6 +3,7 @@ import {readFile,writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {sidebarHost} from './sidebar-check-host.mjs';
+import {menuPaths} from '../ui/src/PopupIcons.ts';
 
 const host=await sidebarHost(process.argv[2]??'src/Browser.App/bin/x64/Release/net10.0-windows10.0.19041.0/win-x64/Sol.exe');
 let sidebar,popup;
@@ -80,6 +81,9 @@ try{
   await host.wait(()=>popup.evaluate('!!document.querySelector(".beui-menu-popup [role=menu]")'),'embedded menu');await delay(300);
   await host.wait(()=>popup.evaluate('Number(getComputedStyle(document.querySelector("[role=menu]")).opacity)>.99'),'menu visible');
   assert.equal(await popup.evaluate('document.activeElement.getAttribute("role")'),'menuitem');
+  assert.equal(await popup.evaluate(`document.querySelector('.sol-menu-item [data-icon]')?.getAttribute('data-icon')`),'tab','new tab uses an animated tab icon');
+  assert.equal(await popup.evaluate(`[...document.querySelectorAll('.sol-menu-item')].find(b=>b.textContent.includes('Modifier le groupe'))?.querySelector('[data-icon]')?.getAttribute('data-icon')`),'edit','edit group uses an animated pencil');
+  assert.equal(await popup.evaluate(`[...document.querySelectorAll('.sol-menu-item')].find(b=>b.textContent.includes('en veille'))?.querySelector('[data-icon]')?.getAttribute('data-icon')`),'sleep','sleep group uses an animated moon');
   await press('End',35);assert.equal(await popup.evaluate('document.activeElement.textContent.includes("Fermer le groupe")'),true);
   await press('Home',36);await press('ArrowDown',40);await press('ArrowDown',40);
   assert.equal(await popup.evaluate('document.activeElement.textContent.includes("Modifier le groupe")'),true);
@@ -96,6 +100,9 @@ try{
   await host.wait(()=>page.evaluate('document.readyState==="complete"').catch(()=>false),'site page');
   await page.call('Input.dispatchMouseEvent',{type:'mousePressed',x:130,y:140,button:'right',buttons:2,clickCount:1});
   await page.call('Input.dispatchMouseEvent',{type:'mouseReleased',x:130,y:140,button:'right',buttons:0,clickCount:1});
+  await host.wait(()=>popup.evaluate('!!document.querySelector(".sol-menu-item")'),'page menu');
+  const pageIcons=await popup.evaluate('[...document.querySelectorAll(".sol-menu-item")].map(b=>({label:b.textContent,icon:b.querySelector("[data-icon]")?.getAttribute("data-icon"),path:b.querySelector("svg path")?.getAttribute("d")}))');
+  for(const item of pageIcons){if(/enregistrer|save .*as/i.test(item.label))assert.equal(item.icon,'save',item.label);if(/imprimer|print/i.test(item.label))assert.equal(item.path,menuPaths.print,item.label);}
   const menuPick=async(text)=>{
     await host.wait(()=>popup.evaluate(`[...document.querySelectorAll('[role=menuitem]')].some(b=>b.textContent.includes(${JSON.stringify(text)}))`),'native menu '+text);
     await popup.evaluate(`[...document.querySelectorAll('[role=menuitem]')].find(b=>b.textContent.includes(${JSON.stringify(text)})).dispatchEvent(new MouseEvent('mousedown',{bubbles:true,button:0}))`);
