@@ -35,7 +35,7 @@ release:
     - $files = @(Get-ChildItem release/*.zip, release/*-Setup.exe, release/SHA256SUMS.txt, release/installer/*.nupkg, release/installer/releases.*.json)
     - $headers = @{ 'JOB-TOKEN' = $env:CI_JOB_TOKEN }
     - $base = "$env:CI_API_V4_URL/projects/$env:CI_PROJECT_ID/packages/generic/sol/$version"
-    - foreach ($f in $files) { Invoke-RestMethod -Method Put -InFile $f.FullName -Headers $headers -Uri "$base/$($f.Name)" | Out-Null }
+    - foreach ($f in $files) { Write-Host "Uploading $($f.Name) ($($f.Length) bytes)"; Invoke-RestMethod -Method Put -InFile $f.FullName -ContentType 'application/octet-stream' -Headers $headers -Uri "$base/$($f.Name)" -MaximumRetryCount 2 -RetryIntervalSec 15 -TimeoutSec 900 | Out-Null }
     - $links = @($files | ForEach-Object { @{ name = $_.Name; url = "$base/$($_.Name)"; link_type = 'package' } })
     - $body = @{ tag_name = $env:CI_COMMIT_TAG; name = $env:CI_COMMIT_TAG; description = "Sol $version"; assets = @{ links = $links } } | ConvertTo-Json -Depth 5
     - Invoke-RestMethod -Method Post -Headers $headers -ContentType 'application/json' -Body $body -Uri "$env:CI_API_V4_URL/projects/$env:CI_PROJECT_ID/releases" | Out-Null
