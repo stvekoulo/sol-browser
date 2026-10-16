@@ -32,6 +32,8 @@ public sealed partial class PageHost
     {
         await AdBlock.RemoveBundledAsync(profile);
         await PageZoom.InstallAsync(profile, settings.PageZoom);
+        await SharedExtensions.SyncAsync(profile);
+        ExtensionsChanged?.Invoke();
     }
     public async Task<bool> DeleteSessionAsync(string sessionId)
     {
@@ -85,22 +87,6 @@ public sealed partial class PageHost
         if (!_views.TryGetValue(tab.Id, out var initializing) || initializing != view) return null; // fermé ou rouvert pendant l'initialisation
 
         var core = view.CoreWebView2;
-        var documentUrl = tab.Url;
-        var navigationUrl = tab.Url;
-        var navigationSource = tab.Url;
-        var redirected = false;
-        var routeSite = true;
-        // NavigationStarting peut déjà laisser partir un GET. Intercepter le document avant le réseau
-        // empêche d'envoyer les cookies du compte précédent au site de destination.
-        core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.Document, CoreWebView2WebResourceRequestSourceKinds.Document);
-        core.WebResourceRequested += (_, e) =>
-        {
-            if (_views.GetValueOrDefault(tab.Id) != view || routeSite && e.Request.Method == "GET" && e.Request.Uri == navigationUrl.Split('#', 2)[0]
-                && !redirected && RouteNavigation?.Invoke(tab.Id, navigationUrl, navigationSource, true) == true)
-            {
-                e.Response = core.Environment.CreateWebResourceResponse(null!, 204, "No Content", "");
-            }
-        };
         core.DOMContentLoaded += (_, _) =>
         {
             if(!core.Source.StartsWith("https://start.sol/",StringComparison.Ordinal)) { view.Opacity=1;ContentPainted?.Invoke(); }
@@ -150,11 +136,6 @@ public sealed partial class PageHost
         core.Settings.IsBuiltInErrorPageEnabled = false; // les erreurs de chargement sont affichées par le navigateur
         core.NavigationStarting += (_, e) =>
         {
-            redirected = e.IsRedirected;
-            routeSite = !_skipSiteRoute.Remove(tab.Id) && e.IsUserInitiated
-                && !TabSessions.IsSignIn(e.Uri);
-            if (!redirected) navigationSource = documentUrl;
-            navigationUrl = e.Uri;
             _pdf.Remove(tab.Id);
             if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var document) && document.AbsolutePath.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)) _pdf.Add(tab.Id);
             core.Settings.IsZoomControlEnabled = IsPdf(tab.Id);
@@ -192,8 +173,6 @@ public sealed partial class PageHost
             // Une navigation remplacée ne peut ni arrêter le nouvel indicateur ni remplacer sa page.
             if (!_views.TryGetValue(tab.Id, out var current) || current != view
                 || _navigation.GetValueOrDefault(tab.Id) != e.NavigationId) return;
-            NavigationSettled?.Invoke(tab.Id);
-            if (e.IsSuccess) documentUrl = core.Source;
             _loading.Remove(tab.Id);
             var downloading = _downloading.Remove(tab.Id);
             RuntimeChanged?.Invoke();
@@ -235,7 +214,7 @@ public sealed partial class PageHost
         core.DOMContentLoaded += (_, _) => { if (_mode.ContainsKey(tab.Id)) _ = PageZoom.TabAsync(core, 1); };
         if (!_views.TryGetValue(tab.Id, out initializing) || initializing != view) return null;
         _ready.Add(tab.Id);
-        if (navigate) Navigate(tab.Id, _target.GetValueOrDefault(tab.Id, tab.Url), route: false);
+        if (navigate) Navigate(tab.Id, _target.GetValueOrDefault(tab.Id, tab.Url));
         if (_wanted.Remove(tab.Id, out var wanted)) SetDevice(tab.Id, wanted.Name, wanted.Landscape);
         return core;
     }

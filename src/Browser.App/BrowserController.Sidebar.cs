@@ -76,7 +76,7 @@ public sealed partial class BrowserController
         var block = ids.Length > 1;
         ShowMenu(x, y,
         [
-            (T("Session de ce site…", "Site session…"), () => _afterMenu = () => OpenSessionMenu(id, x, y)),
+            (T("Session de cet onglet…", "Tab session…"), () => _afterMenu = () => OpenSessionMenu(id, x, y)),
             (tab.Pinned ? (block ? T("Détacher les deux pages", "Unpin both pages") : T("Détacher l'onglet", "Unpin tab"))
                 : (block ? T("Épingler les deux pages", "Pin both pages") : T("Épingler l'onglet", "Pin tab")), () => PinTabs(id, !tab.Pinned)),
             .. GroupEntries(tab),

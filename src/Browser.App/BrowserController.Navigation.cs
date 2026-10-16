@@ -8,37 +8,23 @@ namespace Browser.App;
 
 public sealed partial class BrowserController
 {
-    private void ApplySiteNavigation(string tabId)
-    {
-        if (!_sessionTargets.TryGetValue(tabId, out var url)) return;
-        var core = _pages.CoreOf(tabId);
-        _window.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
-        {
-            if (_closingWindow || _sessionTargets.GetValueOrDefault(tabId) != url || _pages.CoreOf(tabId) != core) return;
-            _sessionTargets.Remove(tabId);
-            ChangeSession(tabId, _sessions.ForSite(url), url);
-        });
-    }
     private Tab OpenLink(string source, string url, bool activate = true)
     {
         var tab = _tabs.Tabs.FirstOrDefault(t => t.Id == source);
-        return Open(url, activate: activate, sessionId: tab is not null && TabSessions.SameSite(tab.Url, url) ? tab.SessionId : null);
+        return Open(url, activate: activate, sessionId: tab?.SessionId);
     }
-    private void ChangeSession(string tabId, string sessionId, string? url = null)
+    private void ChangeSession(string tabId, string sessionId)
     {
         if (_tabs.Tabs.FirstOrDefault(t => t.Id == tabId) is not { } tab || sessionId == _deletingSession
             || sessionId.Length > 0 && _sessions.Resolve(sessionId).Length == 0) return;
-        if (tab.SessionId == sessionId) { if (url is null) _sessions.SetSite(tab.Url, sessionId); HidePopup(); return; }
+        if (tab.SessionId == sessionId) { HidePopup(); return; }
         if (_downloads.Any(d => d.TabId == tabId && DownloadPending(d.Id,d.Op)))
         { Notice(T("Téléchargement en cours", "Download in progress"), T("Attendez sa fin avant de changer la session de cet onglet.", "Wait for it to finish before changing this tab's session.")); return; }
-        if (url is null) _sessions.SetSite(tab.Url, sessionId);
-        _sessionTargets.Remove(tabId);
         HidePopup(); ExtensionPopup?.Hide();
         _network.Forget(tabId); if (_network.Shown == tabId) _network.Shown = null;
         _designTabs.Remove(tabId); _translationOriginals.Remove(tabId);
         var asleep = _pages.IsAsleep(tabId);
         _pages.Remove(tabId);
-        if (url is not null) _tabs.Update(tabId, url, url);
         if (_tabs.SetSession(tabId, sessionId) is { } changed)
         { if (asleep) _pages.AddAsleep(changed); else _pages.Add(changed); }
         _pinnedExtensions = []; _pinsInitialized = false; _pinProfileName = null;
@@ -64,8 +50,7 @@ public sealed partial class BrowserController
     }
     private Tab Open(string url, bool activate = true, bool pinned = false, bool asleep = false, string? sessionId = null)
     {
-        var session = sessionId ?? (url.StartsWith("chrome-extension://", StringComparison.Ordinal)
-            ? _tabs.Tabs.FirstOrDefault(t => t.Id == _tabs.ActiveId)?.SessionId ?? "" : _sessions.ForSite(url));
+        var session = sessionId ?? _tabs.Tabs.FirstOrDefault(t => t.Id == _tabs.ActiveId)?.SessionId ?? "";
         // Une identité manquante ne doit jamais charger un site avec les connexions de la session principale.
         if (session.Length > 0 && (_sessions.Resolve(session).Length == 0 || session == _deletingSession))
         { url = Settings.DefaultHomePage; session = ""; }

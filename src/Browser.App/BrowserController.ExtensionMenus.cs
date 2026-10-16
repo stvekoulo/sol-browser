@@ -9,21 +9,6 @@ namespace Browser.App;
 public sealed partial class BrowserController
 {
 
-    // La fenêtre de l'extension s'ouvre dans l'encart, sous la barre ; une extension qui n'a que des réglages les ouvre en onglet.
-    private async void ShowExtension(ExtensionInfo extension, double right, double top)
-    {
-        try
-        {
-            if (AppPaths.Private || EngineProfile is not { } profile || !(await profile.GetBrowserExtensionsAsync()).Any(e => e.Id == extension.Id && e.IsEnabled)) return;
-            if (extension.Popup is { } popup && ExtensionPopup is { } host) await host.ShowAsync($"chrome-extension://{extension.Id}/{popup.TrimStart('/')}", right, top, profile.ProfileName);
-            else if ((extension.Popup ?? extension.Options) is { } page) { Open($"chrome-extension://{extension.Id}/{page.TrimStart('/')}"); Refresh(); }
-            // Ni fenêtre ni réglages : elle agit au clic sur son bouton, ou dans un panneau latéral. Le moteur ne transmet pas ce clic.
-            else Notice(extension.Name, T("Cette extension n’a pas de fenêtre à ouvrir : elle agit au clic sur son bouton ou dans un panneau latéral, ce que le moteur de Sol ne sait pas encore faire. Ses autres fonctions (dans les pages, par clic droit) restent actives.", "This extension has no window to open: it acts when its button is clicked or in a side panel, which Sol's engine cannot do yet. Its other features (in pages, by right-click) remain active."));
-        }
-        catch (Exception e) when (e is InvalidOperationException or COMException or ArgumentException)
-        { Notice(T("Extension indisponible", "Extension unavailable"), e.Message); }
-    }
-
     // Bouton de la barre : les extensions actives qui ont une fenêtre, puis l'accès à leur gestion.
     private async Task OpenExtensionsMenuAsync(double x, double y)
     {
@@ -32,7 +17,7 @@ public sealed partial class BrowserController
         var entries = new List<(string Label, Action? Run)>();
         if (EngineProfile is { } profile)
             foreach (var installed in await profile.GetBrowserExtensionsAsync())
-                if (installed.IsEnabled && installed.Id != AdBlock.ExtensionId && ExtensionCatalog.Read(ExtensionFolder(installed.Id), installed.Id) is { } info && (info.Popup ?? info.Options) is not null)
+                if (installed.IsEnabled && installed.Id != AdBlock.ExtensionId && installed.Id != PageZoom.ExtensionId && ExtensionCatalog.Read(ExtensionFolder(installed.Id), installed.Id) is { } info)
                     entries.Add((info.Name, () => _afterMenu = () => ShowExtension(info, x, y)));
         if (entries.Count == 0) { await OpenExtensionsAsync(); return; }
         entries.Add(("", null));
@@ -56,15 +41,17 @@ public sealed partial class BrowserController
         var installed = new List<object>();
         var have = new HashSet<string>();
         if (EngineProfile is { } profile)
-            foreach (var extension in await profile.GetBrowserExtensionsAsync())
+        {
+            await SharedExtensions.SyncAsync(profile);
+            foreach (var (id, enabled) in await SharedExtensions.SnapshotAsync())
             {
-                // Le bloqueur intégré a son propre réglage ; seules les extensions rangées dans le dossier de Sol sont listées.
-                if (ExtensionCatalog.Read(ExtensionFolder(extension.Id), extension.Id) is not { } info || extension.Id == AdBlock.ExtensionId) continue;
-                have.Add(extension.Id);
-                installed.Add(new { id = extension.Id, name = info.Name, version = info.Version, enabled = extension.IsEnabled, page = (info.Popup ?? info.Options) is not null, options = info.Options is not null,
-                    pinned = _settings.PinnedExtensions.Contains(extension.Id), icon = ExtensionCatalog.Icon(info.Folder),
-                    store = info.Store, update = _extensionUpdates.GetValueOrDefault(extension.Id) });
+                if (enabled is null || !ExtensionCatalog.IsId(id) || ExtensionCatalog.Read(ExtensionFolder(id), id) is not { } info) continue;
+                have.Add(id);
+                installed.Add(new { id, name = info.Name, version = info.Version, enabled = enabled.Value, page = true, options = info.Options is not null,
+                    pinned = _settings.PinnedExtensions.Contains(id), icon = ExtensionCatalog.Icon(info.Folder),
+                    store = info.Store, update = _extensionUpdates.GetValueOrDefault(id) });
             }
+        }
         // Les extensions des autres navigateurs : beaucoup de petits fichiers à lire, hors du fil de l'interface.
         _extensionOffers = await Task.Run(() => BrowserImport.Detect(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData))
             .SelectMany(source => ExtensionCatalog.Scan(source.UserData, source.Name))

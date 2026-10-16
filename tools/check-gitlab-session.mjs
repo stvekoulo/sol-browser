@@ -63,6 +63,7 @@ try{
   assert(!requests.slice(afterLogout).find(r=>r.url==='/logged-out')?.cookie.includes('_gitlab_session='),'logout is not resurrected on restart');
   await activate(mainTab);page=await host.connect(host.origin+'/restored');
   await host.wait(async()=> (await current('_gitlab_session'))?.value==='main-fixture','other account remains signed in');
+  await host.wait(()=>page.evaluate('location.pathname==="/restored"&&document.readyState==="complete"&&innerHeight>160').catch(()=>false),'restored page ready for context menu');
   for(const type of ['mousePressed','mouseReleased'])await page.call('Input.dispatchMouseEvent',{type,x:100,y:150,button:'right',clickCount:1});
   const popup=await host.connect('#popup');
   await host.wait(()=>popup.evaluate('[...document.querySelectorAll(".sol-menu-item")].some(b=>b.textContent.includes("Vider la session"))'),'site-reset context action');

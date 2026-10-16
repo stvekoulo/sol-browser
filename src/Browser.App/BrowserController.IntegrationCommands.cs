@@ -131,6 +131,10 @@ public sealed partial class BrowserController
             case "extension.toggle": _ = ChangeExtensionAsync(id, remove: false); return true;
             case "extension.remove": _ = ChangeExtensionAsync(id, remove: true); return true;
             case "extensions.menu": _ = OpenExtensionsMenuAsync(c.X!.Value, c.Y!.Value); return true;
+            case "extension.edge":
+                if (!AppPaths.Private && ExtensionCatalog.IsId(id) && ExtensionCatalog.Read(ExtensionFolder(id), id) is { } edgeExtension)
+                    ShowExtensionEdgeFallback(edgeExtension, c.X ?? 500, c.Y ?? Scaled(58));
+                return true;
             case "extension.show":
                 if (ExtensionCatalog.IsId(id) && ExtensionCatalog.Read(ExtensionFolder(id), id) is { } shownExtension)
                 {

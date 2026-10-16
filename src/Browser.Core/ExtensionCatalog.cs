@@ -10,7 +10,7 @@ namespace Browser.Core;
 /// <param name="From">Navigateur où elle a été trouvée ; vide pour une extension déjà dans Sol.</param>
 /// <param name="Permissions">Permissions, accès aux sites et adresses où elle injecte ses scripts.</param>
 /// <param name="Store">Publiée sur le Chrome Web Store : Sol peut y chercher ses mises à jour.</param>
-public sealed record ExtensionInfo(string Id, string Name, string Version, string Folder, string? Popup, string? Options, string From = "", string[]? Permissions = null, bool Store = false);
+public sealed record ExtensionInfo(string Id, string Name, string Version, string Folder, string? Popup, string? Options, string From = "", string[]? Permissions = null, bool Store = false, string? SidePanel = null);
 
 /// <summary>
 /// Extensions pour navigateurs Chromium. Le moteur de Sol les charge depuis un dossier ; il n'a ni boutique ni mise à
@@ -31,11 +31,13 @@ public static class ExtensionCatalog
             var action = root.TryGetProperty("action", out var a) ? a : root.TryGetProperty("browser_action", out var b) ? b : default;
             var options = Text(root, "options_page") ?? (root.TryGetProperty("options_ui", out var ui) ? Text(ui, "page") : null);
             return new ExtensionInfo(id, Localized(folder, root, name), Text(root, "version") ?? "", folder,
-                action.ValueKind == JsonValueKind.Object ? Text(action, "default_popup") : null, options, from,
+                action.ValueKind == JsonValueKind.Object && Text(action, "default_popup") is { Length: > 0 } popup ? popup : null,
+                options is { Length: > 0 } ? options : null, from,
                 new[] { "permissions", "host_permissions" }.SelectMany(field => Strings(root, field))
                     .Concat(root.TryGetProperty("content_scripts", out var scripts) && scripts.ValueKind == JsonValueKind.Array
                         ? scripts.EnumerateArray().SelectMany(script => Strings(script, "matches")) : []).Distinct().ToArray(),
-                Text(root, "update_url") is { } update && update.StartsWith(ExtensionPackage.StoreUpdates, StringComparison.OrdinalIgnoreCase));
+                Text(root, "update_url") is { } update && update.StartsWith(ExtensionPackage.StoreUpdates, StringComparison.OrdinalIgnoreCase),
+                root.TryGetProperty("side_panel", out var panel) && Text(panel, "default_path") is { Length: > 0 } panelPage ? panelPage : null);
         }
         catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException) { return null; }
     }

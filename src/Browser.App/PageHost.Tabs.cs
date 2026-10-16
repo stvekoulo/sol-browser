@@ -14,7 +14,6 @@ public sealed partial class PageHost
         _asleep.Remove(id);
         _pdf.Remove(id);
         _ready.Remove(id);
-        _skipSiteRoute.Remove(id);
         _hiddenSince.Remove(id);
         if (_pip == id) ExitPip();
         if (_views.TryGetValue(id, out var closing)) ClearSims(id, closing);
@@ -44,11 +43,9 @@ public sealed partial class PageHost
         finally { view.Close(); }
     }
 
-    public void Navigate(string id, string url, bool route = true)
+    public void Navigate(string id, string url)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out _)) return;
-        if (route && RouteNavigation?.Invoke(id, url, null, false) == true) return;
-        if (!route) _skipSiteRoute.Add(id);
         if (_ready.Contains(id) && Core(id) is { } core)
         {
             // Le moteur termine parfois l'ancien chargement avant d'annoncer le suivant (ConnectionAborted).

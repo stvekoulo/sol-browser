@@ -33,7 +33,7 @@ public sealed partial class BrowserController
         Add(T("Extensions", "Extensions"), new("extensions.open"), keywords: "extensions modules");
         Add(T("Réglages", "Settings"), new("settings.open", X: x, Y: 70), keywords: "settings parametres preferences");
         Add(T("Espaces et profils", "Spaces and profiles"), new("profile.menu", X: x, Y: 70), keywords: "profile espace compte");
-        if (active is not null) Add(T("Session de ce site", "Site session"), new("session.menu", Id: active.Id, X: x, Y: 70), keywords: "compte session cookies admin user invite");
+        if (active is not null) Add(T("Session de cet onglet", "Tab session"), new("session.menu", Id: active.Id, X: x, Y: 70), keywords: "compte session cookies admin user invite");
         Add(T("Plein écran", "Full screen"), new("window.maximize"), keywords: "fullscreen plein ecran");
         if (active is not null)
         {

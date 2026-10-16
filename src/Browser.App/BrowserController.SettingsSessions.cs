@@ -253,7 +253,6 @@ public sealed partial class BrowserController
     private readonly TabSessions _sessions = new(Path.Combine(AppPaths.DataDir, "tab-sessions.json"));
     private string? _deletingSession;
     private string? _sessionMenuTab;
-    private readonly Dictionary<string, string> _sessionTargets = new();
     private string SessionsJson(string tabId) => JsonSerializer.Serialize(new
     {
         popup = "sessions", id = tabId,
@@ -267,18 +266,5 @@ public sealed partial class BrowserController
         if (ClosesPanel("session-" + tabId)) return;
         HidePopup(); _sessionMenuTab = tabId;
         _popup.Show(x, y, 350, SessionsJson(tabId), focus: true);
-    }
-    private bool RouteSiteNavigation(string tabId, string url, string? sourceUrl, bool waitForResponse)
-    {
-        _sessionTargets.Remove(tabId);
-        if (_tabs.Tabs.FirstOrDefault(t => t.Id == tabId) is not { } tab || TabSessions.SameSite(sourceUrl ?? tab.Url, url)
-            || TabSessions.SiteOf(url) is null && url != Settings.DefaultHomePage) return false;
-        var session = _sessions.ForSite(url);
-        if (tab.SessionId == session) return false;
-        _sessionTargets[tabId] = url;
-        // Attendre que le moteur ait accepté la réponse bloquée avant de fermer sa vue.
-        if (waitForResponse) return true;
-        ApplySiteNavigation(tabId);
-        return true;
     }
 }

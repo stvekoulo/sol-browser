@@ -36,16 +36,14 @@ public sealed partial class BrowserController
 
     private async Task ReloadExtensionAsync(string id)
     {
-        if (AppPaths.Private || EngineProfile is not { } profile || !ExtensionCatalog.IsId(id) || id == AdBlock.ExtensionId) return;
+        if (AppPaths.Private || EngineProfile is null || !ExtensionCatalog.IsId(id) || id == AdBlock.ExtensionId) return;
         await _extensionChanges.WaitAsync();
         try
         {
-            var extension = (await profile.GetBrowserExtensionsAsync()).FirstOrDefault(e => e.Id == id);
-            if (extension is null) return;
-            var enabled = extension.IsEnabled;
+            var state = await SharedExtensions.SnapshotAsync();
+            if (!state.TryGetValue(id, out var enabled) || enabled is null) return;
             ExtensionPopup?.Hide();
-            var loaded = await profile.AddBrowserExtensionAsync(ExtensionFolder(id));
-            await loaded.EnableAsync(enabled);
+            await _pages.SyncExtensionsAsync(reloadId: id);
             await RefreshExtensionsAsync();
         }
         catch (Exception e) when (e is InvalidOperationException or ArgumentException or COMException)
@@ -91,6 +89,8 @@ public sealed partial class BrowserController
                 throw new InvalidOperationException("L’identité de l’extension a changé. Installez sa version signée depuis le store pour préserver son accès natif.");
             }
             await installed.EnableAsync(wasEnabled);
+            await SharedExtensions.SetAsync(id, wasEnabled);
+            await _pages.SyncExtensionsAsync(reloadId: id);
             _pages.ApplySettings();
             await RefreshExtensionsAsync();
             return true;
@@ -142,14 +142,10 @@ public sealed partial class BrowserController
         await _extensionChanges.WaitAsync();
         try
         {
-            if ((await profile.GetBrowserExtensionsAsync()).FirstOrDefault(e => e.Id == id) is not { } extension) return;
-            if (remove)
-            {
-                await extension.RemoveAsync();
-                // ponytail: fichiers et préférence d'épinglage partagés ; conserver le code pour les autres sessions.
-                // Nettoyer les fichiers seulement après vérification de tous les profils moteur si l'espace devient un problème.
-            }
-            else await extension.EnableAsync(!extension.IsEnabled);
+            var state = await SharedExtensions.SnapshotAsync();
+            if (!state.TryGetValue(id, out var enabled) || enabled is null) return;
+            await SharedExtensions.SetAsync(id, remove ? null : !enabled.Value);
+            await _pages.SyncExtensionsAsync(reloadId: !remove && !enabled.Value ? id : null);
             ExtensionPopup?.Hide();
             _pages.ApplySettings();
             await RefreshExtensionsAsync();

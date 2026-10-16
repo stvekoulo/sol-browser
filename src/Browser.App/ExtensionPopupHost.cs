@@ -54,7 +54,7 @@ public sealed class ExtensionPopupHost(Window owner)
     private double Scale => owner.Content?.XamlRoot?.RasterizationScale ?? 1;
 
     /// <param name="right">Bord droit de la fenêtre (celui du bouton), dans la fenêtre du navigateur.</param>
-    public async Task ShowAsync(string url, double right, double top, string profileName)
+    public async Task ShowAsync(string url, double right, double top, string profileName, bool panel = false)
     {
         var run = ++_run;
         var origin = new Point();
@@ -72,7 +72,7 @@ public sealed class ExtensionPopupHost(Window owner)
             FocusVisualSecondaryThickness = new Thickness(0),
         };
         window.Content = view;
-        Place(320, 200); // en attendant que la page dise sa taille
+        Place(panel ? 380 : 320, panel ? 600 : 200);
         window.AppWindow.Show(activateWindow: false); // une vue ne démarre son moteur qu'une fois affichée
         try
         {
@@ -102,7 +102,7 @@ public sealed class ExtensionPopupHost(Window owner)
         IsOpen = true;
         window.Activate();
         view.Focus(FocusState.Programmatic);
-        _ = FollowSizeAsync(run);
+        if (!panel) _ = FollowSizeAsync(run);
     }
 
     private Window CreateWindow()

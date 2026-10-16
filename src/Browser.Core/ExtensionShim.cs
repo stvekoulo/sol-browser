@@ -22,14 +22,14 @@ public static class ExtensionShim
           if (!tabs || !tabs.query || tabs.__sol) return;
           const query = tabs.query.bind(tabs);
           const manifest = chrome.runtime.getManifest();
-          const popup = ((manifest.action || manifest.browser_action || {}).default_popup || '').replace(/^\//, '');
-          const popupUrl = popup ? chrome.runtime.getURL(popup).split(/[?#]/)[0] : null;
+          const ownUrls = [((manifest.action || manifest.browser_action || {}).default_popup), manifest.side_panel?.default_path]
+            .filter(Boolean).map(path => chrome.runtime.getURL(path.replace(/^\//, '')).split(/[?#]/)[0]);
           // Les vues qui affichent la fenêtre de l'extension : pour le moteur, des onglets comme les autres.
           const ownWindows = async () => {
-            if (!popupUrl || !chrome.runtime.getContexts) return [];
+            if (!ownUrls.length || !chrome.runtime.getContexts) return [];
             try {
               return (await chrome.runtime.getContexts({ contextTypes: ['TAB'] }))
-                .filter(c => (c.documentUrl || '').split(/[?#]/)[0] === popupUrl).map(c => c.tabId);
+                .filter(c => ownUrls.includes((c.documentUrl || '').split(/[?#]/)[0])).map(c => c.tabId);
             } catch { return []; }
           };
           const resolve = async info => {

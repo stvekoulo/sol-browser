@@ -64,7 +64,7 @@ public sealed partial class BrowserController
                     && PageTranslation.GoogleUrl(PageTranslation.IsGooglePage(sourceTab.Url) ? _translationOriginals.GetValueOrDefault(id, sourceTab.Url) : sourceTab.Url, c.Query!) is { } translatedUrl)
                 {
                     if (!PageTranslation.IsGooglePage(sourceTab.Url)) _translationOriginals[id] = sourceTab.Url;
-                    HidePopup(); _pages.Navigate(id, translatedUrl, route: false); Refresh();
+                    HidePopup(); _pages.Navigate(id, translatedUrl); Refresh();
                 }
                 return true;
             case "translation.original":

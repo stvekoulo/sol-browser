@@ -12,7 +12,6 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     private readonly Dictionary<string, string> _blurScriptIds = new(); // vues où le flou est installé
     private readonly HashSet<string> _loading = new();
     private readonly HashSet<string> _ready = new();
-    private readonly HashSet<string> _skipSiteRoute = new();
     private readonly HashSet<string> _visible = new();
     private readonly HashSet<string> _pdf = new();
     private readonly Dictionary<string, Task> _profileReady = new();
@@ -22,8 +21,6 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     private readonly Dictionary<string, Task> _closingProfiles = new();
     public event Action<string>? SessionFailed;
     public event Action? PagePressed;
-    public Func<string, string, string?, bool, bool>? RouteNavigation { get; set; }
-    public event Action<string>? NavigationSettled;
     public bool IsPdf(string id) => _pdf.Contains(id);
     private bool _watchLayout;
     private (string? Primary, string? Secondary, double Ratio) _layout;

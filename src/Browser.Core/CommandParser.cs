@@ -68,7 +68,7 @@ public static class CommandParser
         ["welcome.ready"] = [], ["welcome.open"] = [], ["welcome.done"] = [], ["welcome.name"] = ["title"],
         ["import.run"] = ["id", "query"], ["import.csv"] = [], ["update.restart"] = [], ["update.later"] = [], ["update.check"] = [],
         ["extensions.open"] = [], ["extensions.menu"] = ["x", "y"], ["extension.add"] = ["id"], ["extension.folder"] = [], ["extension.toggle"] = ["id"], ["extension.remove"] = ["id"], ["extension.show"] = ["id"],
-        ["extension.store"] = [], ["extension.install"] = ["title"], ["extension.options"] = ["id"], ["extension.reload"] = ["id"],
+        ["extension.store"] = [], ["extension.install"] = ["title"], ["extension.options"] = ["id"], ["extension.reload"] = ["id"], ["extension.edge"] = ["id"],
         ["extension.confirm"] = ["id"], ["extension.current"] = [],
         ["extension.pin"] = ["id"], ["extensions.update"] = [], ["extension.update"] = ["id"],
         ["capture.size"] = ["height"], ["capture.close"] = [], ["capture.visibility"] = ["index"],

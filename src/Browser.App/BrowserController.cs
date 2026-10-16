@@ -103,8 +103,6 @@ public sealed partial class BrowserController
         };
         _pages.RuntimeChanged += Refresh;
         _sessions.Seed();
-        _pages.RouteNavigation = RouteSiteNavigation;
-        _pages.NavigationSettled += ApplySiteNavigation;
         _pages.CreatePopupTab = (source, url) =>
         {
             var opener = _tabs.Tabs.FirstOrDefault(t => t.Id == source);
@@ -123,6 +121,7 @@ public sealed partial class BrowserController
         _pages.Loaded += RecordVisit;
         _pages.StoreInstallRequested += url => _ = InstallStoreExtensionAsync(url);
         _pages.StoreManageRequested += () => _ = OpenExtensionsAsync();
+        _pages.ExtensionsChanged += () => _ = RefreshExtensionsAsync();
         _pages.StartRequested += (id, command) =>
         {
             if (_closingWindow) return;
