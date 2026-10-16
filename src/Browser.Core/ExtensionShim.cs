@@ -40,7 +40,9 @@ public static class ExtensionShim
             const own = await ownWindows();
             const pages = list => list.filter(t => !own.includes(t.id));
             // L'onglet affiché : celui que le moteur a montré en dernier.
-            const shown = pages(await query({})).reduce((a, b) => !a || (b.lastAccessed || 0) > (a.lastAccessed || 0) ? b : a, null);
+            const selected = await tabs.__solSelected?.();
+            const all = pages(await query({}));
+            const shown = all.find(t => t.id === selected) || all.reduce((a, b) => !a || (b.lastAccessed || 0) > (a.lastAccessed || 0) ? b : a, null);
             return pages(await query(info))
               .map(t => { t.active = t.highlighted = !!shown && t.id === shown.id; return t; })
               .filter(t => active === undefined || t.active === active);
@@ -56,16 +58,26 @@ public static class ExtensionShim
 
     /// <summary>
     /// Pose le script dans le dossier d'une extension et fait démarrer son script de fond par une amorce qui le charge
-    /// d'abord. Sans effet sur une extension sans script de fond. Vrai si le dossier a changé (l'extension est à recharger).
+    /// d'abord. Une extension avec popup seule reçoit aussi une amorce pour identifier son onglet natif.
+    /// Vrai si le dossier a changé (l'extension est à recharger).
     /// </summary>
     public static bool Apply(string folder)
     {
         var manifestPath = Path.Combine(folder, "manifest.json");
-        if (JsonNode.Parse(File.ReadAllText(manifestPath), null, ExtensionPackage.Lenient) is not JsonObject manifest
-            || manifest["background"] is not JsonObject background
-            || background["service_worker"]?.GetValue<string>() is not { Length: > 0 } worker) return false;
+        if (JsonNode.Parse(File.ReadAllText(manifestPath), null, ExtensionPackage.Lenient) is not JsonObject manifest) return false;
+        var background = manifest["background"] as JsonObject;
+        if (background?["service_worker"]?.GetValue<string>() is not { Length: > 0 } worker)
+        {
+            if (background is not null || manifest["action"] is not JsonObject && manifest["side_panel"] is not JsonObject) return false;
+            manifest["background"] = background = new JsonObject { ["service_worker"] = WorkerFile };
+            worker = WorkerFile;
+            File.WriteAllText(Path.Combine(folder, WorkerFile), $"importScripts('{TabsFile}');");
+            File.WriteAllText(manifestPath, manifest.ToJsonString());
+        }
 
-        var changed = Write(Path.Combine(folder, TabsFile), Script);
+        var action = ExtensionAction.Prepare(folder, manifest);
+        var changed = Write(Path.Combine(folder, TabsFile), Script + action.Script) || action.Changed;
+        if (action.Changed) File.WriteAllText(manifestPath, manifest.ToJsonString());
         var path = worker.Replace('\\', '/').TrimStart('/');
         if (Path.GetFileName(path) == WorkerFile) return changed; // déjà amorcé : seul le script pouvait être à mettre à jour
 

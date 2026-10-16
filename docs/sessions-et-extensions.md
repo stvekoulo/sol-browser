@@ -16,6 +16,21 @@ Les anciens choix par site ne sont plus appliqués ; leurs fichiers ne sont pas 
 | Suppression d’une session | Refusée tant qu’un onglet l’utilise ; retire aussi ses onglets de la pile de réouverture. |
 | Identité restaurée devenue introuvable | Ouvre l’accueil plutôt que le site avec les connexions d’un autre compte. |
 
+Après l’affichage de la page active, Sol prépare progressivement les épingles et raccourcis
+restaurés dans leurs sessions respectives. Leur premier clic réutilise la page chargée.
+Les onglets ordinaires restent endormis ; les pages de connexion ne sont pas préchargées.
+
+## Autorisations des sites
+
+Les choix caméra, micro et autres autorisations sont enregistrés par origine et par session.
+Ils sont aussi synchronisés avec le profil natif WebView2 avant sa première navigation :
+les sites retrouvent leur état autorisé ou refusé dès le redémarrage. Les réponses existantes
+de Sol sont reprises sans nouvelle demande. Deux demandes simultanées sont présentées à la suite.
+
+Oublier une autorisation dans les paramètres, ou vider la session du site, efface également
+le choix natif. Fermer une question ou quitter l’onglet refuse cette demande sans mémoriser
+un nouveau choix. Une fenêtre privée utilise uniquement ses données temporaires.
+
 ## Extensions communes
 
 Le fichier `extension-state.json` appartient au profil Sol. Une installation, activation,
@@ -37,18 +52,30 @@ Les popups et les pages `side_panel.default_path` sont ouvertes dans leur propre
 d’extension, avec les API natives disponibles dans WebView2. Leur vue n’est pas considérée
 comme le site actif lors d’une requête `chrome.tabs.query`.
 
-WebView2 n’expose pas toutes les fonctions d’interface de Microsoft Edge. Une action sans
-popup, comme celle de PromptCard, propose d’ouvrir la page et d’installer l’extension dans Edge.
-Le même repli est accessible dans le gestionnaire pour les autres extensions. Installation et
-connexion dans Edge sont séparées ; les cookies de Sol ne sont pas transférés.
+Les actions sans popup, comme celle de PromptCard, sont exécutées dans Sol. Une adaptation
+du script de fond relaie le clic vers les écouteurs de l’extension ; une commande de menu
+natif accorde `activeTab` à l’onglet visé, sans élargir ses droits aux autres sites.
+La commande interne est masquée ; les menus contextuels propres aux extensions restent disponibles.
+Ce même passage natif fournit l’identité de l’onglet aux popups et panneaux, même quand des
+épingles ont été chargées en arrière-plan. Il n’ajoute aucun droit d’accès aux sites.
+Sol ne propose plus d’ouvrir ou d’installer Microsoft Edge pour exécuter une extension.
+
+Les API restent celles du moteur WebView2 : la compatibilité de toutes les extensions Chrome
+et de leurs services externes n’est pas garantie.
 
 ## Vérification
 
 - `dotnet test tests/Browser.Core.Tests -c Release --no-restore`
-- `node tools/check-extension-activation.mjs` : popup, panneau, onglet actif et repli Edge.
+- `node tools/check-extension-activation.mjs` : action native avec `activeTab`, menus contextuels,
+  popup, panneau, onglet actif et erreur signalée dans Sol.
+- `node tools/check-restored-pins.mjs` : préparation des accès rapides après ouverture et
+  redémarrage, premier clic sans nouvelle navigation, onglets ordinaires endormis.
+- `node tools/check-permission-persistence.mjs` : caméra/micro simulés, redémarrage, révocation
+  native, refus persistants, demandes simultanées et isolation des sessions.
 - `node tools/check-session-inheritance.mjs` : sessions A/B/C, cookies et stockage d’extension
   isolés, liens, duplication, réouverture, historique, redirection, autre domaine, suppression,
   activation/désactivation communes et redémarrage.
 
 Les tests natifs utilisent uniquement un profil temporaire, des extensions et des comptes fictifs.
 Ils n’effectuent pas de connexion à un service réel ni d’installation dans le vrai Microsoft Edge.
+Le test média utilise des appareils simulés et conserve la vraie question d’autorisation de Sol.

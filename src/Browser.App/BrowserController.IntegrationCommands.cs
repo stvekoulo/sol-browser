@@ -131,10 +131,6 @@ public sealed partial class BrowserController
             case "extension.toggle": _ = ChangeExtensionAsync(id, remove: false); return true;
             case "extension.remove": _ = ChangeExtensionAsync(id, remove: true); return true;
             case "extensions.menu": _ = OpenExtensionsMenuAsync(c.X!.Value, c.Y!.Value); return true;
-            case "extension.edge":
-                if (!AppPaths.Private && ExtensionCatalog.IsId(id) && ExtensionCatalog.Read(ExtensionFolder(id), id) is { } edgeExtension)
-                    ShowExtensionEdgeFallback(edgeExtension, c.X ?? 500, c.Y ?? Scaled(58));
-                return true;
             case "extension.show":
                 if (ExtensionCatalog.IsId(id) && ExtensionCatalog.Read(ExtensionFolder(id), id) is { } shownExtension)
                 {
@@ -170,8 +166,8 @@ public sealed partial class BrowserController
                 _sessions.Rename(id, c.Title!); HidePopup(); Refresh(); return true;
             case "session.delete": _ = DeleteSessionAsync(id); return true;
             case "permission.answer": AnswerPermission(c.Index != 0); return true;
-            case "permissions.forget": _permissions.Forget(id); if (_settingsOpen) _popup.Post(SettingsJson()); return true;
-            case "permissions.clear": _permissions.Clear(); if (_settingsOpen) _popup.Post(SettingsJson()); return true;
+            case "permissions.forget": _ = ForgetPermissionsAsync(id); return true;
+            case "permissions.clear": _ = ForgetPermissionsAsync(null); return true;
             case "site-data.clear": if (_settingsOpen) _ = ClearSiteDataAsync(); return true;
             case "site.reset": _ = ResetSiteAsync(); return true;
             case "profile.menu": OpenProfileMenu(c.X!.Value, c.Y!.Value); return true;

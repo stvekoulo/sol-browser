@@ -118,6 +118,7 @@ public sealed partial class BrowserController
                 }
             }
             if (items.Count > 0 && items[^1].Label != "") items.Add(("", null));
+            items.AddRange(NativeExtensionEntries(e.MenuItems, e));
             if (_settings.SolAiEnabled && _ai.Available && (aiText is { Text.Length: > 0 } || aiText?.Editable == true || !e.ContextMenuTarget.IsEditable))
                 items.Add(("Sol AI…", () => _afterMenu = () => _ = OpenPageAiAsync(tabId, aiText)));
             items.Add((T("Capturer une zone", "Capture an area"), () => Capture("region")));

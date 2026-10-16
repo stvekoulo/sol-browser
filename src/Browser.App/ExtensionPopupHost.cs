@@ -54,7 +54,7 @@ public sealed class ExtensionPopupHost(Window owner)
     private double Scale => owner.Content?.XamlRoot?.RasterizationScale ?? 1;
 
     /// <param name="right">Bord droit de la fenêtre (celui du bouton), dans la fenêtre du navigateur.</param>
-    public async Task ShowAsync(string url, double right, double top, string profileName, bool panel = false)
+    public async Task ShowAsync(string url, double right, double top, string profileName, string marker, bool panel = false)
     {
         var run = ++_run;
         var origin = new Point();
@@ -87,7 +87,7 @@ public sealed class ExtensionPopupHost(Window owner)
             core.Settings.IsWebMessageEnabled = false;
             core.Settings.IsZoomControlEnabled = false;
             // Avant le code de l'extension : sa fenêtre voit les onglets comme dans Chrome (voir ExtensionShim).
-            await core.AddScriptToExecuteOnDocumentCreatedAsync(ExtensionShim.Script);
+            await core.AddScriptToExecuteOnDocumentCreatedAsync(ExtensionShim.Script + "\n" + ExtensionAction.QueryScript(marker));
             if (run != _run) return;
             core.NewWindowRequested += (_, e) => { e.Handled = true; Hide(); TabRequested?.Invoke(e.Uri); };
             core.WindowCloseRequested += (_, _) => Hide(); // l'extension ferme sa fenêtre elle-même, une fois son action faite

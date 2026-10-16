@@ -9,31 +9,6 @@ namespace Browser.App;
 public sealed partial class BrowserController
 {
 
-    // Les extensions installées par une version précédente de Sol reçoivent l'amorce (voir ExtensionShim), puis sont rechargées.
-    private async Task PrepareExtensionsAsync()
-    {
-        if (AppPaths.Private || EngineProfile is not { } profile) return;
-        await _extensionChanges.WaitAsync();
-        try
-        {
-            foreach (var extension in await profile.GetBrowserExtensionsAsync())
-            {
-                var folder = ExtensionFolder(extension.Id);
-                if (extension.Id == AdBlock.ExtensionId || !File.Exists(Path.Combine(folder, "manifest.json"))) continue;
-                try
-                {
-                    if (!ExtensionShim.Apply(folder)) continue;
-                    var enabled = extension.IsEnabled;
-                    await (await profile.AddBrowserExtensionAsync(folder)).EnableAsync(enabled);
-                    DebugLog.Write($"extension {extension.Id} : amorce posée, rechargée");
-                }
-                catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException or ArgumentException or COMException)
-                { DebugLog.Write($"extension {extension.Id} : amorce impossible : {e.Message}"); }
-            }
-        }
-        finally { _extensionChanges.Release(); }
-    }
-
     private async Task ReloadExtensionAsync(string id)
     {
         if (AppPaths.Private || EngineProfile is null || !ExtensionCatalog.IsId(id) || id == AdBlock.ExtensionId) return;

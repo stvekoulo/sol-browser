@@ -79,7 +79,8 @@ internal static class SharedExtensions
                     if (extension is null && !enabled.Value) continue;
                     var folder = Folder(id);
                     if (ExtensionCatalog.Read(folder, id) is null) continue;
-                    if (extension is null || id == reloadId && enabled.Value)
+                    var prepared = enabled.Value && ExtensionShim.Apply(folder);
+                    if (extension is null || prepared || id == reloadId && enabled.Value)
                     {
                         extension = await profile.AddBrowserExtensionAsync(folder);
                         if (extension.Id != id)

@@ -199,6 +199,7 @@ public sealed partial class PageHost
             .Where(p => p.Profile.ProfileName == name && PermissionStore.OriginOf(p.Source) == origin).ToArray();
         try
         {
+            await NativePermissions.ResetAsync(core.Profile, origin);
             foreach (var page in pages)
             {
                 page.Stop();

@@ -167,7 +167,8 @@ public sealed partial class BrowserController
         };
         _pages.Loaded += id =>
         {
-            if (!_pinsInitialized) { _ = RefreshPinnedExtensionsAsync(); _ = PrepareExtensionsAsync(); _ = UpdateExtensionsLaterAsync(); }
+            if (!_pinsInitialized) { _ = RefreshPinnedExtensionsAsync(); _ = UpdateExtensionsLaterAsync(); }
+            if (_tabs.ActiveId == id) _ = PrepareRestoredPinsAsync();
             _ = LearnShortcutNameAsync(id);
             if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { } tab && IsWeb(tab.Url) && tab.Url is not (Settings.DefaultHomePage or QuickNotes.PageUrl)) FetchStartIcon(tab.Url);
             Refresh();

@@ -30,6 +30,7 @@ public sealed partial class PageHost
     }
     private async Task PrepareProfileAsync(CoreWebView2Profile profile)
     {
+        await NativePermissions.SyncAsync(profile);
         await AdBlock.RemoveBundledAsync(profile);
         await PageZoom.InstallAsync(profile, settings.PageZoom);
         await SharedExtensions.SyncAsync(profile);
@@ -87,6 +88,7 @@ public sealed partial class PageHost
         if (!_views.TryGetValue(tab.Id, out var initializing) || initializing != view) return null; // fermé ou rouvert pendant l'initialisation
 
         var core = view.CoreWebView2;
+        await core.AddScriptToExecuteOnDocumentCreatedAsync(ExtensionAction.ContextScript);
         core.DOMContentLoaded += (_, _) =>
         {
             if(!core.Source.StartsWith("https://start.sol/",StringComparison.Ordinal)) { view.Opacity=1;ContentPainted?.Invoke(); }
@@ -195,6 +197,7 @@ public sealed partial class PageHost
         core.NewWindowRequested += (sender, e) => _ = OpenWindowAsync(tab.Id, e);
         core.ContextMenuRequested += (_, e) =>
         {
+            if (HandleExtensionAction(tab.Id, e)) return;
             // Position du clic dans la fenêtre, pour y poser notre menu.
             var point = view.TransformToVisual(null).TransformPoint(new Windows.Foundation.Point(e.Location.X, e.Location.Y));
             ContextMenuRequested?.Invoke(tab.Id, point.X, point.Y, e);

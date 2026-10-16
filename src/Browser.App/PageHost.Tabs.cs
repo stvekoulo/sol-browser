@@ -101,6 +101,13 @@ public sealed partial class PageHost
         RuntimeChanged?.Invoke();
     }
 
+    public async Task PrepareRestoredAsync(string id)
+    {
+        if (_views.ContainsKey(id) || !_asleep.Remove(id, out var tab)) return;
+        await AddAsync(tab);
+        if (_views.TryGetValue(id, out var view)) Rest(id, view, hidden: !_visible.Contains(id));
+    }
+
     public void ApplyLayout(string? activeId, string? secondaryId, double ratio)
     {
         _layout = (activeId, secondaryId, ratio);

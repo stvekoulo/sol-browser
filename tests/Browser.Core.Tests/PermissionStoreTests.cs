@@ -24,6 +24,25 @@ public class PermissionStoreTests : IDisposable
     }
 
     [Fact]
+    public void A_failed_save_does_not_claim_that_consent_was_recorded()
+    {
+        Directory.CreateDirectory(File_);
+        var store = new PermissionStore(File_);
+        Assert.False(store.Set("https://a.test", "Camera", true));
+        Assert.Null(store.Get("https://a.test", "Camera"));
+    }
+
+    [Fact]
+    public void Native_profiles_resolve_to_the_same_isolated_permission_files()
+    {
+        Assert.Equal(File_, PermissionStore.FileForProfile(_dir, "Default"));
+        Assert.Equal(File_, PermissionStore.FileForProfile(_dir, ""));
+        var session = new string('a', 32);
+        Assert.Equal(Path.Combine(_dir, "session-permissions", session + ".json"), PermissionStore.FileForProfile(_dir, "sol-" + session));
+        Assert.Throws<ArgumentException>(() => PermissionStore.FileForProfile(_dir, "sol-../other"));
+    }
+
+    [Fact]
     public void Answers_are_kept_per_site_and_per_kind_across_restarts()
     {
         var store = new PermissionStore(File_);

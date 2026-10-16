@@ -5,7 +5,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
-export async function sidebarHost(executable,{serve=null,downloads=false,captures=false,privateMode=false}={}) {
+export async function sidebarHost(executable,{serve=null,downloads=false,captures=false,privateMode=false,media=false}={}) {
   const profileName=`sidebar-check-${Date.now()}`,base = resolve(`bin/${profileName}`), profile = resolve(base, 'profiles',profileName);
   await mkdir(profile, {recursive: true});
   if(privateMode)await writeFile(resolve(profile,'temporary'),'');
@@ -26,6 +26,7 @@ export async function sidebarHost(executable,{serve=null,downloads=false,capture
     Icons: Array(12).fill(icon), PinnedCount:2, ActiveIndex:2,
     Groups:[{Name:'Travail',Color:'#8fa8e8',Icon:'',Collapsed:false},{Name:'Lecture',Color:'#e3cf7a',Icon:'📖',Collapsed:false}], GroupOf:[null,null,0,0,1,1]}));
   const env = {...process.env, NAVIGATEUR_DATA_DIR:base, NAVIGATEUR_DEBUG:'1', WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS:`--remote-debugging-port=${port} --disable-background-timer-throttling --disable-backgrounding-occluded-windows`};
+  if(media)env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS+=' --use-fake-device-for-media-stream';
   if(downloads){env.NAVIGATEUR_TEST_DOWNLOAD_DIR=resolve(base,'downloads');await mkdir(env.NAVIGATEUR_TEST_DOWNLOAD_DIR,{recursive:true});}
   if(captures){env.NAVIGATEUR_CAPTURE_DIR=resolve(base,'captures');await mkdir(env.NAVIGATEUR_CAPTURE_DIR,{recursive:true});}
   delete env.WEBVIEW2_USER_DATA_FOLDER;

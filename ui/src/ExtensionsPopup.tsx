@@ -10,7 +10,6 @@ export default function ExtensionsPopup({content,rootRef}:{content:Extract<Conte
   return <div ref={rootRef} className="popup extensions-popup">
     <div className="popup-header"><span className="popup-header-title">{t('Extensions','Extensions')}</span><span className="popup-badge">{content.installed.length}</span></div>
     <p className="row-sub extension-note">{t('Disponibles dans toutes les sessions de ce profil Sol. Cookies et données des extensions restent séparés entre sessions. Rechargez les pages après un changement. Les extensions sont désactivées en navigation privée.','Available in every session of this Sol profile. Extension data and cookies stay separate between sessions. Reload pages after a change. Extensions are disabled in private browsing.')}</p>
-    <p className="row-sub extension-note">{t('Si une fonction exige Edge, utilisez « Microsoft Edge… ». Installez-y aussi l’extension et reconnectez-vous : les sessions sont séparées.','If a feature requires Edge, use “Microsoft Edge…”. Install the extension there and sign in again: sessions are separate.')}</p>
     <div className="popup-list">
       {!content.installed.length&&<p className="row-hint">{t('Aucune extension ajoutée pour l’instant.','No extension added yet.')}</p>}
       {content.installed.map(e=><Card key={e.id} size="compact" className="sol-extension-card" data-extension={e.id}>
@@ -21,7 +20,6 @@ export default function ExtensionsPopup({content,rootRef}:{content:Extract<Conte
           <Button variant="ghost" size="sm" className={`pill-action${e.pinned?' on':''}`} aria-pressed={e.pinned} onClick={()=>send({type:'extension.pin',id:e.id})}>{e.pinned?t('Désépingler','Unpin'):t('Épingler','Pin')}</Button>
           {e.page&&e.enabled&&<Button variant="ghost" size="sm" className="pill-action" onClick={()=>send({type:'extension.show',id:e.id})}>{t('Ouvrir','Open')}</Button>}
           {e.options&&e.enabled&&<Button variant="ghost" size="sm" className="pill-action" onClick={()=>send({type:'extension.options',id:e.id})}>{t('Réglages','Settings')}</Button>}
-          <Button variant="ghost" size="sm" className="pill-action" onClick={()=>send({type:'extension.edge',id:e.id})}>{t('Microsoft Edge…','Microsoft Edge…')}</Button>
           <Button variant="ghost" size="sm" className="pill-action" onClick={()=>send({type:'extension.reload',id:e.id})}><Icon name="reload" d="" size={13}/>{t('Recharger','Reload')}</Button>
           <Button variant="ghost" size="sm" className="pill-action sol-remove-extension" onClick={()=>send({type:'extension.remove',id:e.id})}>{t('Retirer','Remove')}</Button>
         </div>

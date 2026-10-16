@@ -156,7 +156,7 @@ public sealed partial class BrowserController
     }
 
     public void DismissAiPopup() { if (_aiPopup) HidePopup(); }
-    private void HidePopup()
+    private void HidePopup(bool cancelPermissions = true)
     {
         if (_aiPopup) { _aiPopup = false; _ai.Cancel(); _aiContext = null; }
         _siteReset = null;
@@ -180,12 +180,7 @@ public sealed partial class BrowserController
         _profilesOpen = false;
         _extensionsOpen = false;
         // Question d'accès fermée sans réponse : refus pour cette fois, rien n'est retenu.
-        if (_asking is var (pendingArgs, pendingDeferral, _, _, _))
-        {
-            _asking = null;
-            pendingArgs.State = Microsoft.Web.WebView2.Core.CoreWebView2PermissionState.Deny;
-            pendingDeferral.Complete();
-        }
+        if (cancelPermissions) DismissPermissions();
         var dismissed = _menuDismissed;
         (_menu, _menuDismissed) = (null, null);
         dismissed?.Invoke();

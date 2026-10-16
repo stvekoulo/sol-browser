@@ -15,7 +15,7 @@ public sealed partial class PageHost
         foreach (var profile in profiles) success &= await SharedExtensions.SyncAsync(profile, reloadId);
         ExtensionsChanged?.Invoke();
         if (!success) throw new InvalidOperationException(Language.Current == "fr"
-            ? "Une extension n’a pas pu être synchronisée dans toutes les sessions. Réessayez ou utilisez Microsoft Edge."
-            : "An extension could not be synchronized across all sessions. Retry or use Microsoft Edge.");
+            ? "Une extension n’a pas pu être synchronisée dans toutes les sessions. Rechargez-la puis réessayez."
+            : "An extension could not be synchronized across all sessions. Reload it, then retry.");
     }
 }

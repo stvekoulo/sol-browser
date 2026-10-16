@@ -56,67 +56,6 @@ public sealed partial class BrowserController
         _popup.Show(x - Scaled(width), y, width, DownloadsJson(_downloads), focus: true, above: true); // depuis le bas de la carte latérale
     }
 
-    // Demandes d'accès des sites. Une réponse est retenue pour ce site et ce type d'accès ; fermer la question
-    // sans répondre refuse pour cette fois seulement.
-    private readonly PermissionStore _defaultPermissions = new(AppPaths.Permissions);
-    private readonly Dictionary<string, PermissionStore> _sessionPermissions = new();
-    private PermissionStore _permissions => _tabs.Tabs.FirstOrDefault(t => t.Id == _tabs.ActiveId)?.SessionId is { Length: > 0 } session
-        ? _sessionPermissions.TryGetValue(session, out var store) ? store : _sessionPermissions[session] = new(Path.Combine(AppPaths.DataDir, "session-permissions", session + ".json"))
-        : _defaultPermissions;
-    private (Microsoft.Web.WebView2.Core.CoreWebView2PermissionRequestedEventArgs Args, Windows.Foundation.Deferral Deferral, string Origin, Microsoft.Web.WebView2.Core.CoreWebView2 Core, string? PageOrigin)? _asking;
-
-    private static string PermissionLabel(Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind kind) => kind switch
-    {
-        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.Microphone => T("utiliser votre micro", "use your microphone"),
-        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.Camera => T("utiliser votre caméra", "use your camera"),
-        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.Geolocation => T("connaître votre position", "know your location"),
-        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.Notifications => T("vous envoyer des notifications", "send you notifications"),
-        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.ClipboardRead => T("lire le contenu du presse-papiers", "read the clipboard"),
-        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.MultipleAutomaticDownloads => T("télécharger plusieurs fichiers à la suite", "download several files in a row"),
-        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.FileReadWrite => T("lire et modifier des fichiers de cet ordinateur", "read and change files on this computer"),
-        Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.OtherSensors => T("lire les capteurs de mouvement", "read motion sensors"),
-        _ => T($"utiliser une fonction sensible ({kind})", $"use a sensitive feature ({kind})"),
-    };
-
-    private void OnPermissionRequested(Microsoft.Web.WebView2.Core.CoreWebView2 core, Microsoft.Web.WebView2.Core.CoreWebView2PermissionRequestedEventArgs e)
-    {
-        e.SavesInProfile = false; // les réponses sont gardées par le navigateur, pas par le moteur
-        var origin = PermissionStore.OriginOf(e.Uri);
-        // Pas de site identifiable, ou une question déjà affichée : refus, sans rien retenir.
-        if (origin is null || _asking is not null || _tabs.ActiveId is not { } active || _pages.CoreOf(active) != core)
-        {
-            e.State = Microsoft.Web.WebView2.Core.CoreWebView2PermissionState.Deny;
-            return;
-        }
-        if (_permissions.Get(origin, e.PermissionKind.ToString()) is { } known)
-        {
-            e.State = known ? Microsoft.Web.WebView2.Core.CoreWebView2PermissionState.Allow : Microsoft.Web.WebView2.Core.CoreWebView2PermissionState.Deny;
-            return;
-        }
-
-        HidePopup();
-        _asking = (e, e.GetDeferral(), origin, core, PermissionStore.OriginOf(core.Source));
-        _popup.ShowCentered(360, JsonSerializer.Serialize(new
-        {
-            popup = "permission",
-            site = new Uri(origin).Host,
-            what = PermissionLabel(e.PermissionKind),
-            secure = origin.StartsWith("https://", StringComparison.Ordinal),
-        }), top: 70);
-    }
-
-    private void AnswerPermission(bool allow)
-    {
-        if (_asking is not var (args, deferral, origin, core, pageOrigin)) return;
-        _asking = null;
-        if (_tabs.ActiveId is not { } active || _pages.CoreOf(active) != core || PermissionStore.OriginOf(core.Source) != pageOrigin)
-        { args.State = Microsoft.Web.WebView2.Core.CoreWebView2PermissionState.Deny; deferral.Complete(); HidePopup(); return; }
-        args.State = allow ? Microsoft.Web.WebView2.Core.CoreWebView2PermissionState.Allow : Microsoft.Web.WebView2.Core.CoreWebView2PermissionState.Deny;
-        deferral.Complete();
-        _permissions.Set(origin, args.PermissionKind.ToString(), allow);
-        HidePopup();
-    }
-
     private string _siteData = "idle";
     private (string Id, string Origin, string Session)? _siteReset;
     private bool _resettingSite;
@@ -140,13 +79,8 @@ public sealed partial class BrowserController
         HidePopup();
         try
         {
-            if (await _pages.ResetSiteAsync(id, origin))
-            {
-                var permissions = session.Length == 0 ? _defaultPermissions : _sessionPermissions.TryGetValue(session, out var stored)
-                    ? stored : _sessionPermissions[session] = new(Path.Combine(AppPaths.DataDir, "session-permissions", session + ".json"));
-                permissions.Forget(origin);
-            }
-            else if (!_closingWindow) Notice(T("Effacement incomplet", "Incomplete clearing"), T("Certaines données n’ont pas pu être effacées. Réessayez sur ce site.", "Some data could not be cleared. Retry on this site."));
+            if (!PermissionFor(session).Forget(origin) || !await _pages.ResetSiteAsync(id, origin))
+                if (!_closingWindow) Notice(T("Effacement incomplet", "Incomplete clearing"), T("Certaines données n’ont pas pu être effacées. Réessayez sur ce site.", "Some data could not be cleared. Retry on this site."));
         }
         finally { _resettingSite = false; }
     }
