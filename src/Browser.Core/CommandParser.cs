@@ -75,7 +75,7 @@ public static class CommandParser
         ["capture.run"] = ["query"], ["capture.region"] = ["x", "y", "width", "height"],
         ["capture.selection"] = ["index"], ["capture.save"] = [],
         ["backup.export"] = [], ["backup.export.key"] = ["title"], ["backup.import"] = [], ["backup.restore"] = ["title"],
-        ["ui.ready"] = [], ["ui.tooltip"] = [],
+        ["ui.ready"] = [], ["ui.tooltip"] = [], ["ui.layout"] = ["x","y","width","height"],
     };
 
     public static Command? Parse(string json)

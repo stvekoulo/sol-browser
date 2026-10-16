@@ -5,9 +5,10 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
-export async function sidebarHost(executable,{serve=null,downloads=false}={}) {
+export async function sidebarHost(executable,{serve=null,downloads=false,captures=false,privateMode=false}={}) {
   const profileName=`sidebar-check-${Date.now()}`,base = resolve(`bin/${profileName}`), profile = resolve(base, 'profiles',profileName);
   await mkdir(profile, {recursive: true});
+  if(privateMode)await writeFile(resolve(profile,'temporary'),'');
   const server = createServer((req, res) => {
     if(serve?.(req,res))return;
     res.writeHead(200, {'Content-Type': 'text/html'});
@@ -26,6 +27,7 @@ export async function sidebarHost(executable,{serve=null,downloads=false}={}) {
     Groups:[{Name:'Travail',Color:'#8fa8e8',Icon:'',Collapsed:false},{Name:'Lecture',Color:'#e3cf7a',Icon:'📖',Collapsed:false}], GroupOf:[null,null,0,0,1,1]}));
   const env = {...process.env, NAVIGATEUR_DATA_DIR:base, NAVIGATEUR_DEBUG:'1', WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS:`--remote-debugging-port=${port} --disable-background-timer-throttling --disable-backgrounding-occluded-windows`};
   if(downloads){env.NAVIGATEUR_TEST_DOWNLOAD_DIR=resolve(base,'downloads');await mkdir(env.NAVIGATEUR_TEST_DOWNLOAD_DIR,{recursive:true});}
+  if(captures){env.NAVIGATEUR_CAPTURE_DIR=resolve(base,'captures');await mkdir(env.NAVIGATEUR_CAPTURE_DIR,{recursive:true});}
   delete env.WEBVIEW2_USER_DATA_FOLDER;
   let app, failure='';
   const connections = [];
@@ -36,6 +38,7 @@ export async function sidebarHost(executable,{serve=null,downloads=false}={}) {
   };
   const targets = () => fetch(`http://127.0.0.1:${port}/json/list`).then(r=>r.json()).catch(()=>[]);
   const connect = async hash => {
+    if(hash==='#sidebar')hash='';
     const url=hash.includes('://')?hash:`https://ui.navigateur/index.html${hash}`;
     const target = await wait(async()=> (await targets()).find(t=>t.url === url), `target ${hash}`);
     const ws = new WebSocket(target.webSocketDebuggerUrl); await once(ws,'open'); connections.push(ws);
@@ -45,9 +48,9 @@ export async function sidebarHost(executable,{serve=null,downloads=false}={}) {
     const evaluate = async expression=> {const result=await call('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true,userGesture:true});if(result.exceptionDetails)throw new Error(JSON.stringify(result.exceptionDetails));return result.result.value;};
     return {call,evaluate};
   };
-  const launch = async(height=950)=> {
+  const launch = async(height=950,width=1000)=> {
     failure='';
-    app = spawn(resolve(executable),[`--profile=${profileName}`,`--bounds=-9000,-9000,1000,${height}`],{windowsHide:true,env,stdio:['ignore','pipe','pipe']});
+    app = spawn(resolve(executable),[`--profile=${profileName}`,`--bounds=-9000,-9000,${width},${height}`,...(privateMode?['--private']:[])],{windowsHide:true,env,stdio:['ignore','pipe','pipe']});
     app.stderr.on('data',data=>failure+=data);app.stdout.on('data',data=>failure+=data);
     const sidebar=await connect('#sidebar');
     await wait(()=>sidebar.evaluate('!!document.querySelector(".sidebar-card")').catch(()=>false),'sidebar ready');
@@ -59,5 +62,10 @@ export async function sidebarHost(executable,{serve=null,downloads=false}={}) {
     if(app && app.exitCode===null) { const exited=once(app,'exit');await sidebar.evaluate(`chrome.webview.postMessage('{"type":"window.close"}')`);await exited; }
     connections.splice(0).forEach(ws=>ws.close());
   };
-  return {base,profile,origin,launch,close,connect,wait,targets,dispose:()=>new Promise(r=>server.close(r))};
+  const dispose=async()=>{
+    if(app&&app.exitCode===null){const exited=once(app,'exit');app.kill();await exited;}
+    connections.splice(0).forEach(ws=>ws.close());
+    await new Promise(r=>server.close(r));
+  };
+  return {base,profile,origin,launch,close,connect,wait,targets,dispose};
 }

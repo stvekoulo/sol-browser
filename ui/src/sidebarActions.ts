@@ -1,12 +1,12 @@
 import type { MouseEvent, KeyboardEvent } from 'react';
-import { interfaceScale, send } from './bridge';
+import { send } from './bridge';
 
 export function sidebarMenu(type: string, id: string, event: MouseEvent<HTMLElement>) {
   event.preventDefault(); event.stopPropagation();
   const box = event.currentTarget.getBoundingClientRect();
   send({ type, ...(type === 'shortcut.menu' ? { index: Number(id) } : { id }),
     x: event.type === 'contextmenu' ? event.clientX : box.left,
-    y: (event.type === 'contextmenu' ? event.clientY : box.bottom + 4) + 52 * interfaceScale() });
+    y: (event.type === 'contextmenu' ? event.clientY : box.bottom + 4) });
 }
 
 export function middleClose(event: MouseEvent, id: string | null) {

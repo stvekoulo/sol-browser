@@ -1,16 +1,14 @@
-import { useEffect, useState, type MouseEvent } from 'react';
+import {WindowControls,useWindowDrag} from './WindowControls';
+import { useEffect, useState } from 'react';
 import { isStartPage, onState, send, type State } from './bridge';
 import { t, useLang } from './i18n';
 import AddressPill from './AddressPill';
 import { Icon, SidebarIcon } from './Icons';
 
-// Pression sur le fond de la barre, en attente d'un mouvement pour déplacer la fenêtre.
-let dragArmed: { x: number; y: number } | null = null;
-
-export default function App() {
+export default function App({sidebarOpen=true}:{sidebarOpen?:boolean}) {
   const [state, setState] = useState<State | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
   useLang();
+  const windowDrag=useWindowDrag();
 
   useEffect(() => {
     const off = onState(setState, e => {
@@ -20,26 +18,9 @@ export default function App() {
           input?.focus();
           input?.select();
         });
-      if (e.event === 'sidebar' && typeof e.open === 'boolean')
-        setSidebarOpen(e.open);
     });
-    send({ type: 'ui.ready' });
 
-    const move = (e: globalThis.MouseEvent) => {
-      if (!dragArmed) return;
-      if (!(e.buttons & 1)) return void (dragArmed = null);
-      if (Math.abs(e.screenX - dragArmed.x) + Math.abs(e.screenY - dragArmed.y) < 4) return;
-      dragArmed = null;
-      send({ type: 'window.drag' });
-    };
-    const disarm = () => (dragArmed = null);
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', disarm);
-    return () => {
-      off();
-      window.removeEventListener('mousemove', move);
-      window.removeEventListener('mouseup', disarm);
-    };
+    return off;
   }, []);
 
   if (!state) return null;
@@ -48,28 +29,10 @@ export default function App() {
   const { split } = state;
   const panes = split.visible ? [byId(split.primaryId), byId(split.secondaryId)] : [activeTab];
 
-  // Seul le fond de la barre déplace ou agrandit la fenêtre. Le déplacement ne démarre qu'une fois la souris
-  // réellement en mouvement, bouton enfoncé : lancé sur un simple clic, Windows attendrait un relâchement
-  // déjà passé et la fenêtre resterait accrochée au curseur.
-  const dragWindow = (e: MouseEvent) => {
-    if (e.button === 0 && e.target === e.currentTarget) dragArmed = { x: e.screenX, y: e.screenY };
-  };
-  const maximize = (e: MouseEvent) => {
-    if (e.target === e.currentTarget) send({ type: 'window.maximize' });
-  };
-
   return (
-    <header className="topbar" onMouseDown={dragWindow} onDoubleClick={maximize}>
-      <div className="topbar-left" onMouseDown={dragWindow}>
-        <div className="lights">
-          <button className="light close" aria-label={t('Fermer', 'Close')} onClick={() => send({ type: 'window.close' })} />
-          <button className="light minimize" aria-label={t('Réduire', 'Minimize')} onClick={() => send({ type: 'window.minimize' })} />
-          <button
-            className="light maximize"
-            aria-label={state.maximized ? t('Restaurer', 'Restore') : t('Agrandir', 'Maximize')}
-            onClick={() => send({ type: 'window.maximize' })}
-          />
-        </div>
+    <header className={`topbar${sidebarOpen?' sidebar-open':''}`} {...windowDrag}>
+      <div className="topbar-left" {...windowDrag}>
+        {!sidebarOpen&&<WindowControls maximized={state.maximized}/>}
 
         <div className="pill-surface navigation-actions" role="group" aria-label={t('Navigation et panneau latéral', 'Navigation and sidebar')}>
         <button
@@ -104,7 +67,7 @@ export default function App() {
         </div>
       </div>
 
-      <div className={`topbar-center${split.visible ? ' split-addresses' : ''}`} onMouseDown={dragWindow} onDoubleClick={maximize}>
+      <div className={`topbar-center${split.visible ? ' split-addresses' : ''}`} {...windowDrag}>
         {panes.map((tab, i) => (
           <AddressPill
             key={tab?.id ?? i}
@@ -116,7 +79,7 @@ export default function App() {
         ))}
       </div>
 
-      <div className="topbar-right pill-surface" onMouseDown={dragWindow}>
+      <div className="topbar-right pill-surface" {...windowDrag}>
         {activeTab && !isStartPage(activeTab.url) && activeTab.url !== 'https://start.sol/index.html#notes' && /^https?:\/\//.test(activeTab.url) &&
           <button data-action="translation.open" className={`pill-icon-btn${activeTab.translated ? ' translation-active' : ''}`} aria-label={t('Traduire la page', 'Translate page')} aria-pressed={!!activeTab.translated} title={activeTab.translated ? t('Traduction · voir l’original', 'Translation · view original') : t('Traduire la page', 'Translate page')}
             onClick={e => { const box = e.currentTarget.getBoundingClientRect(); send({ type: 'translation.open', id: activeTab.id, x: box.right, y: box.bottom + 6 }); }}>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { fontLabels, onMessage, send } from './bridge';
 import { t, useLang } from './i18n';
 import { Icon } from './Icons';
+import {Card} from '@/components/motion/card';
 import logo from './assets/logo.png';
 import browserLight from './assets/welcome/browser-light.webp';
 import browserDark from './assets/welcome/browser-dark.webp';
@@ -145,7 +146,7 @@ export default function Welcome() {
 
   return (
     <main className="welcome">
-      <section className="welcome-card" aria-label={t('Accueil de Sol', 'Sol welcome')}>
+      <Card size="compact" role="region" className="sol-surface-card welcome-card" aria-label={t('Accueil de Sol', 'Sol welcome')}>
         {/* La clé rejoue l'apparition du contenu à chaque étape. */}
         <div key={step} className="welcome-step">{steps[step]}</div>
         <footer className="welcome-foot">
@@ -160,7 +161,7 @@ export default function Welcome() {
             {step >= last ? (setup.first ? t('Commencer', 'Get started') : t('Terminer', 'Done')) : t('Continuer', 'Continue')}
           </button>
         </footer>
-      </section>
+      </Card>
       <Preview step={step} />
     </main>
   );

@@ -77,7 +77,7 @@ public sealed partial class BrowserController
             JsonFileStore.Save(AppPaths.Settings, _settings);
         }
         _db = new BrowserDb(AppPaths.Database);
-        _capture = new CaptureService(window, json => CapturePanel?.Post(json));
+        _capture = new CaptureService(window, json => CapturePanel?.Post(json), pages.RestoreCaptureViewportAsync);
         _ai.Changed += () => _window.DispatcherQueue.TryEnqueue(() =>
         {
             if (_closingWindow) return;
@@ -197,6 +197,7 @@ public sealed partial class BrowserController
             UpdateDock();
             if (_settingsOpen) _popup.Post(SettingsJson());
         });
+        WireGitLabSessionClosing();
         _window.Closed += (_, _) =>
         {
             _closingWindow = true;

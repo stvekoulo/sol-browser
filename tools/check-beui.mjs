@@ -27,6 +27,7 @@ const openSettings=async()=>{
   popup??=await host.connect('#popup');
   await host.wait(()=>popup.evaluate('!!document.querySelector(".settings-popup")').catch(()=>false),'settings rendered');
   await delay(220);
+  assert(await popup.evaluate('!!document.querySelector(".sol-popup-card[data-slot=card]>.settings-popup")&&document.querySelectorAll(".settings-popup .sol-settings-card,.settings-popup .theme-row[data-slot=card],.settings-popup .setting-row[data-slot=card]").length===0'),'settings use one outer beUI Card and flat inner controls');
 };
 const shot=async(name)=>{await delay(250);const r=await popup.call('Page.captureScreenshot',{format:'png'});await writeFile(resolve(host.base,`${name}.png`),Buffer.from(r.data,'base64'));};
 const bounds=async(id)=>{
@@ -38,6 +39,7 @@ const bounds=async(id)=>{
 };
 try{
   sidebar=await host.launch();await openSettings();
+  assert(await popup.evaluate('!!document.querySelector(".sol-popup-card[data-slot=card]>.settings-popup")'),'settings use the shared beUI Card');
   const toggle='[data-setting="memory"]';
   assert.equal(await popup.evaluate(`!!document.querySelector('${toggle} [role="switch"]')`),true);
   const before=await popup.evaluate(`document.querySelector('${toggle} [role="switch"]').getAttribute('aria-checked')==='true'`);
@@ -79,6 +81,7 @@ try{
   const s=await sidebar.evaluate('window.__sidebarState'),group=s.groups[0];
   await cmd(sidebar,{type:'group.menu',id:group.id,x:180,y:60});
   await host.wait(()=>popup.evaluate('!!document.querySelector(".beui-menu-popup [role=menu]")'),'embedded menu');await delay(300);
+  assert(await popup.evaluate('!!document.querySelector(".sol-popup-card[data-slot=card]>.beui-menu-popup")'),'context menu uses the shared beUI Card');
   await host.wait(()=>popup.evaluate('Number(getComputedStyle(document.querySelector("[role=menu]")).opacity)>.99'),'menu visible');
   assert.equal(await popup.evaluate('document.activeElement.getAttribute("role")'),'menuitem');
   assert.equal(await popup.evaluate(`document.querySelector('.sol-menu-item [data-icon]')?.getAttribute('data-icon')`),'tab','new tab uses an animated tab icon');
@@ -92,9 +95,11 @@ try{
   await delay(200);assert.equal(await popup.evaluate('document.querySelector(".group-editor input").value'),group.name);
   await cmd(sidebar,{type:'popup.close'});
   await popup.call('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
-  await cmd(sidebar,{type:'group.menu',id:group.id,x:180,y:60});await delay(250);
-  await host.wait(()=>popup.evaluate('Number(getComputedStyle(document.querySelector("[role=menu]")).opacity)>.99'),'reduced-motion menu visible');
-  await press('Escape',27);
+  for(let opening=0;opening<3;opening++){
+    await cmd(sidebar,{type:'group.menu',id:group.id,x:180,y:60});await delay(250);
+    await host.wait(()=>popup.evaluate('document.visibilityState==="visible"&&Number(getComputedStyle(document.querySelector("[role=menu]")).opacity)>.99'),'reduced-motion menu visible after rapid reopening '+opening);
+    await press('Escape',27);
+  }
   const tab=s.tabs.find(t=>t.url===host.origin+'/2');await cmd(sidebar,{type:'tab.activate',id:tab.id});
   const page=await host.connect(tab.url);
   await host.wait(()=>page.evaluate('document.readyState==="complete"').catch(()=>false),'site page');
@@ -109,6 +114,7 @@ try{
   };
   await menuPick('Voir en mobile');await menuPick('Choisir les écrans à comparer');
   await host.wait(()=>popup.evaluate('!!document.querySelector("[role=checkbox]")'),'native comparison checkboxes');
+  assert(await popup.evaluate('document.querySelectorAll(".name-form [data-slot=card],label label").length===0'),'comparison choices stay flat without nested labels');
   await delay(300);
   const checked=()=>popup.evaluate('document.querySelectorAll("[role=checkbox][aria-checked=true]").length');
   while(await checked()>1)await click('[role=checkbox][aria-checked=true]');
@@ -121,5 +127,5 @@ try{
   await cmd(sidebar,{type:'device.set',id:tab.id,query:''});
   assert((await readFile('ui/dist/licenses/third-party.txt','utf8')).includes('Saurabh Chauhan'));
   console.log(JSON.stringify({passed:'beUI native switches and persistence; engine/font selection, keyboard, focus and dismissal; three scales; light/dark; short window and mouse scrolling; native context-menu keyboard, submenus and editor transition; comparison checkboxes, min/max and persistence; reduced motion; delivered MIT notice',evidence:host.base}));
-}catch(error){if(popup)console.error('POPUP',await popup.evaluate('({text:document.body.innerText,focus:document.activeElement.tagName,size:[innerWidth,innerHeight],root:document.querySelector("#root").scrollTop})').catch(()=>null));throw error;}
+}catch(error){if(popup)console.error('POPUP',await popup.evaluate('(()=>{const menu=document.querySelector("[role=menu]"),surface=document.querySelector("[data-slot=morphing-modal]");return {text:document.body.innerText,focus:document.activeElement.tagName,size:[innerWidth,innerHeight],visible:document.visibilityState,reduce:matchMedia("(prefers-reduced-motion: reduce)").matches,ready:menu?.dataset.morphReady,menu:menu&&getComputedStyle(menu).opacity,outer:surface&&getComputedStyle(surface).opacity}})()').catch(()=>null));throw error;}
 finally{if(sidebar)await host.close(sidebar).catch(()=>{});await host.dispose();}

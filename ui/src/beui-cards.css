@@ -1,0 +1,18 @@
+.notes-menu>.sol-inline-menu{gap:2px;padding:6px;border-color:var(--border);color:var(--text)}
+.notes-menu .sol-checkbox button[role=checkbox]{padding:0;min-height:20px;justify-content:center!important}
+.note-reference-picker[data-slot=card]{gap:4px;border-color:var(--border);color:var(--text)}
+.sol-select-content:has(.sol-select-card){padding:0!important;border:0!important;background:transparent!important;box-shadow:none}
+.sol-select-content>.p-1{padding:0;border-radius:inherit}
+.sol-select-card{padding:4px;gap:0;min-width:0;border:1px solid var(--border);border-radius:inherit;background:var(--bg-popup);color:var(--text)}
+.note-card:has(.note-card-check) .note-card-top{padding-right:28px}
+.capture-pill[data-slot=card]{gap:0}
+.capture-bar[data-slot=card]{flex-direction:row}
+.sol-surface-card[data-slot=card]{border:1px solid transparent;border-radius:var(--radius-2xl,1rem);background:var(--bg-popup);color:var(--text);box-shadow:none}
+.sol-surface-card.net{padding:0;gap:0}
+.sol-surface-card.welcome-card{gap:0}
+.download-stack-dock.sol-surface-card{border:1px solid transparent!important;padding:0!important;background:var(--bg-popup)!important;gap:8px}
+.download-stack-dock>.dock-update{border:0;border-radius:0;background:transparent}
+.download-stack-dock>.sol-download-stack{background:transparent!important;border-radius:inherit!important}
+.sol-download-stack>span>span[aria-hidden]{background:transparent}
+.note-image-view{padding:0;border:0;border-radius:var(--radius-2xl,1rem);background:transparent}
+.note-image-card{padding:12px;gap:0}

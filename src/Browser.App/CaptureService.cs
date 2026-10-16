@@ -10,18 +10,19 @@ using Windows.Storage.Streams;
 namespace Browser.App;
 
 /// <summary>Capture d'écran d'une page : une zone, la partie visible ou la page entière, en PNG ou en PDF.</summary>
-public sealed class CaptureService(Window window, Action<string>? post = null)
+public sealed class CaptureService(Window window, Action<string>? post = null, Func<CoreWebView2, Task>? restoreViewport = null)
 {
     // Au-delà, le moteur ne sait plus produire une seule image ; une page plus longue est coupée (le PDF, lui, n'a pas de limite).
     private const int MaxImageHeight = 16000;
     private bool _running;
+    private bool _cancelled;
     public bool Busy => _running;
     private TaskCompletionSource<BitmapBounds?>? _selection;
     private TaskCompletionSource<bool>? _decision;
     public void Select(BitmapBounds bounds) => _selection?.TrySetResult(bounds);
     /// <summary>L'aperçu est accepté : reste à choisir où l'enregistrer.</summary>
     public void Save() => _decision?.TrySetResult(true);
-    public void Cancel() { _selection?.TrySetResult(null); _decision?.TrySetResult(false); }
+    public void Cancel() { _cancelled = true; _selection?.TrySetResult(null); _decision?.TrySetResult(false); }
     private void Send(string kind, string? data = null) => post?.Invoke(JsonSerializer.Serialize(new { @event = "capture-state", kind, data }));
 
     // Sélection d'une zone à la souris, dessinée dans la page. Renvoie { x, y, w, h } dans la fenêtre, ou null (Échap).
@@ -89,6 +90,7 @@ public sealed class CaptureService(Window window, Action<string>? post = null)
         await Task.Delay(150); // les contrôles de capture viennent d'être masqués : le temps que l'écran le montre
         var scale = window.Content.XamlRoot.RasterizationScale;
         var (pixels, width, height) = await GrabAsync();
+        if (_cancelled) return;
         var bounds = new BitmapBounds { Width = width, Height = height };
         if (mode == "region")
         {
@@ -117,6 +119,7 @@ public sealed class CaptureService(Window window, Action<string>? post = null)
     {
         if (_running) return;
         _running = true;
+        _cancelled = false;
         try { await capture(); Send("done"); }
         // page fermée pendant la capture, ou dossier non inscriptible : rien n'est enregistré
         catch (Exception e) when (e is InvalidOperationException or IOException or UnauthorizedAccessException or COMException or InvalidDataException or ArgumentException)
@@ -127,12 +130,13 @@ public sealed class CaptureService(Window window, Action<string>? post = null)
     // L'image est montrée avant tout enregistrement ; elle n'est écrite que si l'utilisateur la garde.
     private async Task ReviewAsync(byte[] png, double pixelsPerDip, string title, Func<string, Task>? pdfPage = null)
     {
-        post?.Invoke(JsonSerializer.Serialize(new { @event = "capture-review", data = "data:image/png;base64," + Convert.ToBase64String(png) }));
-        while (true)
+        while (!_cancelled)
         {
             _decision = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            post?.Invoke(JsonSerializer.Serialize(new { @event = "capture-review", data = "data:image/png;base64," + Convert.ToBase64String(png) }));
             if (!await _decision.Task) return;
             var paths = await ChoosePathsAsync(title);
+            if (_cancelled) return;
             if (paths.Count == 0) continue; // dialogue d'enregistrement annulé : l'aperçu reste affiché
             foreach (var path in paths)
             {
@@ -190,14 +194,17 @@ public sealed class CaptureService(Window window, Action<string>? post = null)
         var result = new byte[(int)output.Size]; reader.ReadBytes(result); return result;
     }
 
-    private static async Task<(byte[] Image, double Dpr)> ScreenshotAsync(CoreWebView2 core, string mode, JsonElement? region)
+    private async Task<(byte[] Image, double Dpr)> ScreenshotAsync(CoreWebView2 core, string mode, JsonElement? region)
     {
         // Les bandes de flou du navigateur ne font pas partie de la page.
         const string blurHost = "window.__navBlurHost && (window.__navBlurHost.style.display = '{0}')";
         await EvalAsync(core, string.Format(blurHost, "none"));
+        JsonElement? previousMetrics = null;
+        var source = core.Source;
         try
         {
             var m = (await EvalAsync(core, Metrics))!.Value;
+            previousMetrics = m;
             double N(JsonElement e, string name) => e.GetProperty(name).GetDouble();
             var width = mode == "region" ? N(region!.Value, "w") : N(m, "w");
             var height = mode == "region" ? N(region!.Value, "h") : N(m, "h");
@@ -221,7 +228,24 @@ public sealed class CaptureService(Window window, Action<string>? post = null)
         }
         finally
         {
-            await EvalAsync(core, string.Format(blurHost, ""));
+            try
+            {
+                // Une capture hors écran peut laisser WebView2 avec une surface agrandie, sans changer innerWidth.
+                if (mode != "visible")
+                {
+                    if (restoreViewport is not null) await restoreViewport(core);
+                    else await core.CallDevToolsProtocolMethodAsync("Emulation.clearDeviceMetricsOverride", "{}");
+                }
+            }
+            finally
+            {
+                await EvalAsync(core, string.Format(blurHost, ""));
+                if (previousMetrics is { } m && core.Source == source)
+                {
+                    var scroll = JsonSerializer.Serialize(new { left = m.GetProperty("sx").GetDouble(), top = m.GetProperty("sy").GetDouble(), behavior = "instant" });
+                    await EvalAsync(core, $"scrollTo({scroll})");
+                }
+            }
         }
     }
 

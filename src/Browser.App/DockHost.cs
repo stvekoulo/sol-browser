@@ -48,7 +48,7 @@ public sealed class DockHost(Grid frame, WebView2 view, UiBridge bridge, Func<Ta
         frame.Height = Math.Clamp(height, 44, maxHeight);
         frame.Visibility = Visibility.Visible;
         frame.UpdateLayout();
-        CornerClip.Set(view, 20 * (float)(UiBridge.Settings?.UiFactor ?? 0.92));
+        CornerClip.Set(view, 16 * (float)(UiBridge.Settings?.UiFactor ?? 0.92)); // beUI Card rounded-2xl.
     }
 
     public void Hide() => frame.Visibility = Visibility.Collapsed;

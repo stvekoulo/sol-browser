@@ -13,33 +13,30 @@
   /* Couleur dynamique injectée par l'hôte selon la page active */
   --page-bg: #eef0e2;
 
+}
+
+:root, [data-surface-theme] {
+  color-scheme: light;
   /* Teinte des surfaces : le fond de la page, coloré par l'accent du site (bleu d'un réseau social, rouge
      d'un site vidéo…). Sans accent, c'est simplement le fond de la page. */
-  /* La couleur brute du site (--site-accent, posée par bridge.ts) est adoucie avant usage : une teinte pastel,
-     claire, jamais vive. Sans couleur de site, ces variables n'existent pas et chaque surface garde son repli. */
-  --page-accent: color-mix(in oklab, var(--site-accent) 58%, #ffffff);
-  --chrome-accent: color-mix(in oklab, var(--site-chrome-accent) 58%, #ffffff);
+  /* La couleur du site reste légèrement adoucie. Sans accent, chaque surface garde son fond neutre. */
+  --page-accent: color-mix(in oklab, var(--site-accent) 66%, #ffffff);
+  --chrome-accent: color-mix(in oklab, var(--site-chrome-accent) 66%, #ffffff);
 
   --tint: color-mix(in srgb, var(--page-bg) 72%, var(--page-accent, var(--page-bg)) 28%);
+  --chrome-tint: color-mix(in srgb, var(--page-bg) 72%, var(--chrome-accent, var(--page-bg)) 28%);
   --tint-pill: color-mix(in srgb, var(--page-bg) 56%, var(--page-accent, var(--page-bg)) 44%);
 
   /* Arrière-plan de l'interface (barre du haut, colonne de la carte) : le fond de la page, légèrement teinté. */
-  --chrome-bg: color-mix(in srgb, var(--page-bg) 86%, var(--chrome-accent, var(--page-bg)) 14%);
+  --chrome-bg: color-mix(in srgb, var(--chrome-tint) 78%, #ffffff 22%);
 
-  /* Surface de la carte latérale : fusionne la teinte de la page avec un voile givré */
-  --bg-sidebar-card: linear-gradient(
-    165deg,
-    color-mix(in srgb, var(--tint) 68%, #ffffff 32%) 0%,
-    color-mix(in srgb, var(--tint) 82%, #dde0ce 18%) 55%,
-    color-mix(in srgb, var(--tint) 74%, #cfd3be 26%) 100%
-  );
-  --border-card: rgba(255, 255, 255, 0.78);
+  /* Même éclaircissement que le haut, avec le réglage de teinte propre à la sidebar. */
+  --bg-sidebar-card: color-mix(in srgb, var(--tint) 78%, #ffffff 22%);
+  --border-card: var(--border);
   --shadow-card:
-    inset 0 1px 0 rgba(255, 255, 255, 0.92),
-    0 10px 26px rgba(0, 0, 0, 0.06),
-    0 0 0 0.5px rgba(0, 0, 0, 0.06);
+    0 10px 26px rgba(0, 0, 0, 0.06);
 
-  --bg-popup: color-mix(in srgb, var(--tint) 45%, #ffffff 55%);
+  --bg-popup: color-mix(in srgb, var(--tint) 55%, #ffffff 45%);
 
   /* Capsules translucides de la barre supérieure */
   --bg-glass-pill: linear-gradient(
@@ -66,15 +63,14 @@
   --accent: color-mix(in oklab, var(--site-accent, #0a84ff) 80%, #ffffff);
 
   --shadow-glass-pill:
-    inset 0 1px 0 rgba(255, 255, 255, 0.92),
-    0 1px 3px rgba(0, 0, 0, 0.035),
-    0 0 0 0.5px rgba(0, 0, 0, 0.075);
+    0 1px 3px rgba(0, 0, 0, 0.035);
 
   --shadow-pill-elevated:
-    inset 0 1px 0 #ffffff,
-    0 1px 3px rgba(0, 0, 0, 0.04),
-    0 0 0 0.5px rgba(0, 0, 0, 0.045);
+    0 1px 3px rgba(0, 0, 0, 0.04);
 
+}
+
+:root {
   --light-close: #ff5f57;
   --light-minimize: #febc2e;
   --light-maximize: #28c840;
@@ -84,25 +80,19 @@
 }
 
 /* Adaptation automatique lorsque la page active est sombre (ex: YouTube Dark, X, GitHub Dark) */
-:root[data-theme="dark"] {
+:root[data-theme="dark"], [data-surface-theme="dark"] {
   color-scheme: dark;
-  --chrome-bg: color-mix(in srgb, var(--page-bg) 88%, var(--chrome-accent, var(--page-bg)) 12%);
+  --chrome-bg: color-mix(in srgb, var(--chrome-tint) 66%, #000000 34%);
   --tint: color-mix(in srgb, var(--page-bg) 80%, var(--page-accent, var(--page-bg)) 20%);
+  --chrome-tint: color-mix(in srgb, var(--page-bg) 80%, var(--chrome-accent, var(--page-bg)) 20%);
   --tint-pill: color-mix(in srgb, var(--page-bg) 68%, var(--page-accent, var(--page-bg)) 32%);
 
-  --bg-sidebar-card: linear-gradient(
-    165deg,
-    color-mix(in srgb, var(--tint) 78%, #000000 22%) 0%,
-    color-mix(in srgb, var(--tint) 70%, #000000 30%) 55%,
-    color-mix(in srgb, var(--tint) 62%, #000000 38%) 100%
-  );
-  --border-card: rgba(255, 255, 255, 0.12);
+  --bg-sidebar-card: color-mix(in srgb, var(--tint) 66%, #000000 34%);
+  --border-card: var(--border);
   --shadow-card:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 6px 16px rgba(0, 0, 0, 0.3),
-    0 0 0 0.5px rgba(255, 255, 255, 0.08);
+    0 6px 16px rgba(0, 0, 0, 0.3);
 
-  --bg-popup: color-mix(in srgb, var(--tint) 52%, #08080a 48%);
+  --bg-popup: color-mix(in srgb, var(--tint) 44%, #050507 56%);
 
   --bg-glass-pill: linear-gradient(
     180deg,
@@ -126,18 +116,14 @@
   --accent: color-mix(in oklab, var(--site-accent, #409cff) 82%, #ffffff);
 
   /* En sombre, la couleur du site est adoucie vers un gris moyen plutôt que vers le blanc. */
-  --page-accent: color-mix(in oklab, var(--site-accent) 56%, #17171b);
-  --chrome-accent: color-mix(in oklab, var(--site-chrome-accent) 56%, #17171b);
+  --page-accent: color-mix(in oklab, var(--site-accent) 64%, #17171b);
+  --chrome-accent: color-mix(in oklab, var(--site-chrome-accent) 64%, #17171b);
 
   --shadow-glass-pill:
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    0 1px 3px rgba(0, 0, 0, 0.16),
-    0 0 0 0.5px rgba(255, 255, 255, 0.1);
+    0 1px 3px rgba(0, 0, 0, 0.16);
 
   --shadow-pill-elevated:
-    inset 0 1px 0 rgba(255, 255, 255, 0.11),
-    0 1px 3px rgba(0, 0, 0, 0.18),
-    0 0 0 0.5px rgba(255, 255, 255, 0.09);
+    0 1px 3px rgba(0, 0, 0, 0.18);
 }
 
 /* Police de l'interface, au choix de l'utilisateur. Sans choix : la pile d'origine, ci-dessus. */
@@ -160,14 +146,14 @@
 :root[data-font$="-bold"] body, :root[data-font$="-bold"] body * { font-weight: 700 !important; }
 
 /* Un voile léger ; seul l'onglet actif reçoit une teinte plus affirmée. */
-:root {
+:root, [data-surface-theme] {
   --private-accent:#8b5cf6;
   --bg-pill-solid:rgba(255,255,255,0.80);
   --bg-pill-solid-hover:rgba(255,255,255,0.92);
   --bg-active-tab:color-mix(in oklab,var(--tab-accent,var(--accent)) 23%,rgba(255,255,255,0.86));
   --border-active-tab:color-mix(in srgb,var(--tab-accent,var(--accent)) 35%,transparent);
 }
-:root[data-theme="dark"] {
+:root[data-theme="dark"], [data-surface-theme="dark"] {
   --bg-active-tab:color-mix(in oklab,var(--tab-accent,var(--accent)) 27%,rgba(20,20,24,0.86));
   --border-active-tab:color-mix(in srgb,var(--tab-accent,var(--accent)) 42%,transparent);
   --bg-pill-solid:rgba(255,255,255,0.065);

@@ -11,7 +11,7 @@ namespace Browser.App;
 public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge)
 {
     private const double Edge = 10;
-    private const float Radius = 20;
+    private const float Radius = 16; // beUI Card rounded-2xl (1rem).
     private bool _pending;
     private bool _focus;
     private double _x, _y;
@@ -109,7 +109,7 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge)
 
         frame.Visibility = Visibility.Visible;
         frame.UpdateLayout();
-        CornerClip.Set(view, (_bottom ? 32 : Radius) * (float)(UiBridge.Settings?.UiFactor ?? 0.92));
+        CornerClip.Set(view, Radius * (float)(UiBridge.Settings?.UiFactor ?? 0.92));
         if (_pending && _focus) view.Focus(FocusState.Programmatic);
         _pending = false;
     }
@@ -117,6 +117,7 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge)
     public void Hide()
     {
         _pending = false;
+        _selecting = false;
         frame.Visibility = Visibility.Collapsed;
     }
 }

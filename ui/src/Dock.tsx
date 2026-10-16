@@ -1,5 +1,6 @@
 import {useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {NotificationStack} from '@/components/motion/notification-stack';
+import {Card} from '@/components/motion/card';
 import {interfaceScale,onMessage,send} from './bridge';
 import {DownloadCard,pendingDownload,type Download} from './Downloads';
 import DockUpdate,{type Update} from './DockUpdate';
@@ -32,9 +33,9 @@ export default function Dock(){
   if(!items.length&&!update)return null;
   const active=items.filter(d=>d.state==='InProgress'&&!d.paused&&!d.canceled),pending=items.filter(pendingDownload);
   const label=active.length?t(`${active.length} téléchargement${active.length>1?'s':''} en cours`,`${active.length} download${active.length>1?'s':''} in progress`):pending.length?(pending.some(d=>d.paused)?t('En pause','Paused'):t('Interrompu','Interrupted')):items.every(d=>d.canceled)?t('Annulé','Canceled'):items.some(d=>d.state==='Interrupted'&&!d.canceled)?t('Interrompu','Interrupted'):items.some(d=>d.canceled)?t('Téléchargements','Downloads'):t('Terminé','Done');
-  return <div ref={root} className={`dock download-stack-dock${expanded?' expanded':''}`}>
+  return <Card ref={root} size="compact" className={`sol-surface-card dock download-stack-dock${expanded?' expanded':''}`}>
     {update&&<DockUpdate update={update}/>}
     {expanded&&<div className="dock-stack-heading"><span className="popup-header-title">{label}</span></div>}
     {!!items.length&&<NotificationStack expanded={expanded} onExpandedChange={setExpanded} maxVisible={3} ariaLabel={t('Téléchargements','Downloads')} className="sol-download-stack" collapsedLabel={<span className="popup-header-title">{label}</span>} expandedLabel={t('Réduire','Collapse')} classNames={{stack:'sol-download-stack-list',card:'sol-download-stack-card',footer:'sol-download-stack-footer',count:'sol-download-count'}} items={items.map(d=>({id:d.id,title:d.name,content:<DownloadCard d={d}/>}))}/>}
-  </div>;
+  </Card>;
 }

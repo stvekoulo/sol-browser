@@ -125,6 +125,8 @@ public sealed partial class BrowserController
             if (PermissionStore.OriginOf(_pages.CoreOf(tabId)?.Source ?? "") is not null && !_pages.CoreOf(tabId)!.Source.StartsWith("https://start.sol/"))
                 items.Add((T("Vider la session de ce site…", "Clear this site's session…"), () => _afterMenu = () => AskResetSite(tabId)));
             items.Add((_tools.IsOpen ? T("Masquer l'inspecteur réseau", "Hide network inspector") : T("Inspecter le réseau", "Inspect network"), () => _afterMenu = ToggleNetwork));
+            if (_pages.CoreOf(tabId) is { } designCore && IsWebAddress(designCore.Source) && !designCore.Source.StartsWith("https://start.sol/") && !_pages.IsPdf(tabId))
+                items.Add((_designTabs.Contains(tabId) ? T("Masquer l'inspecteur de design", "Hide design inspector") : T("Inspecteur de design", "Design inspector"), () => _afterMenu = () => _ = ToggleDesignAsync(tabId)));
             items.Add((T("DevTools natifs · F12", "Native DevTools · F12"), () => _afterMenu = OpenDevTools));
 
             // Le moteur attend notre réponse : il est toujours libéré à la fermeture du menu, avec ou sans choix.

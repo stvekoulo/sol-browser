@@ -246,12 +246,21 @@ public sealed partial class BrowserController
     // Déplacement de la fenêtre depuis la barre de titre dessinée par l'interface.
     private void BeginDrag()
     {
-        if (IsFullScreen) return; // une fenêtre en plein écran ne se déplace pas
-        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(_window);
-        ReleaseCapture();
-        SendMessage(hwnd, 0x00A1 /* WM_NCLBUTTONDOWN */, 2 /* HTCAPTION */, 0);
+        // La boucle de déplacement Windows commence après la sortie de l'événement WebView2.
+        _window.DispatcherQueue.TryEnqueue(() =>
+        {
+            var button = GetSystemMetrics(23 /* SM_SWAPBUTTON */) != 0 ? 0x02 : 0x01;
+            if (IsFullScreen || _closingWindow || (GetAsyncKeyState(button) & 0x8000) == 0 || !GetCursorPos(out var point)) return;
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(_window);
+            ReleaseCapture();
+            SendMessage(hwnd, 0x00A1 /* WM_NCLBUTTONDOWN */, 2 /* HTCAPTION */, (nint)((point.X & 0xffff) | ((point.Y & 0xffff) << 16)));
+        });
     }
 
+    [StructLayout(LayoutKind.Sequential)] private struct DragPoint { public int X, Y; }
+    [DllImport("user32.dll")] private static extern bool GetCursorPos(out DragPoint point);
+    [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
+    [DllImport("user32.dll")] private static extern int GetSystemMetrics(int index);
     [DllImport("user32.dll")] private static extern bool ReleaseCapture();
     [DllImport("user32.dll")] private static extern bool ShowWindow(nint hwnd, int command);
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(nint hwnd);

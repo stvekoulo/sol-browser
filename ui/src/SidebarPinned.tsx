@@ -20,8 +20,8 @@ export function SidebarPinned({ state, icons }: { state: State; icons: Record<st
   const wideAt = (index: number, count: number) => named(count) || (index === count - 1 && count <= 3);
   const rowClass = (count: number) => `pinned-row${!named(count) && count > 3 ? ' even' : ''}`;
   return <div ref={strip} className="pinned-strip">
-    {shortcuts.length > 0 && <div className={rowClass(shortcuts.length)} aria-label={t('Accès rapides', 'Shortcuts')}>
-      {shortcuts.map((shortcut, index) => <ShortcutPill key={shortcut.url} shortcut={shortcut} index={index} wide={wideAt(index, shortcuts.length)} active={shortcut.tabId === activeId} />)}
+    {shortcuts.length > 0 && <div className="pinned-row even" aria-label={t('Accès rapides', 'Shortcuts')}>
+      {shortcuts.map((shortcut, index) => <ShortcutPill key={shortcut.url} shortcut={shortcut} index={index} wide={false} active={shortcut.tabId === activeId} />)}
     </div>}
     <div className="pinned-tabs-zone" data-pin-zone>
       {pinned.length > 0 && <div className={rowClass(pinned.length)}>

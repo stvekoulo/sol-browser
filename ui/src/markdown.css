@@ -13,6 +13,7 @@
 .sol-markdown table { border-collapse:collapse; min-width:100%; }.sol-markdown th,.sol-markdown td { padding:8px 12px; border-bottom:1px solid var(--border-card); text-align:start; }.sol-markdown th { background:var(--bg-tab-hover); font-weight:600; }
 .sol-markdown img { display:block; max-width:100%; height:auto; border-radius:12px; margin:.6em 0; }
 .sol-markdown .task-list-item { list-style:none; }.sol-markdown input[type=checkbox] { accent-color:var(--accent); margin-right:.5em; }
+.sol-markdown .note-task-checkbox{display:inline-flex;vertical-align:middle;margin-right:.5em}
 .sol-markdown .footnotes { font-size:.9em; border-top:1px solid var(--border-card); margin-top:1.2em; }.sol-markdown .katex-display { max-width:100%; overflow:auto; padding:4px 0; }
 .sol-markdown .hljs-keyword,.sol-markdown .hljs-selector-tag,.sol-markdown .hljs-title { color:var(--accent); font-weight:600; }.sol-markdown .hljs-comment,.sol-markdown .hljs-quote { opacity:.6; font-style:italic; }.sol-markdown .hljs-string,.sol-markdown .hljs-number,.sol-markdown .hljs-literal { color:color-mix(in srgb,var(--accent) 65%,var(--text)); }
 .notes-markdown { flex:1; min-height:160px; overflow:auto; padding:12px 0; }

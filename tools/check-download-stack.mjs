@@ -31,6 +31,7 @@ try{
     await host.wait(()=>latest().then(items=>items.some(d=>d.name===names[i])),'queued download '+i);
   }
   await clickFooter();
+  assert(await dock.evaluate('!!document.querySelector(".sol-surface-card.download-stack-dock[data-slot=card]")'),'one outer beUI Card contains the download stack');
   await host.wait(()=>dock.evaluate('document.querySelectorAll(".download-card").length===4'),'expanded stack includes all downloads');
   assert.equal(await dock.evaluate('document.querySelectorAll("button button").length'),0,'actions are independent controls');
   await delay(400);

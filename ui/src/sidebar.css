@@ -1,25 +1,25 @@
-/* Carte latérale flottante (#sidebar) : aucun cadre externe, tout flotte sur --page-bg. */
+/* Colonne latérale intégrée : la surface rejoint les bords de la fenêtre. */
 /* Fond opaque sous la carte animée : la transparence du moteur peut produire une surface noire. */
 html:has(> .sidebar-body) { background-color: var(--page-bg); }
 .sidebar-body {
-  background-color: var(--page-bg); /* la couleur de la page, comme la barre du haut (app.css) */
+  background: var(--bg-sidebar-card);
 }
 html.painted .sidebar-body:not(.floating) { transition: background-color 220ms var(--ease-out); }
 
 .sidebar-card {
-  height: calc(100% - 12px);
-  margin: 2px 10px 10px 10px;
+  height: 100%;
+  margin: 0;
   display: flex;
   flex-direction: column;
   padding: 12px;
-  background: var(--bg-sidebar-card);
-  border-radius: var(--radius-card);
-  border: 1px solid var(--border-card);
-  box-shadow: var(--shadow-card);
-  transition: background 220ms var(--ease-out), border-color 220ms var(--ease-out), box-shadow 220ms var(--ease-out);
+  background: transparent;
+  border-radius: 0;
+  border: 0;
+  box-shadow: none;
+  transition: background 220ms var(--ease-out), border-color 220ms var(--ease-out);
 }
 
-/* Pilule flottante d'URL complète en haut de la carte latérale */
+/* Adresse intégrée au panneau, avec la même courbe que les accès rapides. */
 .sidebar-url-pill {
   height: 40px;
   flex: none;
@@ -27,9 +27,9 @@ html.painted .sidebar-body:not(.floating) { transition: background-color 220ms v
   align-items: center;
   gap: 8px;
   padding: 0 8px 0 14px;
-  border-radius: var(--radius-pill);
+  border-radius: 12px;
   background: var(--bg-pill-solid);
-  box-shadow: var(--shadow-pill-elevated);
+  box-shadow: none;
   transition: background var(--fast) var(--ease-out), box-shadow var(--fast) var(--ease-out);
 }
 .sidebar-url-pill:hover,
@@ -62,7 +62,7 @@ html.painted .sidebar-body:not(.floating) { transition: background-color 220ms v
 .sidebar-url-btn:hover { background: var(--bg-tab-hover); color: var(--text); }
 .sidebar-url-btn.copied { color: #28c840; }
 
-/* Rangée des pilules flottantes (G, X, Youtube) */
+/* Tuiles d'accès rapide et onglets épinglés. */
 .pinned-row {
   display: flex;
   align-items: center;
@@ -73,9 +73,9 @@ html.painted .sidebar-body:not(.floating) { transition: background-color 220ms v
 }
 .pinned-pill {
   height: 40px;
-  border-radius: var(--radius-pill);
+  border-radius: 12px;
   background: var(--bg-pill-solid);
-  box-shadow: var(--shadow-pill-elevated);
+  box-shadow: inset 0 0 0 1px var(--border-card);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -122,7 +122,7 @@ html.painted .sidebar-body:not(.floating) { transition: background-color 220ms v
   align-items: center;
   gap: 10px;
   padding: 0 10px 0 12px;
-  border-radius: var(--radius-pill);
+  border-radius: 10px;
   color: var(--text);
   font-size: 13.5px;
   transition: background var(--fast) var(--ease-out), box-shadow var(--fast) var(--ease-out);
@@ -176,7 +176,7 @@ html.painted .sidebar-body:not(.floating) { transition: background-color 220ms v
   flex: none;
   margin-top: 4px;
   padding: 0 12px;
-  border-radius: var(--radius-pill);
+  border-radius: 10px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -205,9 +205,9 @@ html.painted .sidebar-body:not(.floating) { transition: background-color 220ms v
 .sidebar-status svg { flex: none; }
 .sidebar-status span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
-/* Carte flottante au-dessus de la page : la vue a exactement sa taille, la page reste visible tout autour. */
+/* Le volet temporaire conserve exactement la géométrie de la colonne ancrée. */
 .sidebar-body.floating .sidebar-card { margin: 0; height: 100%; }
-.sidebar-body.floating { background-color: transparent; transition: none; }
+.sidebar-body.floating { background: var(--bg-sidebar-card); transition: none; }
 
 /* Groupes d'onglets : un en-tête à la couleur du groupe, ses onglets en retrait derrière un filet de même couleur */
 .tab-group-block { display: flex; flex-direction: column; gap: 2px; --group: #8fa8e8; }
@@ -261,4 +261,4 @@ html.painted .sidebar-body:not(.floating) { transition: background-color 220ms v
 .sidebar-quick-btn:hover { color:var(--text); background:var(--bg-glass-pill-hover); }
 .sidebar-quick-btn.on { color:var(--text); background:var(--bg-active-tab); }
 .private-action { color:var(--private-accent); }
-.sidebar-tab.active, .sidebar-tab.active:hover, .sidebar-split-group .sidebar-tab.active, .pinned-pill.active, .pinned-pill.loaded.active { background:var(--bg-active-tab); box-shadow:var(--shadow-pill-elevated), inset 0 0 0 1px var(--border-active-tab); }
+.sidebar-tab.active, .sidebar-tab.active:hover, .sidebar-split-group .sidebar-tab.active, .pinned-pill.active, .pinned-pill.loaded.active { background:var(--bg-active-tab); box-shadow:inset 0 0 0 1px var(--border-active-tab); }

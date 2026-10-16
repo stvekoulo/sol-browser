@@ -13,7 +13,7 @@
 .sidebar-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .sidebar-split-group .tab-menu { display: none; }
 .sidebar-split-group .sidebar-tab { gap: 5px; padding-left: 8px; }
-.tab-group-heading { display: flex; align-items: center; background: color-mix(in srgb, var(--group) 17%, transparent); border-radius: var(--radius-pill); min-width: 0; }
+.tab-group-heading { display: flex; align-items: center; background: color-mix(in srgb, var(--group) 17%, transparent); border-radius: 10px; min-width: 0; }
 .tab-group-heading:hover { background: color-mix(in srgb, var(--group) 25%, transparent); }
 .tab-group-header { flex: 1; min-width: 0; background: transparent; padding: 0 7px 0 10px; gap: 6px; height: 34px; }
 .tab-group-header:hover { background: transparent; }

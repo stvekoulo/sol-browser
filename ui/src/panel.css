@@ -1,7 +1,7 @@
 /* Panneau du bas (#panel) : inspecteur réseau. Une vue à part, sous les pages. */
 /* Autour de la carte arrondie, la vue (un rectangle) prend la couleur réelle de la page : ses coins s'y fondent. */
 .panel-body { background: var(--page-real, var(--page-bg)); overflow: hidden; }
-.panel-body #root { height: 100vh; padding: 8px 10px 10px 0; box-sizing: border-box; }
+.panel-body #root { height: calc(100vh / var(--ui-scale, 1)); padding: 8px 10px 6px; box-sizing: border-box; }
 
 .net {
   height: 100%;

@@ -30,6 +30,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
 
     public event Action<string, string?, string?>? PageChanged; // id, url, titre
     public event Action? RuntimeChanged;                         // chargement, historique
+    public event Action? ContentPainted;
     public event Action<string>? Loaded;                         // id, page chargée avec succès
     public event Action<string>? PageFocused;
     public event Action<string, Command>? StartRequested;

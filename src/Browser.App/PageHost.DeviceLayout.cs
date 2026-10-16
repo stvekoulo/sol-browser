@@ -106,4 +106,13 @@ public sealed partial class PageHost
         catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { /* vue fermée entre-temps */ }
     }
 
+    public async Task RestoreCaptureViewportAsync(CoreWebView2 core)
+    {
+        var id = _views.FirstOrDefault(pair => pair.Value.CoreWebView2 == core).Key;
+        if (id is null) return;
+        if (_sims.TryGetValue(id, out var sims) && sims.FirstOrDefault(sim => sim.View.CoreWebView2 == core) is { } sim)
+            await EmulateAsync(id, sim); // métriques, densité et tactile de l'appareil, sans recharger sa page
+        else await core.CallDevToolsProtocolMethodAsync("Emulation.clearDeviceMetricsOverride", "{}");
+    }
+
 }

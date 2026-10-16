@@ -27,7 +27,7 @@ try{
   await page.evaluate(`localStorage.setItem('sol.notes.editor','source')`);
   await click('.notes-browser-heading button');await host.wait(()=>page.evaluate('!!document.querySelector(".notes-writing")'),'source editor');
   await input('.notes-title','Notes Sol');
-  const body='# Une note\n\n- [ ] Première tâche\n- [x] Terminée\n\n#projet/web\n\n[[legacy]]\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n\n$E=mc^2$';
+  const body='# Une note\n\n```md\n- [ ] Exemple de code\n```\n\n- [ ] Première tâche\n- [x] Terminée\n\n#projet/web\n\n[[legacy]]\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n\n$E=mc^2$';
   await input('.notes-writing',body);
   await host.wait(()=>state().then(s=>s.draft.id&&s.items.some(n=>n.text===body)&&!s.error),'new note autosaved');
   const id=(await state()).draft.id;
@@ -40,7 +40,19 @@ try{
   await host.wait(()=>state().then(s=>s.items.find(n=>n.id===id)?.tags.includes('manuel')),'manual tags saved');
   await button('Aperçu');await host.wait(()=>page.evaluate('!!document.querySelector(".sol-markdown table")'),'Markdown table');
   assert.equal(await page.evaluate('document.querySelectorAll(".sol-markdown .katex").length'),1);
-  await click('.sol-markdown input[type="checkbox"]');await host.wait(()=>state().then(s=>s.items.find(n=>n.id===id)?.text.includes('[x] Première tâche')),'checklist saves');
+  assert.equal(await page.evaluate('document.querySelectorAll(".sol-markdown input[type=checkbox]").length'),0);
+  await click('.sol-markdown [role="checkbox"]');await host.wait(()=>state().then(s=>s.items.find(n=>n.id===id)?.text.includes('[x] Première tâche')),'beUI checklist saves');
+  assert.equal(await page.evaluate('!!document.querySelector(".sol-markdown [role=checkbox][aria-checked=true] svg path")'),true);
+  await page.evaluate('document.querySelector(".sol-markdown [role=checkbox]").focus()');
+  await page.call('Input.dispatchKeyEvent',{type:'keyDown',key:' ',code:'Space',windowsVirtualKeyCode:32});await page.call('Input.dispatchKeyEvent',{type:'keyUp',key:' ',code:'Space',windowsVirtualKeyCode:32});
+  await host.wait(()=>state().then(s=>s.items.find(n=>n.id===id)?.text.includes('[ ] Première tâche')),'beUI checklist keyboard saves');
+  assert.equal(await page.evaluate('document.activeElement?.getAttribute("role")'),'checkbox','task focus survives save');
+  assert((await state()).draft.text.includes('```md\n- [ ] Exemple de code\n```'),'task controls leave fenced code intact');
+  assert.equal(await page.evaluate('document.querySelectorAll(".note-task-checkbox").length'),2);
+  await page.call('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
+  await click('.sol-markdown [role=checkbox]');await host.wait(()=>state().then(s=>s.items.find(n=>n.id===id)?.text.includes('[x] Première tâche')),'reduced-motion task saves');
+  await page.call('Emulation.setEmulatedMedia',{features:[]});
+  await page.call('Page.captureScreenshot',{format:'png'}).then(r=>writeFile(resolve(host.base,'notes-checkbox-preview.png'),Buffer.from(r.data,'base64')));
   await click('.sol-markdown a[href="#sol-note-legacy"]');await host.wait(()=>state().then(s=>s.draft.id==='legacy'),'wiki link opens original');
   assert.equal(await page.evaluate('document.querySelectorAll(".note-backlinks button").length'),1);
   await cmd(page,{type:'notes.edit',id});await host.wait(()=>state().then(s=>s.draft.id===id),'return note');
@@ -53,7 +65,7 @@ try{
   await cmd(page,{type:'notes.attach',id,title:'image.png',input:png});await host.wait(()=>state().then(s=>s.draft.files.length===1),'attachment');
   await host.wait(()=>state().then(s=>s.items.find(n=>n.id===id)?.files.length===1),'attachment autosaved');
   assert.equal((await state()).attachments[0].mime,'image/png');await click('.note-attachments figure>a');
-  assert.equal(await page.evaluate('document.querySelector("dialog").open'),true);await page.evaluate('document.querySelector("dialog").close()');
+  assert.equal(await page.evaluate('document.querySelector("dialog").open'),true);assert(await page.evaluate('!!document.querySelector("dialog>.sol-surface-card[data-slot=card]")'),'image preview uses an outer beUI Card');await page.evaluate('document.querySelector("dialog").close()');
   await page.evaluate(`(async()=>{const context=new AudioContext(),out=context.createMediaStreamDestination(),osc=context.createOscillator();osc.connect(out);osc.start();window.__audioTest=context;window.__originalMic=navigator.mediaDevices.getUserMedia;navigator.mediaDevices.getUserMedia=async()=>out.stream;await context.resume()})()`);
   await button('Note vocale');await host.wait(()=>page.evaluate(`document.querySelector('.note-audio button')?.textContent==='Terminer l’enregistrement'`),'recorder starts');await delay(1500);await button('Terminer l’enregistrement');
   await host.wait(()=>state().then(s=>s.items.find(n=>n.id===id)?.files.length===2),'voice note autosaved');
@@ -76,6 +88,9 @@ try{
   const scripts=await page.evaluate('[...document.scripts].map(s=>s.src).filter(Boolean)');assert(scripts.every(url=>url.startsWith('https://start.sol/')));
   assert(scripts.some(url=>url.includes('/vditor/dist/js/lute/')));
   const rich=await page.evaluate('document.querySelector(".vditor-wysiwyg [contenteditable=true]").textContent');assert(rich.includes('Première tâche'));
+  await click('.vditor-wysiwyg input[type=checkbox]');await host.wait(()=>state().then(s=>s.items.find(n=>n.id===id)?.text.includes('[ ] Première tâche')),'rich task saves');
+  await click('.vditor-wysiwyg input[type=checkbox]');await host.wait(()=>state().then(s=>/- \[[xX]\] Première tâche/.test(s.items.find(n=>n.id===id)?.text??'')),'rich task restored');
+  await page.call('Page.captureScreenshot',{format:'png'}).then(r=>writeFile(resolve(host.base,'notes-checkbox-rich.png'),Buffer.from(r.data,'base64')));
   await page.evaluate(`(()=>{const el=document.querySelector('.vditor-wysiwyg [contenteditable=true]');el.focus();const range=document.createRange();range.selectNodeContents(el);range.collapse(false);const selection=getSelection();selection.removeAllRanges();selection.addRange(range)})()`);await page.call('Input.insertText',{text:' Saisie riche vérifiée'});
   await host.wait(()=>state().then(s=>s.items.find(n=>n.id===id)?.text.includes('Saisie riche vérifiée')),'rich typing autosaved');
   await button('Rendu instantané');await host.wait(()=>page.evaluate('!!document.querySelector(".vditor-ir [contenteditable=true][aria-label]")'),'instant editor');
@@ -93,6 +108,15 @@ try{
   await host.wait(()=>state().then(s=>s.items.find(n=>n.id==='legacy')?.text===''&&s.items.find(n=>n.id==='legacy')?.title===''),'empty note saved');assert((await state()).draft.history.some(h=>h.text===old.Text));
   await input('.notes-title',old.Title);await input('.notes-writing',old.Text);await host.wait(()=>state().then(s=>s.items.find(n=>n.id==='legacy')?.text===old.Text),'old content restored');await cmd(page,{type:'notes.edit',id});await host.wait(()=>state().then(s=>s.draft.id===id),'return final note');
   await page.evaluate(`document.querySelector('[aria-label="Revenir aux notes"]').click()`);
+  await click('.notes-browser footer .notes-menu summary');
+  assert.equal(await page.evaluate('!!document.querySelector(".notes-browser footer .notes-menu>[data-slot=card]")'),true,'export menu uses Card');
+  assert.equal(await page.evaluate('document.querySelectorAll("label label").length'),0,'no nested labels in notes controls');
+  await click('.note-export-filter>span');
+  assert.equal(await page.evaluate('document.querySelector(".note-export-filter [role=checkbox]").getAttribute("aria-checked")'),'true','clicking export label checks once');
+  await click('.notes-browser footer .notes-menu summary');
+  await click('[aria-label="Sélection multiple"]');await click('.note-card-check [role=checkbox]');
+  assert.equal(await page.evaluate('document.querySelector(".note-card-check [role=checkbox]").getAttribute("aria-checked")'),'true');
+  await click('[aria-label="Sélection multiple"]');
   await input('[aria-label="Rechercher dans les notes"]','#travail has:file');assert.equal(await page.evaluate('document.querySelectorAll(".note-card").length'),1);
   await input('[aria-label="Rechercher dans les notes"]','');
   await page.evaluate(`document.querySelector('nav button').click()`);
@@ -112,4 +136,4 @@ try{
   assert.equal((await state()).items.find(n=>n.id===id).text,kept);assert.equal((await state()).items.find(n=>n.id===id).files.length,2);
   const disk=JSON.parse(await readFile(resolve(host.profile,'notes.json'),'utf8'));assert.equal(disk.length,2);assert.equal(disk.find(n=>n.Id==='legacy').Text,old.Text);
   console.log(JSON.stringify({passed:'migration, autosave, rapid edits, tags, checklists, wiki/backlinks, comments, versions, attachment cleanup, audio, actions, rich typing, offline editors, HTML safety, empty notes, search, responsive, restart persistence',screenshots:host.base}));
-}catch(error){console.error(JSON.stringify({state:await state().catch(()=>null),tags:await page?.evaluate(`document.querySelector('[aria-label="Tags"]')?.value`).catch(()=>null)}));throw error;}finally{if(sidebar)await host.close(sidebar).catch(()=>{});await host.dispose();}
+}catch(error){console.error(JSON.stringify({state:await state().then(s=>({draft:s?.draft.text,error:s?.error,items:s?.items.map(n=>({id:n.id,text:n.text}))})).catch(()=>null),tags:await page?.evaluate(`document.querySelector('[aria-label="Tags"]')?.value`).catch(()=>null)}));throw error;}finally{if(sidebar)await host.close(sidebar).catch(()=>{});await host.dispose();}

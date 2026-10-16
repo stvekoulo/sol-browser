@@ -52,6 +52,7 @@ export function menuIconPath(label: string): string {
   if(has('sol ai'))return 'M8 1l2 5 5 2-5 2-2 5-2-5-5-2 5-2z';
   if(has('orthographe','spelling'))return menuPaths.spell;
   if(has('devtools'))return menuPaths.tools;
+  if(has('design'))return menuPaths.edit;
   if (has('pivoter', 'rotate')) return 'M12.8 8a4.8 4.8 0 1 1-1.4-3.4M12.8 3.2v3h-3';
   if (has('comparer', 'compare', 'ecrans', 'screens')) return 'M1.5 4.5h3.5v7H1.5zM6.5 3.5h3v9h-3zM11 5.5h3.5v5H11z';
   if (has('macbook', 'imac')) return 'M3.5 3.5h9v6.5h-9zM1.5 12.5h13';

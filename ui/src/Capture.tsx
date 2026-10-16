@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from 
 import { Icon } from './Icons';
 import { onMessage, send } from './bridge';
 import { t, useLang } from './i18n';
+import {Card} from '@/components/motion/card';
 
 type Area = { x:number; y:number; width:number; height:number };
 export default function Capture() {
@@ -17,12 +18,12 @@ export default function Capture() {
   const image=useRef<HTMLImageElement>(null);
   const anchor=useRef<{x:number;y:number}|null>(null);
   useLang();
-  const close=()=>{send({type:'capture.selection',index:0});send({type:'capture.close'});setPhase('idle');setPreview('');};
+  const close=()=>{send({type:'capture.selection',index:0});send({type:'capture.close'});setPhase('idle');setPreview('');setArea(null);anchor.current=null;};
   useEffect(()=>{
     const off=onMessage(data=>{
       const message=data as {event?:string;kind?:string;mode?:string;data?:string;device?:boolean};
       if(message.event==='capture-open'){
-        setPhase('ready');setMode(message.mode!);setDevice(!!message.device);setError('');
+        setPhase('ready');setMode(message.mode!);setDevice(!!message.device);setError('');setPreview('');setArea(null);anchor.current=null;
         // Pas requestAnimationFrame : la vue est encore masquée à la réouverture, et une vue masquée n'en reçoit pas.
         setTimeout(()=>{if(root.current)send({type:'capture.size',height:root.current.getBoundingClientRect().height});},0);
       }
@@ -62,18 +63,18 @@ export default function Capture() {
     <div className={shot.height>shot.width*2?'capture-shot tall':'capture-shot'}>
       <img src={preview} alt={t('Capture à enregistrer','Screenshot to save')} draggable={false} onLoad={e=>setShot({width:e.currentTarget.naturalWidth,height:e.currentTarget.naturalHeight})}/>
     </div>
-    <div className="capture-options capture-bar">
+    <Card size="compact" className="sol-surface-card capture-options capture-bar">
       <span>{shot.width>0&&`${shot.width} × ${shot.height} px`}</span>
       <button onClick={close}>{t('Annuler','Cancel')}</button>
       <button className="capture-action" autoFocus onClick={()=>send({type:'capture.save'})}>{t('Enregistrer…','Save…')}</button>
-    </div>
+    </Card>
   </div>;
-  if(phase==='selecting')return <div className="capture-selection" onPointerDown={select} onPointerMove={select} onPointerUp={select}>
+  if(phase==='selecting')return <div className="capture-selection" onPointerDown={select} onPointerMove={select} onPointerUp={select} onPointerCancel={()=>{anchor.current=null;setArea(null)}}>
     <img ref={image} src={preview} alt={t('Aperçu du navigateur à sélectionner','Browser preview to select')} draggable={false}/>
     <p>{t('Trace une zone · Échap pour annuler','Drag an area · Escape to cancel')}</p>
     {area&&<div className="capture-area" style={{left:`${area.x*100}%`,top:`${area.y*100}%`,width:`${area.width*100}%`,height:`${area.height*100}%`}}/>}
   </div>;
-  return <div ref={root} className="capture-pill" role="region" aria-label={t('Options de capture','Capture options')}>
+  return <Card size="compact" ref={root} className="sol-surface-card capture-pill" role="region" aria-label={t('Options de capture','Capture options')}>
     {phase==='ready'?<>
       <div className="capture-options">
         <span className="capture-symbol"><Icon d="M2.5 5h2l1-1.5h5l1 1.5h2v8h-11zM8 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4"/></span>
@@ -86,5 +87,5 @@ export default function Capture() {
       </div>
       <p className={error?'capture-error':'capture-hint'}>{error||(includeBrowser?t('Barre du haut, sidebar et onglets affichés inclus. Les contrôles de capture sont exclus.','Top bar, sidebar and displayed tabs included. Capture controls are excluded.'):device?t('L’appareil simulé est capturé avec sa coque. « Page entière » : la page seule.','The simulated device is captured with its frame. “Full page”: the page alone.'):t('Seul le contenu de la page est capturé.','Only page content is captured.'))}</p>
     </>:phase==='saving'?<p className="capture-hint">{t('Préparation de la capture…','Preparing capture…')}</p>:null}
-  </div>;
+  </Card>;
 }

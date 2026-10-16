@@ -45,6 +45,8 @@ try{
   await host.wait(()=>page.evaluate('document.querySelectorAll(".note-tag-row").length>=2'),'hierarchical tag rows');
   await page.evaluate(`const row=[...document.querySelectorAll('.note-tag-row')].at(-1);row.querySelector('summary').click();[...row.querySelectorAll('button')].find(b=>b.textContent.includes('Renommer')).click()`);
   await host.wait(()=>page.evaluate('document.activeElement.getAttribute("aria-label")==="Nom du tag"'),'modal focuses field');
+  assert(await page.evaluate('document.querySelector("[role=dialog]").matches("[data-slot=card]")'),'notes dialog uses the beUI Card');
+  assert(await page.evaluate('(()=>{const card=document.querySelector("[role=dialog]");const surface=getComputedStyle(card.closest(".sol-modal-surface")),style=getComputedStyle(card);return style.borderTopColor==="rgba(0, 0, 0, 0)"&&style.boxShadow==="none"&&parseFloat(surface.borderTopWidth)===0&&surface.boxShadow==="none"})()'),'dialog Card and wrapper have no visible outline or glow');
   await screenshot(page,'notes-modal');
   await press(page,'Escape',27);await host.wait(()=>page.evaluate('!document.querySelector("[role=dialog]")'),'Escape dismisses modal');
   await page.evaluate(`[...[...document.querySelectorAll('.note-tag-row')].at(-1).querySelectorAll('button')].find(b=>b.textContent.includes('Renommer')).click()`);

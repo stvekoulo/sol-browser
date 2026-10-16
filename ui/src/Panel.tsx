@@ -1,5 +1,6 @@
 import {Input} from '@/components/motion/input';
 import {Checkbox} from '@/components/motion/checkbox';
+import {Card} from '@/components/motion/card';
 import SolSelect from './SolSelect';
 import {Button} from '@/components/motion/button/base';
 import SolTabs from './SolTabs';
@@ -64,7 +65,7 @@ export default function Panel() {
     ['errors', t('Erreurs', 'Errors'), items.filter(isError).length],
   ];
   return (
-    <div className="net">
+    <Card size="compact" className="sol-surface-card net">
       <header className="net-bar">
         <span className="net-title">{t('Outils dev', 'Dev tools')}</span>
         <SolTabs className="net-filters" value={mode} label={t('Outils réseau','Network tools')} change={value=>{const key=value as typeof mode;setMode(key);if(key==='compose'&&!draftTab)setDraftTab(tools.tabId)}} items={[
@@ -122,7 +123,7 @@ export default function Panel() {
         </div>
         {detail && <DetailPane detail={detail} onClose={() => {setDetail(null);selectedRequest.current=''}} onEdit={()=>{setDraft({...emptyDraft(),Url:detail.url,Method:detail.method,Headers:Object.fromEntries(Object.entries(detail.requestHeaders).filter(([key,value])=>!/(cookie|authorization|token|secret|api[-_]?key|host|content-length|connection|sec-)/i.test(key)&&!value.includes('[masqué]'))),Body:detail.postData.includes('[masqué]')?'':detail.postData});setDraftTab(detail.tabId);setMode('compose')}} />}
       </div>}
-    </div>
+    </Card>
   );
 }
 function Composer({draft,setDraft,tools,tabId}:{draft:Draft;setDraft:(draft:Draft)=>void;tools:Tools;tabId:string}) {

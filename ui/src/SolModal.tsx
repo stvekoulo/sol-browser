@@ -1,6 +1,7 @@
 import {useEffect,useRef,type ReactNode} from 'react';
 import {createPortal} from 'react-dom';
 import {MorphingModal} from '@/components/motion/morphing-modal';
+import {Card} from '@/components/motion/card';
 import {t} from './i18n';
 export default function SolModal({id,title,close,children}:{id:string|null;title:string;close:()=>void;children:ReactNode}){
   const content=useRef<HTMLDivElement>(null),closing=useRef(close);closing.current=close;
@@ -23,6 +24,6 @@ export default function SolModal({id,title,close,children}:{id:string|null;title
     return()=>{cancelAnimationFrame(frame);document.removeEventListener('keydown',key,true);previous?.isConnected&&previous.focus({preventScroll:true});};
   },[id]);
   return createPortal(<MorphingModal viewId={id} placement="center" onClose={close} className="sol-modal-surface">
-    <div ref={content} role="dialog" aria-modal="true" aria-label={title} className="sol-modal-content"><button className="notes-tool sol-modal-close" aria-label={t('Fermer','Close')} onClick={close}>×</button>{children}</div>
+    <Card ref={content} size="compact" role="dialog" aria-modal="true" aria-label={title} className="sol-surface-card sol-modal-content"><button className="notes-tool sol-modal-close" aria-label={t('Fermer','Close')} onClick={close}>×</button>{children}</Card>
   </MorphingModal>,document.body);
 }

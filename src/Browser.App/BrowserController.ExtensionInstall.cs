@@ -224,7 +224,7 @@ public sealed partial class BrowserController
         }
         try { System.Diagnostics.Process.Start(start); }
         catch (System.ComponentModel.Win32Exception) { return; } // rien ne s'est ouvert : on garde cette fenêtre
-        if (replace) _window.Close();
+        if (replace) _ = CloseWithSessionAsync();
     }
 
     // Bouton de capture d'écran de la barre d'outils.

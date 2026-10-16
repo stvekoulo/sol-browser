@@ -36,7 +36,7 @@ public sealed partial class BrowserController
                     CapturePanel?.Hide();
                     Capture(c.Query, browser: c.Index == 1);
                 } return true;
-            case "window.close": _window.Close(); return true;
+            case "window.close": _ = CloseWithSessionAsync(); return true;
             case "window.drag": BeginDrag(); return true;
 
             case "suggest.pick":

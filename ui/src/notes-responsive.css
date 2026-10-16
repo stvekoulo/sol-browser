@@ -3,8 +3,21 @@
 .notes-body button.notes-tool{padding:6px;min-height:32px;min-width:32px;justify-content:center}.notes-body button.pill-action{height:auto;min-height:30px;font:500 12px var(--font);white-space:normal}
 .notes-navigation button{justify-content:flex-start!important;padding:10px!important;height:auto!important;font:500 12px var(--font)}.notes-tags button{height:auto;font:inherit;justify-content:flex-start}.notes-tags button.notes-tool{justify-content:center}
 .notes-body .notes-preview{height:auto!important;min-height:82px;align-items:flex-start!important;justify-content:flex-start!important;white-space:normal}.notes-menu>div button{justify-content:flex-start!important}.note-history-item button{height:auto!important;white-space:normal!important;text-align:left}
+.notes-body .note-card .notes-preview{background:transparent;box-shadow:none}
+.notes-body .note-card:not(.selected):hover{background:var(--bg-tab-hover)}
+.notes-body .note-card:has(:focus-visible){outline:none}
+.notes-nav-motion button:not(.active){background:transparent}
+.notes-nav-motion button.active .notes-nav-hover{background:transparent!important}
 .notes-body button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}.notes-paper textarea,.notes-paper input{max-width:100%;box-sizing:border-box}
 .notes-document{overflow:hidden;min-height:0}.notes-paper{min-height:0;overscroll-behavior:contain;scrollbar-width:thin}.notes-collection{overflow:hidden;min-height:0}.notes-collection-header>div{min-width:0}.notes-collection-header h2{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* shortcut: Vditor owns editable task inputs; replace this skin when it supports a React checkbox renderer. */
+.note-rich-editor input[type=checkbox]{appearance:none;position:relative;width:20px;height:20px;min-width:20px;padding:0;border:1px solid var(--border-strong);border-radius:6px;background:var(--bg-tab-hover);vertical-align:middle;cursor:pointer;transition:background-color .2s,border-color .2s,transform .16s}
+.note-rich-editor input[type=checkbox]::after{content:"";position:absolute;inset:2px;background:var(--page-bg);mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 13l4 4L19 7' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/contain no-repeat;opacity:0;transform:scale(.5);transition:opacity .16s,transform .16s}
+.note-rich-editor input[type=checkbox]:checked{background:var(--accent);border-color:var(--accent)}
+.note-rich-editor input[type=checkbox]:checked::after{opacity:1;transform:scale(1)}
+.note-rich-editor input[type=checkbox]:active{transform:scale(.92)}
+.note-rich-editor input[type=checkbox]:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+@media(prefers-reduced-motion:reduce){.note-rich-editor input[type=checkbox],.note-rich-editor input[type=checkbox]::after{transition:none;transform:none}}
 .notes-toolbar-actions{min-width:0}.notes-batch{flex-wrap:wrap}.note-mode-controls>.sol-tabs{overflow:auto;scrollbar-width:none}.note-rich-editor{min-width:0;max-width:100%}
 .sol-modal-content:has(>.notes-browser){padding:0;height:min(700px,calc(100dvh - 80px))}.sol-modal-content>.notes-browser{height:100%;border:0;overflow:auto}.sol-modal-content>.notes-browser .notes-browser-heading{padding-right:48px}.sol-modal-content>.notes-browser .notes-navigation,.sol-modal-content>.notes-browser footer{flex-shrink:0}.sol-modal-content>.notes-browser .notes-tags{overflow:visible;flex:none}
 @media(min-width:801px) and (max-width:1100px){.notes-workspace.has-editor{grid-template-columns:minmax(190px,230px) minmax(0,1fr)}.notes-workspace.has-editor>.notes-browser{display:none}.notes-filter-toggle{display:inline-flex!important}}

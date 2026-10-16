@@ -15,9 +15,17 @@ await writeFile(resolve(host.base,'profiles','second','profile-name.txt'),'Profi
 let sidebar,popup;
 const cmd=(ui,c)=>ui.evaluate(`chrome.webview.postMessage(${JSON.stringify(JSON.stringify(c))})`);
 const wait=expression=>host.wait(()=>popup.evaluate(expression).catch(()=>false),expression);
-const click=async selector=>{const p=await popup.evaluate(`(()=>{const el=document.querySelector(${JSON.stringify(selector)});el.scrollIntoView({block:'nearest'});const r=el.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`);await popup.call('Input.dispatchMouseEvent',{type:'mousePressed',...p,button:'left',buttons:1,clickCount:1});await popup.call('Input.dispatchMouseEvent',{type:'mouseReleased',...p,button:'left',buttons:0,clickCount:1});};
+const click=async selector=>{await delay(320);const p=await popup.evaluate(`(()=>{const el=document.querySelector(${JSON.stringify(selector)});el.scrollIntoView({block:'nearest'});const r=el.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`);await popup.call('Input.dispatchMouseEvent',{type:'mouseMoved',...p});await popup.call('Input.dispatchMouseEvent',{type:'mousePressed',...p,button:'left',buttons:1,clickCount:1});await popup.call('Input.dispatchMouseEvent',{type:'mouseReleased',...p,button:'left',buttons:0,clickCount:1});};
 const input=(selector,text)=>popup.evaluate(`(()=>{const el=document.querySelector(${JSON.stringify(selector)});el.focus();Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,${JSON.stringify(text)});el.dispatchEvent(new Event('input',{bubbles:true}))})()`);
-const shot=async name=>{await delay(320);const r=await popup.call('Page.captureScreenshot',{format:'png'});await writeFile(resolve(host.base,`${name}.png`),Buffer.from(r.data,'base64'));};
+const shot=async name=>{await delay(320);const frame=await popup.evaluate('(()=>{const card=document.querySelector(".beui-native-panel>.sol-surface-card.sol-popup-card[data-slot=card]"),body=card?.querySelector(":scope>.popup");return {card:!!card,body:!!body,inner:body&&getComputedStyle(body).borderTopWidth,outer:card&&getComputedStyle(card).borderTopWidth,color:card&&getComputedStyle(card).borderTopColor,shadow:card&&getComputedStyle(card).boxShadow,radius:card&&parseFloat(getComputedStyle(card).borderTopLeftRadius)}})()');assert(frame.body&&parseFloat(frame.inner)===0&&parseFloat(frame.outer)>0&&parseFloat(frame.outer)<=1.1&&Math.abs(frame.radius-16)<.1&&frame.color==='rgba(0, 0, 0, 0)'&&frame.shadow==='none',`plain beUI Card without a visible border or glow: ${JSON.stringify(frame)}`);const r=await popup.call('Page.captureScreenshot',{format:'png'});await writeFile(resolve(host.base,`${name}.png`),Buffer.from(r.data,'base64'));};
+const hoverRows=async selector=>{
+  const count=await popup.evaluate(`document.querySelectorAll(${JSON.stringify(selector)}).length`);assert(count>0);
+  for(let i=0;i<count;i++){
+    const point=await popup.evaluate(`(()=>{const r=document.querySelectorAll(${JSON.stringify(selector)})[${i}].getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`);
+    await popup.call('Input.dispatchMouseEvent',{type:'mouseMoved',...point});await delay(320);
+    assert(await popup.evaluate(`(()=>{const s=getComputedStyle(document.querySelectorAll(${JSON.stringify(selector)})[${i}]);return s.backgroundColor==='rgba(0, 0, 0, 0)'&&s.boxShadow==='none'})()`),'hover and selection belong to the outer row, without an inset button surface');
+  }
+};
 const navigations=()=>readFile(resolve(host.profile,'debug.log'),'utf8').then(s=>(s.match(/navigation.end/g)??[]).length);
 const open=async c=>{await cmd(sidebar,{type:'popup.close'});await delay(550);await cmd(sidebar,c);popup??=await host.connect('#popup');};
 try{
@@ -25,7 +33,7 @@ try{
   await open({type:'profile.menu',x:180,y:80});await wait('!!document.querySelector(".profiles-popup")');
   assert(await popup.evaluate('!!document.querySelector("[data-slot=morphing-modal]")'));
   assert(await popup.evaluate('document.querySelector(".profile-pick[aria-current=true]").disabled'));
-  await shot('profiles-light');
+  await hoverRows('.sol-account-list .profile-pick');await shot('profiles-light');
   await click('[aria-label="Renommer le profil Profil Essai"]');await wait('!!document.querySelector("#name-input")');
   assert(await popup.evaluate('document.activeElement.id==="name-input"'));
   await input('#name-input','Travail');await popup.evaluate('document.querySelector(".name-form").requestSubmit()');
@@ -42,13 +50,14 @@ try{
   await host.wait(()=>sidebar.evaluate(`window.__sidebarState.tabs.find(t=>t.id==='${tab}')?.sessionName==='Projet'`),'session rename');
   await open({type:'session.menu',id:tab,x:180,y:100});await wait(`!!document.querySelector('[aria-label="Supprimer Projet"]')`);
   assert(await popup.evaluate(`document.querySelector('[aria-label="Supprimer Projet"]').disabled`),'occupied session cannot be deleted');
-  await shot('sessions-light');
+  await hoverRows('.session-entry .row');await shot('sessions-light');
   const beforeRestore=await navigations();await popup.evaluate('document.querySelector(".session-entry .row").click()');
   await host.wait(()=>sidebar.evaluate(`window.__sidebarState.tabs.find(t=>t.id==='${tab}')?.sessionId===''`),'restore current session');
   await host.wait(()=>navigations().then(n=>n>beforeRestore),'current session page finished reloading');
   await open({type:'session.menu',id:tab,x:180,y:100});await click('[aria-label="Supprimer Projet"]');await wait('!!document.querySelector(".session-confirm")');
   await popup.evaluate('[...document.querySelectorAll(".session-confirm button")].find(b=>b.textContent==="Annuler").click()');await wait('!document.querySelector(".session-confirm")');
-  await cmd(sidebar,{type:'settings.set',id:'theme',index:2});await shot('sessions-dark');
+  await cmd(sidebar,{type:'settings.set',id:'theme',index:2});await hoverRows('.session-entry .row');await shot('sessions-dark');
+  await open({type:'profile.menu',x:180,y:80});await wait('!!document.querySelector(".profiles-popup")');await hoverRows('.sol-account-list .profile-pick');await shot('profiles-dark');
   // Read UI commands in the native WebView without installing or altering any real extension.
   await popup.evaluate(`(${extensionFixtureBridge.toString()})()`);
   const fixture={popup:'extensions',session:'Session actuelle',updates:'',installed:[{id:'demo',name:'Extension de démonstration au nom long',version:'1.0',enabled:true,page:true,options:true,pinned:false,icon:null,store:true,update:null}],available:[]};
@@ -61,5 +70,9 @@ try{
   await wait('!!document.querySelector(".extension-access")');await shot('extension-confirm');
   await popup.evaluate('[...document.querySelectorAll(".extension-confirm-actions button")].find(b=>b.textContent.includes("Ajouter")).click()');
   assert(await popup.evaluate('window.__commands.some(c=>c.type==="extension.confirm"&&c.id==="demo")'));
-  assert(session);console.log(JSON.stringify({passed:'native profile rename and focus; create/select/rename site session; protected deletion and cancellation; beUI extension actions and confirmation; narrow layout; light/dark',evidence:host.base}));
+  await cmd(sidebar,{type:'welcome.open'});const welcome=await host.connect('#welcome');
+  await host.wait(()=>welcome.evaluate('!!document.querySelector(".sol-surface-card.welcome-card[data-slot=card]")'),'welcome has an outer beUI Card');
+  assert(await welcome.evaluate('document.querySelector(".welcome-step").getBoundingClientRect().height>100&&document.querySelectorAll(".welcome-step [data-slot=card]").length===0'),'welcome content stays unchanged inside the Card');
+  await welcome.call('Page.captureScreenshot',{format:'png'}).then(r=>writeFile(resolve(host.base,'welcome-card.png'),Buffer.from(r.data,'base64')));
+  assert(session);console.log(JSON.stringify({passed:'native profile rename and focus; create/select/rename site session; protected deletion and cancellation; beUI extension actions and confirmation; narrow layout; light/dark; outer welcome Card',evidence:host.base}));
 }catch(error){if(popup)console.error('PANEL',await popup.evaluate('document.body.innerText').catch(()=>null));throw error;}finally{if(sidebar)await host.close(sidebar).catch(()=>{});await host.dispose();}

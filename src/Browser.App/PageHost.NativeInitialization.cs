@@ -24,6 +24,7 @@ public sealed partial class PageHost
             await view.EnsureCoreWebView2Async(environment, options);
         }
         var profile = view.CoreWebView2.Profile;
+        RestoreGitLabSession(profile);
         if (_sessionCookies.Remove(profile.ProfileName, out var cookies))
             foreach (var cookie in cookies) profile.CookieManager.AddOrUpdateCookie(cookie);
     }
@@ -100,11 +101,16 @@ public sealed partial class PageHost
                 e.Response = core.Environment.CreateWebResourceResponse(null!, 204, "No Content", "");
             }
         };
-        core.DOMContentLoaded += (_, _) => view.Opacity = 1;
+        core.DOMContentLoaded += (_, _) =>
+        {
+            if(!core.Source.StartsWith("https://start.sol/",StringComparison.Ordinal)) { view.Opacity=1;ContentPainted?.Invoke(); }
+        };
         Harden(core);
         core.SetVirtualHostNameToFolderMapping("start.sol", Path.Combine(AppContext.BaseDirectory, "ui"), CoreWebView2HostResourceAccessKind.Deny);
         core.WebMessageReceived += (_, e) =>
         {
+            if(e.Source is Settings.DefaultHomePage or QuickNotes.PageUrl && e.WebMessageAsJson.StartsWith('"') && e.TryGetWebMessageAsString()=="\"ui.painted\"")
+            { view.Opacity=1;ContentPainted?.Invoke();return; }
             if (e.Source == core.Source && e.WebMessageAsJson == "\"sol.page.pointer\"") { PagePressed?.Invoke(); return; }
             // During hash history navigation, WebView2 may still report the previous internal fragment.
             if (e.Source is Settings.DefaultHomePage or QuickNotes.PageUrl && core.Source is Settings.DefaultHomePage or QuickNotes.PageUrl

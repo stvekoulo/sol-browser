@@ -1,4 +1,6 @@
 import { setLang } from './i18n';
+import {applyTheme} from './interfaceTheme';
+export {interfaceScale} from './interfaceTheme';
 
 // Canal avec l'hôte C#. Les types de commandes sont ceux validés par CommandParser côté hôte.
 export type Tab = {
@@ -135,6 +137,7 @@ export type HostEvent = {
   text?: string;
   count?: number;
   open?: boolean;
+  width?: number;
   bg?: string;
   dark?: boolean;
   accent?: string | null;
@@ -146,54 +149,6 @@ export type HostEvent = {
   uiScale?: number;
   tint?: { topbar: boolean; sidebar: boolean; menus: boolean; background: boolean };
 };
-
-// Fonds neutres des thèmes imposés. En thème par défaut, le fond de l'interface est celui de la page.
-// Le sombre est proche du noir des sites sombres : « Sombre » et « Système » rendent comme « Par défaut » sur un tel site.
-const NEUTRAL = { light: 'rgb(243, 243, 246)', dark: 'rgb(9, 9, 11)' };
-export const interfaceScale = () => Number(document.documentElement.style.getPropertyValue('--ui-scale')) || 0.92;
-
-function applyTheme(ev: HostEvent) {
-  const root = document.documentElement.style;
-  if (location.hostname === 'ui.navigateur' || (location.hostname === 'start.sol' && location.hash === '#notes')) {
-    // Même facteur que les dimensions natives, fourni par l'hôte.
-    const scale = ev.uiScale === 0.86 || ev.uiScale === 0.89 ? ev.uiScale : 0.92;
-    const changed = interfaceScale() !== scale;
-    root.setProperty('--ui-scale', String(scale));
-    document.body.style.zoom = String(scale);
-    document.body.style.height = '100%';
-    if (changed) window.dispatchEvent(new Event('ui-scale'));
-  } else if (location.hostname === 'start.sol') {
-    root.removeProperty('--ui-scale');
-    document.body.style.zoom = '';
-    document.body.style.height = '';
-  }
-  document.documentElement.dataset.private = String(!!ev.privateMode);
-  document.documentElement.dataset.font = ev.font ?? 'default';
-  // L'accueil est clair par défaut : il ne suit pas la page ouverte derrière lui, seulement un thème choisi exprès.
-  const welcome = location.hash === '#welcome';
-  const mode = welcome && (ev.mode ?? 'page') === 'page' ? 'light' : ev.mode ?? 'page';
-  if (welcome) ev = { ...ev, accent: null };
-  const dark = mode === 'page' ? !!ev.dark : mode === 'system' ? !!ev.systemDark : mode === 'dark';
-  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-  root.setProperty('--page-bg', ev.privateMode ? (dark ? '#171120' : '#eee7f7') : mode === 'page' || (dark && ev.dark) ? ev.bg! : dark ? NEUTRAL.dark : NEUTRAL.light);
-  if (ev.privateMode) ev = { ...ev, accent: '#8b5cf6' };
-  if (ev.accent) root.setProperty('--tab-accent', ev.accent);
-  else root.removeProperty('--tab-accent');
-  // Couleur réelle de la page, quel que soit le thème : c'est elle que prennent les coins des vues flottantes,
-  // pour se fondre dans la page qu'elles recouvrent.
-  root.setProperty('--page-real', ev.bg!);
-
-  // Couleur d'accent du site. Chaque vue ne la prend que si les réglages l'autorisent pour sa zone ;
-  // sans elle, ses surfaces gardent la couleur du fond.
-  const zone = location.hash === '#sidebar' ? 'sidebar' : location.hash ? 'menus' : 'topbar';
-  // Arrière-plan : le fond de la barre et de la colonne se teinte légèrement (jamais celui des menus).
-  // Posée d'un coup : animer cette couleur redessinerait toute l'interface à chaque image.
-  const site = ev.tint?.[zone] ?? true, chrome = zone !== 'menus' && (ev.tint?.background ?? true);
-  if (ev.accent && site) root.setProperty('--site-accent', ev.accent);
-  else root.removeProperty('--site-accent');
-  if (ev.accent && chrome) root.setProperty('--site-chrome-accent', ev.accent);
-  else root.removeProperty('--site-chrome-accent');
-}
 
 export function onMessage(callback: (data: unknown) => void) {
   const handler = (e: MessageEvent) => {

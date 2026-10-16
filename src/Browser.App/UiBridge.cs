@@ -7,7 +7,7 @@ using Microsoft.Web.WebView2.Core;
 namespace Browser.App;
 
 // Vue d'interface : synchronise la barre, la sidebar et adapte la couleur de coque à la page active.
-public sealed partial class UiBridge(WebView2 view, string page = "index.html", WebView2? sidebar = null, ColumnDefinition? sidebarColumn = null, PageHost? pages = null)
+public sealed partial class UiBridge(WebView2 view, string page = "index.html", PageHost? pages = null)
 {
     private const string Origin = "https://ui.navigateur/";
     // Lit les couleurs de la page active : son fond, et sa couleur d'accent (celle qui fait son identité).
@@ -138,7 +138,6 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
             tint = new { topbar = on?.TintTopbar ?? true, sidebar = on?.TintSidebar ?? true, menus = on?.TintMenus ?? true, background = on?.TintBackground ?? true },
         });
         view.CoreWebView2?.PostWebMessageAsJson(s_lastThemeMsg);
-        sidebar?.CoreWebView2?.PostWebMessageAsJson(s_lastThemeMsg);
         foreach (var floating in _floating) floating.Post(s_lastThemeMsg);
         ThemePublished?.Invoke(s_lastThemeMsg);
     }
@@ -157,8 +156,6 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
         s_lastProbe ??= ($"rgb({initial.R}, {initial.G}, {initial.B})", initial.R < 128, null);
         BroadcastTheme();
         await InitViewAsync(view, page, uiFolder, onCommand);
-        if (sidebar is not null)
-            await InitViewAsync(sidebar, "index.html#sidebar", uiFolder, onCommand);
 
         if (pages is not null)
         {
@@ -210,7 +207,6 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
     public void Post(string json)
     {
         view.CoreWebView2?.PostWebMessageAsJson(json);
-        sidebar?.CoreWebView2?.PostWebMessageAsJson(json);
 
         // Synchronise la couleur de la coque avec l'onglet actif.
         if (json.Contains("\"activeId\":", StringComparison.Ordinal))

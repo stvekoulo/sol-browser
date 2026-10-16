@@ -26,6 +26,17 @@ async function checkPinnedSpacing() {
   assert.ok(spaced,'pinned items have breathing room horizontally and vertically without overflowing');
   assert.equal(await ui.evaluate('document.querySelectorAll(".sidebar-organizer,.sidebar-search").length'),0,'sidebar search and organizer buttons are removed');
 }
+async function checkIntegratedSurface() {
+  const surface=await ui.evaluate(`(()=>{
+    const panel=document.querySelector('.sidebar-card'),r=panel.getBoundingClientRect(),s=getComputedStyle(panel);
+    return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:innerWidth,height:innerHeight,zoom:Number(getComputedStyle(document.body).zoom),radius:s.borderRadius,shadow:s.boxShadow,slot:panel.closest('[data-slot="sidebar"]').dataset.slot,inset:document.querySelector('.workspace-page').getBoundingClientRect().left};
+  })()`);
+  assert.ok(Math.abs(surface.left)<1&&Math.abs(surface.top)<1&&Math.abs(surface.right-surface.inset)<1&&Math.abs(surface.bottom-surface.height)<1,'sidebar is flush with its native column');
+  assert.equal(surface.radius,'0px','sidebar itself is not a floating card');
+  assert.equal(await ui.evaluate('document.querySelectorAll(".sidebar-heading,.sidebar-url-pill").length'),0,'shortcuts follow window controls without duplicated toolbar blocks');
+  assert.equal(surface.shadow,'none','integrated sidebar has no outer shadow');
+  assert.equal(surface.slot,'sidebar','beUI desktop sidebar remains in use');
+}
 async function drag(source, target, fraction=.5, cancel=false) {
   const a=await box(source);
   await mouse('mousePressed',a,1);
@@ -42,6 +53,8 @@ const group = id => `[data-kind="group"][data-id="${id}"]`;
 try {
   ui = await host.launch();
   await host.wait(()=>ui.evaluate('document.querySelectorAll(".sidebar-tab").length===10'), 'restored sidebar');
+  await checkIntegratedSurface();
+  assert.equal(await ui.evaluate('document.querySelectorAll(".sidebar-window-bar .light").length'),3,'window controls belong to the full-height sidebar');
   const toolbar = await host.connect('');
   await host.wait(()=>toolbar.evaluate('!!document.querySelector(".topbar")').catch(()=>false),'toolbar ready');
   for (const surface of [ui, toolbar]) {
@@ -65,11 +78,14 @@ try {
   for (const index of [0,1,2]) {
     await command({type:'settings.set',id:'uiScale',index});
     await host.wait(()=>ui.evaluate(`Number(getComputedStyle(document.body).zoom)===${[.92,.89,.86][index]}`),'requested UI scale applied before dragging');
-    await ui.evaluate(`(()=>{window.__sidebarFrames=[];const record=()=>{window.__sidebarFrames.push(getComputedStyle(document.documentElement).backgroundColor);if(window.__sidebarFrames.length<40)requestAnimationFrame(record)};requestAnimationFrame(record)})()`);
+    const drawerWidth=await ui.evaluate('innerWidth');
+    await ui.evaluate(`(()=>{window.__sidebarFrames=[];const record=()=>{window.__sidebarFrames.push(document.querySelector('.workspace-page').getBoundingClientRect().left);if(window.__sidebarFrames.length<40)requestAnimationFrame(record)};requestAnimationFrame(record)})()`);
     await toolbar.evaluate(`chrome.webview.postMessage('{"type":"sidebar.toggle"}');setTimeout(()=>chrome.webview.postMessage('{"type":"sidebar.toggle"}'),70);setTimeout(()=>chrome.webview.postMessage('{"type":"sidebar.toggle"}'),110);setTimeout(()=>chrome.webview.postMessage('{"type":"sidebar.toggle"}'),160)`);
     await host.wait(()=>ui.evaluate('window.__sidebarFrames.length===40'),'sidebar animation frames');
-    assert.ok(await ui.evaluate(`window.__sidebarFrames.every(bg=>bg!=='rgba(0, 0, 0, 0)')`),'opaque page-colored backdrop throughout rapid toggles');
-    await host.wait(()=>ui.evaluate(`!document.body.classList.contains('floating') && getComputedStyle(document.querySelector('.sidebar-card')).opacity==='1'`),'sidebar animation settles after interruption');
+    assert.ok(await ui.evaluate(`window.__sidebarFrames.every(x=>x>=0)&&new Set(window.__sidebarFrames.map(Math.round)).size>5`),'shared inset follows intermediate sidebar frames throughout rapid toggles');
+    await host.wait(()=>ui.evaluate(`Math.abs(document.querySelector('.workspace-sidebar').getBoundingClientRect().width-document.querySelector('.workspace-sidebar-content').getBoundingClientRect().width)<1`),'sidebar animation settles after interruption');
+    await checkIntegratedSurface();
+    assert.ok(await ui.evaluate(`Math.abs(innerWidth-${drawerWidth})<=1`),'chrome viewport remains stable when entering and leaving');
     await checkPinnedSpacing();
     const beforeDrag=(await state()).tabs.map(tab=>tab.id);
     for (const selector of ['.sidebar-tab', '.tab-group-header']) {
@@ -137,7 +153,7 @@ try {
     assert.ok(layout.footer<=layout.card+1,'footer visible at every scale');
     assert.ok(layout.overflow<=1,'no horizontal scroll');
     assert.ok(layout.buttons.every(b=>b.left>=layout.left && b.right<=layout.right+1),'footer buttons within sidebar');
-    assert.equal(layout.buttons.length,6,'notes and split menu available in footer');
+    assert.equal(layout.buttons.length,6,'profile, notes and split menu available in footer');
   }
   await command({type:'split.close'});
   await command({type:'settings.set',id:'theme',index:2}); await delay(200);
@@ -202,6 +218,9 @@ try {
     await host.close(ui);ui=null;
   }
   console.log(`Sidebar integration passed. Native screenshot: ${resolve(host.base,'sidebar.png')}`);
+} catch(error) {
+  console.error('Sidebar check failed before cleanup:',error);
+  throw error;
 } finally {
   if(ui) await host.close(ui);
   await host.dispose();

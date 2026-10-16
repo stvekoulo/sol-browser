@@ -1,5 +1,5 @@
 import { createRoot } from 'react-dom/client';
-import App from './App';
+import Workspace from './Workspace';
 import Dock from './Dock';
 import Panel from './Panel';
 import Popup from './Popup';
@@ -24,6 +24,7 @@ import './beui.css';
 import './app.css';
 import './sidebar.css';
 import './sidebar-interactions.css';
+import './workspace-chrome.css';
 import './popup.css';
 import './panel.css';
 import './welcome.css';
@@ -35,6 +36,7 @@ import './beui-workspace.css';
 const hash = location.hash;
 if (location.hostname === 'ui.navigateur') installTooltips();
 if (hash === '#popup' || hash === '#dock' || hash === '#capture') document.body.classList.add('popup-body');
+if (!hash && location.hostname === 'ui.navigateur') document.body.classList.add('shell-body');
 if (hash === '#sidebar') document.body.classList.add('sidebar-body');
 if (hash === '#panel') document.body.classList.add('panel-body');
 if (hash === '#welcome') document.body.classList.add('welcome-body');
@@ -42,22 +44,23 @@ if (hash === '#welcome') document.body.classList.add('welcome-body');
 const container = document.getElementById('root')!;
 // L'hôte ne dévoile la surface qu'une fois son contenu rendu, pour éviter le cadre vide du moteur.
 const firstPaint = new MutationObserver(() => {
-  if (!container.firstElementChild) return;
+  if (!container.firstElementChild || (document.body.classList.contains('shell-body') && (!container.querySelector('.topbar') || !container.querySelector('.sidebar-card')))) return;
   firstPaint.disconnect();
   requestAnimationFrame(() => requestAnimationFrame(() => {
     document.documentElement.classList.add('painted');
     painted();
   }));
 });
-firstPaint.observe(container, { childList: true });
+firstPaint.observe(container, { childList: true, subtree:true });
 const root = createRoot(container);
 const render = () => {
   const page = location.hash;
   document.body.classList.toggle('start-body', page === '#start');
   document.body.classList.toggle('notes-body', page === '#notes');
-  root.render(page === '#notes' ? <NotesPage /> : page === '#capture' ? <Capture /> : page === '#start' ? <Start /> : page === '#welcome' ? <Welcome /> : page === '#panel' ? <Panel /> : page === '#popup' ? <Popup /> : page === '#dock' ? <Dock /> : page === '#sidebar' ? <Sidebar /> : <App />);
+  root.render(page === '#notes' ? <NotesPage /> : page === '#capture' ? <Capture /> : page === '#start' ? <Start /> : page === '#welcome' ? <Welcome /> : page === '#panel' ? <Panel /> : page === '#popup' ? <Popup /> : page === '#dock' ? <Dock /> : page === '#sidebar' ? <Sidebar /> : <Workspace />);
 };
 render();
 if (location.hostname === 'start.sol') window.addEventListener('hashchange', render);
 import './beui-panels.css';
 import './notes-responsive.css';
+import './beui-cards.css';

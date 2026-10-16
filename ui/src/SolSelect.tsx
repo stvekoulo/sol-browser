@@ -1,5 +1,6 @@
 import {useEffect,useRef,useState,type KeyboardEvent} from 'react';
 import {Select,SelectTrigger,SelectValue,SelectContent,SelectItem} from '@/components/motion/select';
+import {Card} from '@/components/motion/card';
 
 export default function SolSelect({id,label,value,options,onChange}:{id:string;label:string;value:number;options:string[];onChange:(index:number)=>void}){
   const [open,setOpen]=useState(false),root=useRef<HTMLDivElement>(null);
@@ -19,7 +20,7 @@ export default function SolSelect({id,label,value,options,onChange}:{id:string;l
   return <div ref={root} className={`sol-select${open?' open':''}`} data-sol-select={id} onKeyDown={key}>
     <Select value={String(value)} open={open} onOpenChange={setOpen} onValueChange={next=>{onChange(Number(next));requestAnimationFrame(()=>trigger()?.focus());}}>
       <SelectTrigger ariaLabel={`${label} : ${options[value]??''}`} className="sol-select-trigger"><SelectValue placeholder={options[value]??label}/></SelectTrigger>
-      <SelectContent className="sol-select-content">{options.map((option,index)=><SelectItem key={index} value={String(index)} className="sol-select-option">{option}</SelectItem>)}</SelectContent>
+      <SelectContent className="sol-select-content"><Card size="compact" className="sol-surface-card sol-select-card">{options.map((option,index)=><SelectItem key={index} value={String(index)} className="sol-select-option">{option}</SelectItem>)}</Card></SelectContent>
     </Select>
   </div>;
 }

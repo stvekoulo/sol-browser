@@ -1,4 +1,7 @@
 .beui-native-panel{width:100%;min-width:0;transform-origin:top center}
+.popup,.dock{box-shadow:none}
+.sol-popup-card{width:100%;min-width:0;padding:0!important;gap:0!important;border:1px solid var(--border);border-radius:20px;background:var(--bg-sidebar-card);color:var(--text);box-shadow:none}
+.sol-popup-card>.popup{border:0;background:transparent;box-shadow:none;border-radius:inherit}
 .sol-menu-item .menu-icon-empty{background:none}
 .beui-native-panel .popup.arriving>*,.beui-native-panel .popup.arriving>.popup-list>*{animation:none}
 .beui-native-panel button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
@@ -8,10 +11,22 @@
 .sol-account-list>.profile-row>.relative.z-10{display:flex;align-items:center;gap:6px;width:100%;min-width:0}
 .sol-account-list .profile-row{min-width:0;gap:6px}
 .sol-account-list .profile-edit,.sol-account-list .profile-delete{padding:0;min-width:26px}
-.sol-account-hover{background:var(--bg-tab-hover)!important;border-radius:16px!important}
-.profile-pick:disabled{opacity:1}.session-entry.current>.relative.z-10>.profile-row>.row{background:var(--bg-pill-solid);box-shadow:var(--shadow-pill-elevated)}
+.sol-account-hover{background:var(--bg-tab-hover)!important;border-radius:18px!important}
+.sol-account-list .profile-row :is(.row,.profile-pick){background:transparent;box-shadow:none}
+.sessions-popup .sol-account-hover{border-radius:12px!important}
+.profile-pick:disabled{opacity:1}
 .sol-account-list .row{flex:1;min-width:0}.sol-account-list .row-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .session-avatar{background:var(--bg-tab-hover);border-radius:9px;padding:4px;box-sizing:content-box}
+.sessions-popup .popup-header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 6px 6px}
+.session-picker-heading{display:flex;align-items:center;gap:8px;min-width:0}
+.sessions-popup .session-picker-close{width:26px;height:26px;padding:0;flex:none}
+.sessions-popup .profile-row{padding:3px;gap:4px;border:1px solid transparent;border-radius:12px}
+.sessions-popup .session-entry.current .profile-row{background:var(--bg-pill-solid);border-color:var(--border-card)}
+.sessions-popup .profile-edit,.sessions-popup .profile-delete{width:28px;height:28px;min-width:28px;flex:none}
+.sessions-popup .session-current{gap:4px;font-size:10px;padding:0 6px}
+.sessions-popup .session-create{margin-top:8px;border:1px solid var(--border);border-radius:12px;padding:0 10px;background:var(--bg-tab-hover)}
+.sessions-popup .session-create:hover{background:var(--bg-pill-solid);box-shadow:none}
+.sessions-popup .sessions-footer{padding-top:6px;font-size:10.5px;line-height:1.55}
 .sol-popup-input{width:100%;min-width:0}.session-edit>.sol-popup-input{flex:1 1 100%}
 .sol-popup-input-field{height:38px!important;background:var(--bg-pill-solid)!important;border:1px solid var(--border-strong)!important;box-shadow:none!important}
 .sol-popup-input-field[data-state=focused]{outline:2px solid var(--accent);outline-offset:-2px}
@@ -38,7 +53,8 @@
 .net-controls .sol-tabs-wrap{max-width:100%}.net-controls>.sol-tabs{flex:none}
 @media(max-width:700px){.net-bar>.sol-tabs{order:2;flex-basis:100%;min-width:0}.net-title{flex:1}.net-detail{width:48%;padding:8px}.net-detail-actions>*{max-width:100%}.net-row,.net-columns{grid-template-columns:34px 48px minmax(90px,1fr) 50px 56px 55px;gap:5px}.net-list{overflow:auto}.net-row,.net-columns{min-width:420px}}
 
-.net .net-search{background:none;padding:0;border-radius:0;min-width:150px}
-.net .net-search .sol-popup-input-field{height:34px!important;background:var(--bg-tab-hover)!important}
+.net .net-search{flex:1 1 280px;align-items:stretch;background:none;padding:0;border-radius:0;min-width:min(280px,100%);box-shadow:none}
+.net .net-search .sol-popup-input-field{width:100%;height:36px!important;background:var(--bg-tab-hover)!important}
+.net .net-search input{padding:0 12px 0 36px!important}
 .net-preserve [role=checkbox]{width:18px;height:18px;min-width:18px;padding:0;border:1px solid var(--text-dim);border-radius:6px;background:transparent;color:var(--text)}
 .net-preserve [role=checkbox][aria-checked=true]{background:var(--accent);border-color:var(--accent);color:var(--page-bg)}

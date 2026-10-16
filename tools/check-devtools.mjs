@@ -35,6 +35,10 @@ const query=async value=>{
   await panel.evaluate(`(()=>{const el=document.querySelector('.net-search input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,${JSON.stringify(value)});el.dispatchEvent(new Event('input',{bubbles:true}))})()`);
   await delay(100);
 };
+const checkSearch=async()=>{
+  const layout=await panel.evaluate('(()=>{const root=document.querySelector(".net-search"),field=root.querySelector(".sol-popup-input-field"),input=root.querySelector("input"),icon=root.querySelector(".sol-animated-icon"),r=field.getBoundingClientRect(),z=Number(document.body.style.zoom)||1;return {width:r.width,fill:Math.abs(r.width-root.getBoundingClientRect().width),gap:input.getBoundingClientRect().left+parseFloat(getComputedStyle(input).paddingLeft)*z-icon.getBoundingClientRect().right}})()');
+  assert.ok(layout.width>=220&&layout.fill<1&&layout.gap>=6,`search field fills its space and separates text from its icon: ${JSON.stringify(layout)}`);
+};
 const design=expression=>page.evaluate(`(()=>{const root=document.getElementById('sol-design-view').shadowRoot;${expression}})()`);
 const hover=async (selector,expected=selector)=>{
   await host.wait(()=>page.evaluate('!!document.getElementById("sol-design-view")'),'inspector ready before pointer selection');
@@ -47,6 +51,7 @@ try{
   page=await host.connect(origin+'/dev');await host.wait(()=>page.evaluate('!!document.querySelector("#design-target")').catch(()=>false),'fixture ready');
   const id=(await state()).activeId;
   await command({type:'network.toggle'});panel=await host.connect('#panel');
+  await host.wait(()=>panel.evaluate('!!document.querySelector(".sol-surface-card.net[data-slot=card]")'),'beUI Card frames the devtools');
   await host.wait(()=>panel.evaluate('!!document.querySelector(".net")').catch(()=>false),'network UI ready');
   await panel.evaluate(`chrome.webview.addEventListener('message',e=>{if(e.data.panel==='network')window.__network=e.data});navigator.clipboard.writeText=async text=>window.__copied=text`);
   await command({type:'network.ready'});await host.wait(async()=>(await network())?.tabId===id,'network follows active tab');
@@ -76,14 +81,23 @@ try{
   for(const theme of [1,2])for(const scale of [0,1,2]){
     await command({type:'settings.set',id:'theme',index:theme});await command({type:'settings.set',id:'uiScale',index:scale});await delay(100);
     assert.ok(await panel.evaluate('document.documentElement.scrollWidth<=innerWidth'),'network fits both themes and all scales');
+    await checkSearch();
+    const gaps=await panel.evaluate('(()=>{const r=document.querySelector(".net").getBoundingClientRect();return {left:r.left,right:innerWidth-r.right,bottom:innerHeight-r.bottom}})()');
+    assert.ok(gaps.left>=7&&gaps.right>=7&&Math.abs(gaps.left-gaps.right)<1&&gaps.bottom>=4&&gaps.bottom<=8,`network keeps balanced side margins and a small bottom gap: ${JSON.stringify(gaps)}`);
   }
   await panel.call('Emulation.setDeviceMetricsOverride',{width:480,height:420,deviceScaleFactor:1,mobile:false});
   assert.ok(await panel.evaluate('document.documentElement.scrollWidth<=innerWidth'),'network fits a narrow viewport');
+  await checkSearch();
   assert.ok(await panel.evaluate('getComputedStyle(document.querySelector(".net-preserve [role=checkbox]")).borderTopWidth!=="0px"'),'checkbox remains visible');
   await panel.call('Emulation.clearDeviceMetricsOverride');
   const shot=await panel.call('Page.captureScreenshot',{format:'png'});await writeFile(resolve(host.base,'devtools-network.png'),Buffer.from(shot.data,'base64'));
   await command({type:'network.toggle'});
-  await command({type:'design.toggle',id});await host.wait(()=>page.evaluate('!!document.getElementById("sol-design-view")'),'design enabled');
+  for(const type of ['mousePressed','mouseReleased'])await page.call('Input.dispatchMouseEvent',{type,x:300,y:180,button:'right',clickCount:1});
+  const popup=await host.connect('#popup');
+  await host.wait(()=>popup.evaluate('[...document.querySelectorAll(".sol-menu-item")].some(b=>b.textContent.includes("Inspecteur de design"))'),'design inspector in page context menu');
+  assert.equal(await popup.evaluate('[...document.querySelectorAll(".sol-menu-item")].find(b=>b.textContent.includes("Inspecteur de design")).querySelector("[data-icon]")?.getAttribute("data-icon")'),'edit','design menu uses an animated edit icon');
+  await popup.evaluate('[...document.querySelectorAll(".sol-menu-item")].find(b=>b.textContent.includes("Inspecteur de design")).dispatchEvent(new MouseEvent("mousedown",{bubbles:true,button:0}))');
+  await host.wait(()=>page.evaluate('!!document.getElementById("sol-design-view")'),'context menu opens design inspector');
   assert.equal(await page.evaluate('getComputedStyle(document.getElementById("sol-design-view")).zIndex'),'2147483647','inspector stays above the Sol decorative blur');
   await hover('#design-target');
   assert.ok(await design(`return root.querySelector('dl').textContent.includes('21.00:1')`),'OKLCH contrast calculated by browser color engine');

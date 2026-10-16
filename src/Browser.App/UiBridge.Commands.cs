@@ -19,21 +19,21 @@ public sealed partial class UiBridge
             catch (ArgumentException) { return; }
             if (!e.Source.StartsWith(Origin, StringComparison.Ordinal)) return;
 
-            if (json == "\"ui.painted\"") { target.Opacity = 1; return; }
+            if (json == "\"ui.painted\"") { target.Opacity = 1; Painted?.Invoke(); return; }
 
             if (SidebarHost is { } host && json.Contains("\"sidebar.toggle\"", StringComparison.Ordinal))
             {
-                var open = host.Toggle();
-                view.CoreWebView2?.PostWebMessageAsJson($$"""{"event":"sidebar","open":{{(open ? "true" : "false")}}}""");
+                host.Toggle();
                 return;
             }
             if (CommandParser.Parse(json) is { } command)
             {
                 if (command.Type == "sidebar.motion.done")
                 {
-                    if (target == sidebar && command.Index is { } step) SidebarHost?.AnimationFinished(step);
+                    // Anciennes vues : la disposition commune ne dépend plus de cette confirmation.
                     return;
                 }
+                if (PresentationCommand(target, command)) return;
                 if (command.Type == "ui.tooltip")
                 {
                     tooltip.IsOpen = false;
@@ -51,7 +51,14 @@ public sealed partial class UiBridge
                 }
                 tooltip.IsOpen = false;
                 ToolTipService.SetToolTip(target, null);
+                // Les commandes de la barre droite passent de sa vue locale aux coordonnées de la fenêtre.
+                if (target == view && page == "index.html" && command.X is { } xLocal)
+                {
+                    var offset = target.TransformToVisual((UIElement)target.Parent).TransformPoint(new Windows.Foundation.Point(0, 0));
+                    command = command with { X = xLocal + offset.X, Y = command.Y is { } yLocal ? yLocal + offset.Y : null };
+                }
                 onCommand(command);
+                if (command.Type=="ui.ready") SidebarHost?.Publish();
             }
         };
     }

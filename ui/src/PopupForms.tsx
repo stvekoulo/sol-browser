@@ -75,7 +75,7 @@ export function ComparePicker({ rootRef, ask }: { rootRef: RefObject<HTMLDivElem
           {ask.devices.map(d => {
             const on = chosen.includes(d.name);
             return (
-<label key={d.name} className="setting-row sol-setting"><span className="setting-text"><span className="row-title">{d.label}</span><span className="row-sub">{d.size}</span></span><Checkbox className="sol-checkbox" aria-label={d.label} checked={on} disabled={!on&&chosen.length>=ask.max} onCheckedChange={checked=>setChosen(checked?[...chosen,d.name]:chosen.filter(n=>n!==d.name))}/></label>
+<div key={d.name} className="setting-row sol-setting"><label className="setting-text" htmlFor={`compare-${d.name}`}><span className="row-title">{d.label}</span><span className="row-sub">{d.size}</span></label><Checkbox id={`compare-${d.name}`} className="sol-checkbox" aria-label={d.label} checked={on} disabled={!on&&chosen.length>=ask.max} onCheckedChange={checked=>setChosen(checked?[...chosen,d.name]:chosen.filter(n=>n!==d.name))}/></div>
             );
           })}
         </div>
