@@ -18,6 +18,7 @@ export default function Row({ item, selected = false, onPick }: { item: Item; se
     <button
       className={`row${selected ? ' selected' : ''}`}
       role="option"
+      title={item.title ? `${item.title}\n${item.url}` : item.url}
       aria-selected={selected}
       onMouseDown={e => e.button === 0 && onPick()}
     >
@@ -27,17 +28,17 @@ export default function Row({ item, selected = false, onPick }: { item: Item; se
       {item.kind === 'search' ? (
         <>
           <span className="row-title">{item.title}</span>
-          <span className="row-pill">{t('Recherche', 'Search')}</span>
+          <span className="row-pill"><span>{t('Recherche', 'Search')}</span></span>
         </>
       ) : item.kind === 'go' ? (
         <>
           <span className="row-title">{t('Ouvrir', 'Open')} {item.title}</span>
-          <span className="row-pill">{t('Aller', 'Go')}</span>
+          <span className="row-pill"><span>{t('Aller', 'Go')}</span></span>
         </>
       ) : (
         <>
           <span className="row-title">{item.title || domain || item.url}</span>
-          {domain && <span className="row-pill">{domain}</span>}
+          {domain && <span className="row-pill"><span>{domain}</span></span>}
         </>
       )}
     </button>

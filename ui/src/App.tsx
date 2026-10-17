@@ -100,7 +100,7 @@ export default function App({sidebarOpen=true}:{sidebarOpen?:boolean}) {
           <Icon d="M2.5 5.5h2l1-1.5h5l1 1.5h2v7h-11zM8 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4" />
         </button>
         {state.privateMode && (
-          <span className="private-chip" title={t('Rien de ce que vous visitez ici n’est gardé : tout est effacé à la fermeture de la fenêtre.', 'Nothing you visit here is kept: everything is erased when the window closes.')}>
+          <span className="private-chip" title={t('Les visites ne sont pas enregistrées. Cookies et connexions sont effacés à la fermeture du dernier onglet privé.', 'Visits are not recorded. Cookies and sign-ins are erased when the last private tab closes.')}>
             {t('Privé', 'Private')}
           </span>
         )}

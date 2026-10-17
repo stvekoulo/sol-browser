@@ -61,17 +61,35 @@ public sealed partial class BrowserController
     {
         if (BrowserImport.ProfileDir(_importSources, browser, folder) is not { } dir) return;
         var temp = Path.Combine(AppPaths.DataDir, "import");
-        var (bookmarks, visits) = await Task.Run(() => (BrowserImport.ReadBookmarks(dir), BrowserImport.ReadHistory(dir, ImportedHistory, temp)));
-        // Mots de passe : lus maintenant, écrits dans la base du moteur au prochain démarrage (il la garde verrouillée).
-        var (logins, locked) = await Task.Run(() =>
+        IReadOnlyList<Bookmark> bookmarks = [];
+        IReadOnlyList<ImportedVisit> visits = [];
+        int logins = 0, locked = 0;
+        string? error = null;
+        try
         {
-            var read = PasswordImport.Read(BrowserImport.UserData(_importSources, browser)!, dir, temp);
-            PasswordImport.Queue(AppPaths.PendingPasswords, read.Logins);
-            return (read.Logins.Count, read.Unreadable);
-        });
-        try { _db.Import(bookmarks, visits); }
-        catch (Microsoft.Data.Sqlite.SqliteException) { (bookmarks, visits) = ([], []); }
-        _welcome.Post(JsonSerializer.Serialize(new { welcome = "imported", id = browser, folder, bookmarks = bookmarks.Count, history = visits.Count, passwords = logins, locked }));
+            var data = await Task.Run(() => (BrowserImport.ReadBookmarks(dir), BrowserImport.ReadHistory(dir, ImportedHistory, temp)));
+            _db.Import(data.Item1, data.Item2);
+            (bookmarks, visits) = data;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException)
+        {
+            error = T("Les favoris et l’historique n’ont pas pu être importés. Réessayez.", "Bookmarks and history could not be imported. Please retry.");
+        }
+        try
+        {
+            // Le moteur garde sa base ouverte : les mots de passe sont appliqués au prochain démarrage.
+            (logins, locked) = await Task.Run(() =>
+            {
+                var read = PasswordImport.Read(BrowserImport.UserData(_importSources, browser)!, dir, temp);
+                PasswordImport.Queue(AppPaths.PendingPasswords, read.Logins);
+                return (read.Logins.Count, read.Unreadable);
+            });
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException or System.Security.Cryptography.CryptographicException)
+        {
+            error = T("Import incomplet. Fermez le navigateur source et réessayez, ou importez ses mots de passe depuis un fichier CSV.", "Import incomplete. Close the source browser and retry, or import its passwords from a CSV file.");
+        }
+        _welcome.Post(JsonSerializer.Serialize(new { welcome = "imported", id = browser, folder, bookmarks = bookmarks.Count, history = visits.Count, passwords = logins, locked, error }));
         Refresh();
     }
 
@@ -218,10 +236,9 @@ public sealed partial class BrowserController
         }
     }
 
-    // Crans de zoom, comme dans les navigateurs courants.
-    private static readonly double[] ZoomSteps = [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
+    private static readonly double[] ZoomSteps = Enumerable.Range(10, 31).Select(step => step / 20d).ToArray();
 
-    private void Zoom(string? id, string action)
+    private void Zoom(string? id, string action, int? percent = null)
     {
         if (id is null) return;
         if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is not { } tab || tab.Url is Settings.DefaultHomePage or QuickNotes.PageUrl) return;
@@ -231,6 +248,7 @@ public sealed partial class BrowserController
         {
             "zoom.in" => ZoomSteps.FirstOrDefault(z => z > current + 0.001, ZoomSteps[^1]),
             "zoom.out" => ZoomSteps.LastOrDefault(z => z < current - 0.001, ZoomSteps[0]),
+            "zoom.set" => percent!.Value / 100d,
             _ => 1,
         };
         _pages.SetZoom(zoom); // toutes les pages du profil, présentes et futures
@@ -257,7 +275,7 @@ public sealed partial class BrowserController
     });
     private void OpenSessionMenu(string tabId, double x, double y)
     {
-        if (!_tabs.Tabs.Any(t => t.Id == tabId)) return;
+        if (!_tabs.Tabs.Any(t => t.Id == tabId && !t.Private)) return;
         if (ClosesPanel("session-" + tabId)) return;
         HidePopup(); _sessionMenuTab = tabId;
         _popup.Show(x, y, 350, SessionsJson(tabId), focus: true);

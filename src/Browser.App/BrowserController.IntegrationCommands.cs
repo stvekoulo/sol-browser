@@ -51,8 +51,9 @@ public sealed partial class BrowserController
                 }
                 if (id == "uiScale")
                 {
-                    if (c.Index is not (0 or 1 or 2)) return true;
-                    _settings.UiScale = new[] { 1d, 0.9, 0.8 }[c.Index.Value];
+                    if (c.Index is not (0 or 1 or 2 or 3 or 4)) return true;
+                    // Les trois premiers indices restent compatibles avec les commandes existantes.
+                    _settings.UiScale = new[] { 1d, 0.9, 0.8, 0.95, 0.85 }[c.Index.Value];
                     JsonFileStore.Save(AppPaths.Settings, _settings);
                     InterfaceScaleChanged?.Invoke();
                     _bridge.BroadcastTheme();
@@ -159,7 +160,7 @@ public sealed partial class BrowserController
             case "session.set": ChangeSession(id, c.Query!); return true;
             case "session.new": AskName(T("Nouvelle session", "New session"), T("Cookies, connexions et stockage de site séparés. Historique, favoris et notes restent ceux du profil Sol.", "Separate cookies, sign-ins and site storage. History, bookmarks and notes belong to the Sol profile."), T("Nom de la session", "Session name"), T("Créer", "Create"), "", "session.create", id); return true;
             case "session.create":
-                if (_sessions.Create(c.Title!) is { } created && (id.Length > 0 ? id : _tabs.ActiveId) is { } current) ChangeSession(current, created);
+                if (!_tabs.Tabs.Any(t => t.Id == (id.Length > 0 ? id : _tabs.ActiveId) && t.Private) && _sessions.Create(c.Title!) is { } created && (id.Length > 0 ? id : _tabs.ActiveId) is { } current) ChangeSession(current, created);
                 else Notice(T("Session non créée", "Session not created"), T("Utilisez un nom et au maximum 30 sessions.", "Use a name and at most 30 sessions."));
                 return true;
             case "session.rename":

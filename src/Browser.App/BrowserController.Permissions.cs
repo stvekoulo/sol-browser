@@ -7,11 +7,12 @@ namespace Browser.App;
 public sealed partial class BrowserController
 {
     private readonly PermissionStore _defaultPermissions = new(AppPaths.Permissions);
+    private readonly PermissionStore _privatePermissions = new(null);
     private readonly Dictionary<string, PermissionStore> _sessionPermissions = new();
     private PermissionStore PermissionFor(string session) => session.Length == 0 ? _defaultPermissions
         : _sessionPermissions.TryGetValue(session, out var store) ? store
         : _sessionPermissions[session] = new(PermissionStore.FileForProfile(AppPaths.DataDir, "sol-" + session));
-    private PermissionStore _permissions => PermissionFor(_tabs.Tabs.FirstOrDefault(t => t.Id == _tabs.ActiveId)?.SessionId ?? "");
+    private PermissionStore _permissions => PrivateActive ? _privatePermissions : PermissionFor(_tabs.Tabs.FirstOrDefault(t => t.Id == _tabs.ActiveId)?.SessionId ?? "");
 
     private sealed record PermissionRequest(CoreWebView2PermissionRequestedEventArgs Args, Windows.Foundation.Deferral Deferral,
         string Origin, CoreWebView2 Core, string? PageOrigin, PermissionStore Store);
@@ -37,10 +38,10 @@ public sealed partial class BrowserController
         var origin = PermissionStore.OriginOf(args.Uri);
         var tab = _tabs.Tabs.FirstOrDefault(t => _pages.CoreOf(t.Id) == core);
         if (origin is null || tab is null) { args.State = CoreWebView2PermissionState.Deny; return; }
-        var store = PermissionFor(tab.SessionId);
+        var store = tab.Private || AppPaths.Private ? _privatePermissions : PermissionFor(tab.SessionId);
         if (store.Get(origin, args.PermissionKind.ToString()) is { } known)
         {
-            args.SavesInProfile = !AppPaths.Private;
+            args.SavesInProfile = !AppPaths.Private && !tab.Private;
             args.State = known ? CoreWebView2PermissionState.Allow : CoreWebView2PermissionState.Deny;
             return;
         }
@@ -77,7 +78,7 @@ public sealed partial class BrowserController
             if (!CurrentPermission(request)) { request.Args.State = CoreWebView2PermissionState.Deny; return; }
             if (!request.Store.Set(request.Origin, request.Args.PermissionKind.ToString(), allow))
                 throw new IOException("Permission could not be saved");
-            request.Args.SavesInProfile = !AppPaths.Private;
+            request.Args.SavesInProfile = !AppPaths.Private && !PrivateBrowsing.IsProfile(request.Core.Profile.ProfileName);
             request.Args.State = allow ? CoreWebView2PermissionState.Allow : CoreWebView2PermissionState.Deny;
         }
         catch (Exception error) when (error is IOException or InvalidOperationException or System.Runtime.InteropServices.COMException)

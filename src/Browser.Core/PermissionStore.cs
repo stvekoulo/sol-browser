@@ -4,12 +4,12 @@ namespace Browser.Core;
 /// Réponses déjà données aux demandes d'accès des sites (micro, caméra, position, notifications…), par site et
 /// par type d'accès. Sans réponse enregistrée, le navigateur redemande.
 /// </summary>
-public sealed class PermissionStore(string path)
+public sealed class PermissionStore(string? path)
 {
     private Dictionary<string, bool>? _answers;
 
     // Une ancienne copie ne doit jamais rétablir un accès révoqué : fichier abîmé = redemander.
-    private Dictionary<string, bool> Answers => _answers ??= JsonFileStore.Load<Dictionary<string, bool>>(path, recoverBackup: false);
+    private Dictionary<string, bool> Answers => _answers ??= path is null ? new() : JsonFileStore.Load<Dictionary<string, bool>>(path, recoverBackup: false);
 
     /// <summary>true = autorisé, false = refusé, null = jamais demandé.</summary>
     public bool? Get(string origin, string kind) => Answers.TryGetValue(Key(origin, kind), out var allowed) ? allowed : null;
@@ -34,7 +34,7 @@ public sealed class PermissionStore(string path)
 
     private bool Save(Dictionary<string, bool> next)
     {
-        if (!JsonFileStore.Save(path, next)) return false;
+        if (path is not null && !JsonFileStore.Save(path, next)) return false;
         _answers = next;
         return true;
     }

@@ -153,20 +153,24 @@ public sealed partial class BrowserController
     private async Task ImportCsvAsync(bool fromSettings)
     {
         if (fromSettings) HidePopup();
-        if (AppPaths.Private || await PickFileAsync("CSV", ".csv") is not { } file) return;
+        if (AppPaths.Private) return;
         IReadOnlyList<ImportedLogin> logins = [];
+        string? error = null;
         try
         {
+            if (await PickFileAsync("CSV", ".csv") is not { } file) return;
             logins = PasswordImport.ReadCsv(await File.ReadAllTextAsync(file));
             PasswordImport.Queue(AppPaths.PendingPasswords, logins);
+            if (logins.Count == 0) error = T("Aucun mot de passe trouvé. Exportez les mots de passe en CSV avec les colonnes URL, identifiant et mot de passe.", "No passwords found. Export passwords as CSV with URL, username and password columns.");
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { logins = []; }
-        _welcome.Post(JsonSerializer.Serialize(new { welcome = "csv", passwords = logins.Count }));
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException or COMException)
+        { logins = []; error = T("Le fichier n’a pas pu être importé. Vérifiez son accès et réessayez.", "The file could not be imported. Check access to the file and retry."); }
+        _welcome.Post(JsonSerializer.Serialize(new { welcome = "csv", passwords = logins.Count, error }));
         // Depuis les réglages, l'accueil n'est pas à l'écran : le résultat s'affiche dans une fenêtre de message.
         if (fromSettings)
-            Notice(T("Mots de passe", "Passwords"), logins.Count > 0
+            Notice(T("Mots de passe", "Passwords"), error ?? (logins.Count > 0
                 ? T($"{logins.Count} mot{(logins.Count > 1 ? "s" : "")} de passe importé{(logins.Count > 1 ? "s" : "")}. Ils seront disponibles au prochain démarrage de Sol.", $"{logins.Count} password{(logins.Count == 1 ? "" : "s")} imported. They will be available the next time Sol starts.")
-                : T("Aucun mot de passe trouvé dans ce fichier.", "No password found in this file."));
+                : T("Aucun mot de passe trouvé dans ce fichier.", "No password found in this file.")));
     }
 
     // Sauvegarde du profil dans un fichier chiffré par une clé que l'utilisateur choisit et garde : Sol ne la retient pas.

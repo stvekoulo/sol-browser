@@ -200,7 +200,7 @@ public sealed partial class BrowserController
     {
         if (_closingWindow) return;
         if (_restored.Remove(id)) return; // rouvrir une session n'est pas une visite
-        if (AppPaths.Private) return;     // navigation privée : aucun historique
+        if (AppPaths.Private || _tabs.Tabs.Any(t => t.Id == id && t.Private)) return;
         if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { } tab && IsWeb(tab.Url) && tab.Url is not (Settings.DefaultHomePage or QuickNotes.PageUrl))
             _db.RecordVisit(tab.Url, tab.Title, DateTimeOffset.UtcNow);
     }

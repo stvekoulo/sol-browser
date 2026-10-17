@@ -9,6 +9,7 @@ namespace Browser.App;
 // Vue d'interface : synchronise la barre, la sidebar et adapte la couleur de coque à la page active.
 public sealed partial class UiBridge(WebView2 view, string page = "index.html", PageHost? pages = null)
 {
+    private bool _activePrivate;
     private const string Origin = "https://ui.navigateur/";
     // Lit les couleurs de la page active : son fond, et sa couleur d'accent (celle qui fait son identité).
     // L'accent vient, dans l'ordre : de la balise theme-color du site, puis de la couleur vive la plus présente
@@ -132,7 +133,7 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
         s_lastThemeMsg = JsonSerializer.Serialize(new
         {
             @event = "theme", bg, dark, accent, mode = on?.Theme ?? "page", systemDark = IsSystemDark(), lang = Language.Current,
-            privateMode = AppPaths.Private,
+            privateMode = AppPaths.Private || _activePrivate,
             font = on?.Font ?? "default",
             uiScale = on?.UiFactor ?? 0.92,
             tint = new { topbar = on?.TintTopbar ?? true, sidebar = on?.TintSidebar ?? true, menus = on?.TintMenus ?? true, background = on?.TintBackground ?? true },
@@ -214,6 +215,7 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
             try
             {
                 using var doc = JsonDocument.Parse(json);
+                _activePrivate = doc.RootElement.TryGetProperty("privateMode", out var privacy) && privacy.GetBoolean();
                 if (doc.RootElement.TryGetProperty("activeId", out var prop) && prop.GetString() is { } id)
                 {
                     var changed = id != _activeId;

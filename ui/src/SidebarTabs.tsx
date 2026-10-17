@@ -5,6 +5,7 @@ import { t } from './i18n';
 import { focusTab, middleClose, sidebarMenu } from './sidebarActions';
 import { startSlotDrag } from './useSidebarDrag';
 import {SidebarSort,type SidebarBlock} from './SidebarSort';
+import './private-tabs.css';
 
 export function SidebarTabs({ state, icons }: { state: State; icons: Record<string, string | null | undefined> }) {
   const { tabs, split, activeId } = state;
@@ -66,7 +67,7 @@ export function SidebarTabs({ state, icons }: { state: State; icons: Record<stri
 
 function TabRow({ tab, index, icon, active, paired = false }: { tab: Tab; index: number; icon: string | null | undefined; active: boolean; paired?: boolean }) {
   const label = tab.title && tab.title !== 'about:blank' ? tab.title : t('Nouvel onglet', 'New tab');
-  return <div role="tab" tabIndex={0} aria-selected={active} className={`sidebar-tab${active ? ' active' : ''}${tab.asleep ? ' asleep' : ''}`}
+  return <div role="tab" tabIndex={0} aria-selected={active} data-private={!!tab.privateMode} className={`sidebar-tab${active ? ' active' : ''}${tab.asleep ? ' asleep' : ''}`}
     title={`${label}\n${tab.url}${tab.asleep ? t('\nEn veille · Cliquer pour reprendre', '\nSleeping · Click to resume') : ''}`}
     {...(paired ? {} : { 'data-kind': 'tab', 'data-id': tab.id, 'data-first': index, 'data-last': index })}
     onContextMenu={e => sidebarMenu('tab.menu', tab.id, e)} onClick={() => send({ type: 'tab.activate', id: tab.id })}
@@ -75,10 +76,11 @@ function TabRow({ tab, index, icon, active, paired = false }: { tab: Tab; index:
     onPointerDown={e => startSlotDrag(e.currentTarget.closest<HTMLElement>('[data-kind="tab"]'), e)}>
     {tab.loading ? <span className="spinner" aria-hidden /> : icon ? <img className="favicon" src={icon} alt="" draggable={false} /> : <span className="favicon letter" aria-hidden>{label[0]?.toUpperCase()}</span>}
     <span className="sidebar-tab-title">{label}</span>
+    {tab.privateMode && <span className="private-tab-mark" title={t('Navigation privée', 'Private browsing')} aria-label={t('Navigation privée', 'Private browsing')}><Icon name="private" size={14}/></span>}
     {tab.sessionId && <span className="sidebar-session-badge" title={t(`Session : ${tab.sessionName}`, `Session: ${tab.sessionName}`)}>{tab.sessionName}</span>}
     <button className="sidebar-item-action tab-menu" aria-label={t(`Options de ${label}`, `Options for ${label}`)} title={t('Options de l’onglet', 'Tab options')}
       onPointerDown={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} onClick={e => sidebarMenu('tab.menu', tab.id, e)}><Icon d="M3 8h.01M8 8h.01M13 8h.01" size={15} /></button>
-    <button className="sidebar-tab-close" title={tab.groupId ? t('Mettre en veille · Cliquer encore pour fermer', 'Put to sleep · Click again to close') : t('Fermer l’onglet', 'Close tab')} aria-label={t(`Fermer ${label}`, `Close ${label}`)}
+    <button className="sidebar-tab-close" title={tab.groupId && !tab.privateMode ? t('Mettre en veille · Cliquer encore pour fermer', 'Put to sleep · Click again to close') : t('Fermer l’onglet', 'Close tab')} aria-label={t(`Fermer ${label}`, `Close ${label}`)}
       onPointerDown={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); send({ type: 'tab.close', id: tab.id }); }}><Icon d="M4.5 4.5l7 7M11.5 4.5l-7 7" size={12} /></button>
   </div>;
 }

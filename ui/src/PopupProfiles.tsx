@@ -54,11 +54,11 @@ export function ProfileList({ rootRef, items }: { rootRef: RefObject<HTMLDivElem
         </span>
         <span className="row-title">{t('Nouveau profil', 'New profile')}</span>
       </Button>
-      <Button variant="ghost" size="sm" pressScale={0.98} whileHover={undefined} className="row" title={t('Ni historique ni session ; cookies, cache et connexions sont effacés à la fermeture de la fenêtre. Sans les connexions des autres profils.', 'No history or session; cookies, cache and sign-ins are erased when the window closes. Without the other profiles’ sign-ins.')} onClick={() => send({ type: 'window.private' })}>
+      <Button variant="ghost" size="sm" pressScale={0.98} whileHover={undefined} className="row" title={t('Ni historique ni session ; cookies, cache et connexions sont effacés à la fermeture du dernier onglet privé. Sans les connexions des autres profils.', 'No history or session; cookies, cache and sign-ins are erased when the last private tab closes. Without the other profiles’ sign-ins.')} onClick={() => send({ type: 'window.private' })}>
         <span className="row-badge" aria-hidden>
           <Icon name="private" size={16} />
         </span>
-        <span className="row-title">{t('Nouvelle fenêtre privée', 'New private window')}</span>
+        <span className="row-title">{t('Nouvel onglet privé', 'New private tab')}</span>
         <span className="row-pill">{t('Ctrl+Maj+N', 'Ctrl+Shift+N')}</span>
       </Button>
     </div>
@@ -87,6 +87,6 @@ export function SessionPicker({rootRef,content}:{rootRef:RefObject<HTMLDivElemen
       </div>)}
     </SharedLayoutBg>
     <Button variant="ghost" size="sm" pressScale={0.98} whileHover={undefined} className="row session-create" disabled={busy||content.items.length>=30} onClick={()=>send({type:'session.new',id:content.id})}><span className="row-badge" aria-hidden><Icon name="plus" size={16}/></span><span className="row-title">{t('Nouvelle session…','New session…')}</span></Button>
-    <p className="row-hint sessions-footer">{t('Historique, favoris et notes restent partagés dans ce profil Sol. Les sessions d’une fenêtre privée sont effacées à sa fermeture.','History, bookmarks and notes stay shared in this Sol profile. Private-window sessions are erased when the window closes.')}</p>
+    <p className="row-hint sessions-footer">{t('Historique, favoris et notes restent partagés dans ce profil Sol. Les sessions d’une fenêtre privée sont effacées à sa fermeture.','History, bookmarks and notes stay shared in this Sol profile. Private-window sessions are erased when the last private tab closes.')}</p>
   </div>;
 }

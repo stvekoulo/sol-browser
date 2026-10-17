@@ -51,7 +51,7 @@ public static class BrowserImport
         return found;
     }
 
-    private static bool HasData(string dir) => File.Exists(Path.Combine(dir, "Bookmarks")) || File.Exists(Path.Combine(dir, "History"));
+    private static bool HasData(string dir) => new[] { "Bookmarks", "History", "Login Data", "Login Data For Account" }.Any(name => File.Exists(Path.Combine(dir, name)));
 
     // Noms donnés par l'utilisateur à ses profils, rangés dans « Local State ».
     private static Dictionary<string, string> ProfileNames(string userData)

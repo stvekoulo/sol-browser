@@ -1,0 +1,4 @@
+.sidebar-tab[data-private="true"],.pinned-pill[data-private="true"]{color:#7c3aed;background:color-mix(in srgb,#8b5cf6 10%,transparent);box-shadow:inset 3px 0 #8b5cf6}
+.sidebar-tab[data-private="true"],.pinned-pill[data-private="true"]{--bg-active-tab:color-mix(in srgb,#8b5cf6 20%,var(--bg-sidebar-card));--border-active-tab:#8b5cf6}
+[data-theme="dark"] .sidebar-tab[data-private="true"],[data-theme="dark"] .pinned-pill[data-private="true"]{color:#c4b5fd}
+.private-tab-mark{display:flex;flex-shrink:0;color:inherit}

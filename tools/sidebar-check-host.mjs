@@ -1,8 +1,9 @@
 import { createServer } from 'node:http';
+import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdir, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { relative, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
 export async function sidebarHost(executable,{serve=null,downloads=false,captures=false,privateMode=false,media=false}={}) {
@@ -67,6 +68,12 @@ export async function sidebarHost(executable,{serve=null,downloads=false,capture
     if(app&&app.exitCode===null){const exited=once(app,'exit');app.kill();await exited;}
     connections.splice(0).forEach(ws=>ws.close());
     await new Promise(r=>server.close(r));
+    assert.match(relative(resolve('bin'),base),/^sidebar-check-\d+$/);
+    await rm(resolve(base,'profiles'),{recursive:true,force:true,maxRetries:30,retryDelay:200});
   };
-  return {base,profile,origin,launch,close,connect,wait,targets,dispose};
+  const crash=async()=>{
+    if(app&&app.exitCode===null){const exited=once(app,'exit');app.kill();await exited;}
+    connections.splice(0).forEach(ws=>ws.close());
+  };
+  return {base,profile,origin,launch,close,connect,wait,targets,dispose,crash};
 }

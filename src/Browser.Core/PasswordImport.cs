@@ -27,17 +27,19 @@ public static class PasswordImport
     {
         var list = new List<ImportedLogin>();
         var unreadable = 0;
+        Exception? failure = null;
         var key = Key(userData);
         Directory.CreateDirectory(tempDir);
         foreach (var name in Databases)
         {
             var source = Path.Combine(profileDir, name);
             if (!File.Exists(source)) continue;
-            // Copie avant lecture : le navigateur d'origine garde sa base verrouillée tant qu'il est ouvert.
+            // Une sauvegarde SQLite inclut aussi les mots de passe encore dans le journal WAL du navigateur ouvert.
             var copy = Path.Combine(tempDir, $"import-{Guid.NewGuid():N}.db");
             try
             {
-                File.Copy(source, copy, overwrite: true);
+                using (var original = Open(source, SqliteOpenMode.ReadOnly))
+                using (var snapshot = Open(copy, SqliteOpenMode.ReadWriteCreate)) original.BackupDatabase(snapshot);
                 using var db = Open(copy, SqliteOpenMode.ReadOnly);
                 using var cmd = db.CreateCommand();
                 cmd.CommandText = "SELECT origin_url, action_url, username_element, username_value, password_element, password_value, signon_realm FROM logins WHERE blacklisted_by_user = 0";
@@ -46,17 +48,18 @@ public static class PasswordImport
                 {
                     var secret = r.IsDBNull(5) ? [] : (byte[])r[5];
                     if (secret.Length == 0) continue;
-                    if (key is null || Decrypt(key, secret) is not { Length: > 0 } password) { unreadable++; continue; }
+                    if (Decrypt(key, secret) is not { Length: > 0 } password) { unreadable++; continue; }
                     list.Add(new ImportedLogin(Text(r, 0), Text(r, 1), Text(r, 2), Text(r, 3), Text(r, 4), password, Text(r, 6)));
                 }
             }
-            catch (Exception e) when (e is IOException or SqliteException or UnauthorizedAccessException) { /* base illisible : rien à reprendre */ }
+            catch (Exception e) when (e is IOException or SqliteException or UnauthorizedAccessException) { failure = e; }
             finally
             {
                 SqliteConnection.ClearAllPools();
                 try { File.Delete(copy); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
             }
         }
+        if (failure is not null) throw new IOException("Cannot read the saved passwords. Close the source browser and retry, or import its CSV export.", failure);
         return (list, unreadable);
     }
 
@@ -68,10 +71,10 @@ public static class PasswordImport
     {
         var rows = Rows(text);
         if (rows.Count < 2) return [];
-        var head = rows[0].Select(h => h.Trim().ToLowerInvariant()).ToList();
-        int url = head.FindIndex(h => h is "url" or "login_uri" or "origin" or "website"),
-            user = head.FindIndex(h => h is "username" or "login_username" or "login"),
-            pass = head.FindIndex(h => h is "password" or "login_password");
+        var head = rows[0].Select(h => h.Trim().TrimStart('\uFEFF').ToLowerInvariant()).ToList();
+        int url = head.FindIndex(h => h is "url" or "login_uri" or "origin" or "website" or "adresse"),
+            user = head.FindIndex(h => h is "username" or "login_username" or "login" or "identifiant" or "nom d'utilisateur"),
+            pass = head.FindIndex(h => h is "password" or "login_password" or "mot de passe");
         if (url < 0 || user < 0 || pass < 0) return [];
         var list = new List<ImportedLogin>();
         foreach (var row in rows.Skip(1))
@@ -84,13 +87,14 @@ public static class PasswordImport
         return list;
     }
 
-    // Lignes d'un CSV : champs séparés par des virgules, guillemets doublés dans un champ entre guillemets.
+    // Le premier séparateur de l'en-tête détermine le format ; les séparateurs entre guillemets restent du texte.
     private static List<List<string>> Rows(string text)
     {
         var rows = new List<List<string>>();
         var row = new List<string>();
         var field = new StringBuilder();
         var quoted = false;
+        char? separator = null;
         for (var i = 0; i < text.Length; i++)
         {
             var c = text[i];
@@ -101,7 +105,7 @@ public static class PasswordImport
                 else quoted = false;
             }
             else if (c == '"') quoted = true;
-            else if (c == ',') { row.Add(field.ToString()); field.Clear(); }
+            else if (c == separator || separator is null && (c is ',' or ';' or '\t')) { separator ??= c; row.Add(field.ToString()); field.Clear(); }
             else if (c is '\n' or '\r')
             {
                 if (c == '\r' && i + 1 < text.Length && text[i + 1] == '\n') i++;
@@ -111,6 +115,7 @@ public static class PasswordImport
             }
             else field.Append(c);
         }
+        if (quoted) return [];
         row.Add(field.ToString());
         if (row.Count > 1 || row[0].Length > 0) rows.Add(row);
         return rows;
@@ -195,7 +200,7 @@ public static class PasswordImport
 
     private static SqliteConnection Open(string file, SqliteOpenMode mode)
     {
-        var db = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = file, Mode = mode, Pooling = false }.ToString());
+        var db = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = file, Mode = mode, Pooling = false, DefaultTimeout = 3 }.ToString());
         db.Open();
         return db;
     }
@@ -218,9 +223,15 @@ public static class PasswordImport
             or KeyNotFoundException or InvalidOperationException or NullReferenceException or UnauthorizedAccessException) { return null; }
     }
 
-    private static string? Decrypt(byte[] key, byte[] secret)
+    private static string? Decrypt(byte[]? key, byte[] secret)
     {
-        if (secret.Length < V10.Length + Nonce + Tag || !secret.AsSpan(0, V10.Length).SequenceEqual(V10)) return null;
+        if (!secret.AsSpan().StartsWith(V10))
+        {
+            if (!OperatingSystem.IsWindows() || secret[0] == (byte)'v') return null;
+            try { return Encoding.UTF8.GetString(ProtectedData.Unprotect(secret, null, DataProtectionScope.CurrentUser)); }
+            catch (CryptographicException) { return null; }
+        }
+        if (key is null || secret.Length < V10.Length + Nonce + Tag) return null;
         var cipher = secret.AsSpan(V10.Length + Nonce, secret.Length - V10.Length - Nonce - Tag);
         var plain = new byte[cipher.Length];
         try

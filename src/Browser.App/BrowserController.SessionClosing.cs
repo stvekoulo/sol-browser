@@ -20,6 +20,6 @@ public sealed partial class BrowserController
         _savingGitLabSession = true;
         try { if (!AppPaths.Private) await _pages.SaveGitLabSessionsAsync().WaitAsync(TimeSpan.FromSeconds(3)); }
         catch (Exception error) { DebugLog.Write($"gitlab.session.close.failed {error.GetType().Name}"); }
-        finally { _gitLabSessionSaved = true; _window.Close(); }
+        finally { await _pages.ClosePrivateTabsAsync(); _gitLabSessionSaved = true; _window.Close(); }
     }
 }

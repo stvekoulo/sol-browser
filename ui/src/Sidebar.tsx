@@ -39,10 +39,10 @@ export default function Sidebar() {
   return (
     <div className="sidebar-card" aria-label={t('Panneau latéral des onglets', 'Tabs sidebar')}>
       <div className="sidebar-window-bar" {...windowDrag}><WindowControls maximized={state.maximized}/></div>
-      {activeTab&&<Button variant="ghost" size="sm" pressScale={0.98} whileHover={undefined} className="sidebar-session" data-action="session.menu"
+      {activeTab&&<Button variant="ghost" size="sm" pressScale={0.98} whileHover={undefined} className="sidebar-session" data-action="session.menu" disabled={!!activeTab.privateMode}
         aria-label={t(`Session : ${activeTab.sessionName}`,`Session: ${activeTab.sessionName}`)} aria-haspopup="dialog" title={activeTab.sessionName} data-custom-session={!!activeTab.sessionId}
         onClick={e=>{const box=e.currentTarget.getBoundingClientRect();send({type:'session.menu',id:activeTab.id,x:box.left,y:box.bottom+6})}}>
-        <span className="sidebar-session-symbol"><Icon name="session" size={15}/></span><span className="sidebar-session-name">{activeTab.sessionName}</span><Icon d="M5 6.5l3 3 3-3" size={12}/>
+        <span className="sidebar-session-symbol"><Icon name={activeTab.privateMode?'private':'session'} size={15}/></span><span className="sidebar-session-name">{activeTab.sessionName}</span>{!activeTab.privateMode&&<Icon d="M5 6.5l3 3 3-3" size={12}/>}
       </Button>}
       <div className="sidebar-scroll" data-tab-count={tabs.length}>
         <SidebarPinned state={state} icons={icons} />
@@ -52,7 +52,7 @@ export default function Sidebar() {
 
       <div className="sidebar-quick-actions" role="group" aria-label={t('Actions rapides', 'Quick actions')}>
         {[
-          { type: 'window.private', label: t('Nouvelle fenêtre privée', 'New private window'), path: '' },
+          { type: 'window.private', label: t('Nouvel onglet privé', 'New private tab'), path: '' },
           { type: 'notes.manage', label: t('Notes', 'Notes'), path: 'M4 2.5h8v11H4zM6 5h4M6 8h4M6 11h2' },
           { type: split.visible ? 'split.close' : 'split.open', label: split.visible ? t('Fermer la vue scindée', 'Close split view') : t('Afficher deux pages côte à côte', 'Show two pages side by side'), path: 'M2 3h12v10H2zM8 3v10' },
           ...(split.visible ? [{ type: 'split.menu', label: t('Disposition des pages', 'Page layout'), path: 'M2 3h12v10H2zM6 3v10M4 6v4M10 6v4' }] : []),

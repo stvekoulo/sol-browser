@@ -17,14 +17,14 @@ public sealed class Settings
     public int SolAiLength { get => _solAiLength; set => _solAiLength = value is >= 0 and <= 2 ? value : 0; }
     public bool FullScreen { get; set; } = true;
     private double _uiScale = 1;
-    /// <summary>Taille de l'interface choisie dans les réglages : 100, 90 ou 80 %.</summary>
-    public double UiScale { get => _uiScale; set => _uiScale = value is 1 or 0.9 or 0.8 ? value : 1; }
+    /// <summary>Taille de l'interface choisie dans les réglages : 80 à 100 %, par pas de 5 %.</summary>
+    public double UiScale { get => _uiScale; set => _uiScale = value is 1 or 0.95 or 0.9 or 0.85 or 0.8 ? value : 1; }
     /// <summary>
-    /// Facteur réellement appliqué : 100 % à 0,92, 90 % à 0,89, 80 % à 0,86.
+    /// Facteur réellement appliqué : de 0,86 à 0,92, interpolé entre les paliers de 5 %.
     /// Les tailles sont proches pour garder une interface confortable.
     /// </summary>
     [System.Text.Json.Serialization.JsonIgnore]
-    public double UiFactor => _uiScale switch { 0.9 => 0.89, 0.8 => 0.86, _ => 0.92 };
+    public double UiFactor => Math.Round(0.62 + _uiScale * 0.3, 3);
     private double _pageZoom = 1;
     /// <summary>Zoom commun aux pages du profil, conservé au redémarrage (50 à 200 %).</summary>
     public double PageZoom

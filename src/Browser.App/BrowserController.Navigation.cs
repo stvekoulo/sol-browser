@@ -11,11 +11,11 @@ public sealed partial class BrowserController
     private Tab OpenLink(string source, string url, bool activate = true)
     {
         var tab = _tabs.Tabs.FirstOrDefault(t => t.Id == source);
-        return Open(url, activate: activate, sessionId: tab?.SessionId);
+        return Open(url, activate: activate, sessionId: tab?.SessionId, isPrivate: tab?.Private);
     }
     private void ChangeSession(string tabId, string sessionId)
     {
-        if (_tabs.Tabs.FirstOrDefault(t => t.Id == tabId) is not { } tab || sessionId == _deletingSession
+        if (_tabs.Tabs.FirstOrDefault(t => t.Id == tabId) is not { } tab || tab.Private || sessionId == _deletingSession
             || sessionId.Length > 0 && _sessions.Resolve(sessionId).Length == 0) return;
         if (tab.SessionId == sessionId) { HidePopup(); return; }
         if (_downloads.Any(d => d.TabId == tabId && DownloadPending(d.Id,d.Op)))
@@ -48,13 +48,15 @@ public sealed partial class BrowserController
         else if (_sessionMenuTab is { } current) _popup.Post(SessionsJson(current));
         Refresh();
     }
-    private Tab Open(string url, bool activate = true, bool pinned = false, bool asleep = false, string? sessionId = null)
+    private bool PrivateActive => AppPaths.Private || _tabs.Tabs.Any(t => t.Id == _tabs.ActiveId && t.Private);
+    private Tab Open(string url, bool activate = true, bool pinned = false, bool asleep = false, string? sessionId = null, bool? isPrivate = null)
     {
-        var session = sessionId ?? _tabs.Tabs.FirstOrDefault(t => t.Id == _tabs.ActiveId)?.SessionId ?? "";
+        var privateTab = AppPaths.Private || (isPrivate ?? PrivateActive);
+        var session = privateTab ? "" : sessionId ?? _tabs.Tabs.FirstOrDefault(t => t.Id == _tabs.ActiveId)?.SessionId ?? "";
         // Une identité manquante ne doit jamais charger un site avec les connexions de la session principale.
         if (session.Length > 0 && (_sessions.Resolve(session).Length == 0 || session == _deletingSession))
         { url = Settings.DefaultHomePage; session = ""; }
-        var tab = _tabs.Open(url, activate, pinned, _sessions.Resolve(session));
+        var tab = _tabs.Open(url, activate, pinned, _sessions.Resolve(session), isPrivate: privateTab);
         if (asleep) _pages.AddAsleep(tab);
         else _pages.Add(tab);
         return tab;
@@ -69,12 +71,12 @@ public sealed partial class BrowserController
             // La fermeture revient à une page déjà chargée ; elle ne réveille jamais un onglet déchargé.
             var next = _recentTabs.LastOrDefault(other => other != id && !_pages.IsAsleep(other) && _tabs.Tabs.Any(t => t.Id == other));
             if (next is not null) Activate(next);
-            else Open(_settings.HomePage);
+            else Open(_settings.HomePage, isPrivate: false);
         }
         // Fermer un onglet épinglé, ou rangé dans un groupe, ferme sa page, pas son emplacement : il reste à sa place,
         // déchargé, et se recharge quand on y revient. Pour le retirer pour de bon : le fermer une seconde fois quand il
         // est dans un groupe (il est alors déjà déchargé), ou « Détacher l'onglet » puis fermer quand il est épinglé.
-        if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { } kept && !_shortcutTabs.ContainsValue(id)
+        if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { Private: false } kept && !_shortcutTabs.ContainsValue(id)
             && (kept.Pinned || (kept.GroupId is not null && !_pages.IsAsleep(id))))
         {
             if (_tabs.ActiveId == id)
@@ -94,6 +96,7 @@ public sealed partial class BrowserController
         _recentTabs.Remove(id);
         _restored.Remove(id);
         _pages.Remove(id);
+        if (!_tabs.Tabs.Any(t => t.Private)) _privatePermissions.Clear();
         _favicons.Remove(id);
         _translationOriginals.Remove(id);
         _split.OnTabClosed(id);
@@ -146,8 +149,7 @@ public sealed partial class BrowserController
     {
         var q = query.Trim();
         var seq = ++_suggestSeq;
-        _suggestTab = tabId;
-        IReadOnlyList<Visit> history = q.Length == 0 ? [] : _db.Suggest(q, 3);
+        IReadOnlyList<Visit> history = q.Length == 0 || _tabs.Tabs.Any(t => t.Id == tabId && t.Private) ? [] : _db.Suggest(q, 3);
 
         // Une requête vide (champ vidé ou quitté) ne referme que les suggestions, pas un autre panneau ouvert entre-temps.
         // Pas tout de suite : cliquer une suggestion fait d'abord perdre le curseur à la barre d'adresse, et une
@@ -173,12 +175,15 @@ public sealed partial class BrowserController
         void ShowSuggestions(IReadOnlyList<Suggestion> items)
         {
             _suggestions = items;
-            _suggesting = true;
-            _popup.Show(x, y, width, JsonSerializer.Serialize(new
+            var json = JsonSerializer.Serialize(new
             {
                 popup = "suggestions",
                 items = items.Select(v => new { url = v.Url, title = v.Title, kind = v.Kind }),
-            }), focus: false); // le curseur reste dans la barre d'adresse
+            });
+            if (_suggesting && _popup.IsOpen && _suggestTab == tabId) _popup.Post(json);
+            else _popup.Show(x, y, width, json, focus: false); // le curseur reste dans la barre d'adresse
+            _suggestTab = tabId;
+            _suggesting = true;
             _bridge.Post(JsonSerializer.Serialize(new { @event = "suggestions", id = tabId, count = items.Count,items=items.Select(v=>new{url=v.Url,value=v.Kind=="search"?v.Title:v.Url}) }));
         }
 

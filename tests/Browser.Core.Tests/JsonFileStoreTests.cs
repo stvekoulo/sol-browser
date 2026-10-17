@@ -16,7 +16,10 @@ public class JsonFileStoreTests : IDisposable
     [Theory]
     [InlineData(1, 1, 0.92)]
     [InlineData(0.9, 0.9, 0.89)]
+    [InlineData(0.95, 0.95, 0.905)]
+    [InlineData(0.85, 0.85, 0.875)]
     [InlineData(0.8, 0.8, 0.86)]
+    [InlineData(0.82, 1, 0.92)]
     [InlineData(0.7, 1, 0.92)]
     [InlineData(double.NaN, 1, 0.92)]
     public void Interface_scale_only_accepts_supported_sizes_and_does_not_change_page_zoom(double scale, double expected, double factor)

@@ -9,6 +9,7 @@ public sealed partial class PageHost
 {
     public void Remove(string id)
     {
+        _privateTabs.Remove(id);
         _spellingCache.Remove(id);
         _spellingSeen.Remove(id);
         _asleep.Remove(id);
@@ -28,11 +29,14 @@ public sealed partial class PageHost
     private void CloseView(WebView2 view)
     {
         var core = view.CoreWebView2;
+        if (core is not null && PrivateBrowsing.IsProfile(core.Profile.ProfileName) && _privateTabs.Count == 0)
+        { _closingProfiles[core.Profile.ProfileName] = DeletePrivateProfileAsync(view, core.Profile); return; }
         if (core is null || _views.Values.Any(v => v.CoreWebView2?.Profile.ProfileName == core.Profile.ProfileName))
         { view.Close(); return; }
         var name = core.Profile.ProfileName;
         // Fermer pendant l'installation d'une extension peut laisser son attente liée à une vue détruite.
         _profileReady.Remove(name);
+        if (PrivateBrowsing.IsProfile(name)) { view.Close(); return; }
         _closingProfiles[name] = PreserveSessionAsync(view, core, name);
     }
     private async Task PreserveSessionAsync(WebView2 view, CoreWebView2 core, string name)

@@ -32,7 +32,7 @@ export function applyTheme(ev: HostEvent) {
   const root = document.documentElement.style;
   if (location.hostname === 'ui.navigateur' || (location.hostname === 'start.sol' && location.hash === '#notes')) {
     // Même facteur que les dimensions natives, fourni par l'hôte.
-    const scale = ev.uiScale === 0.86 || ev.uiScale === 0.89 ? ev.uiScale : 0.92;
+    const scale = ev.uiScale !== undefined && [0.86,0.875,0.89,0.905,0.92].includes(ev.uiScale) ? ev.uiScale : 0.92;
     const changed = interfaceScale() !== scale;
     root.setProperty('--ui-scale', String(scale));
     document.body.style.zoom = String(scale);

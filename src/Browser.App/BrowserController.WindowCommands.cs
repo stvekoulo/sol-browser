@@ -16,8 +16,9 @@ public sealed partial class BrowserController
             case "profile.rename":
                 if (Profiles.Rename(AppPaths.BaseDir, id, c.Title!) && id == AppPaths.Profile) _window.Title = $"Sol — {ProfileName(id)}";
                 break;
-            // Fenêtre privée : un profil jetable dans une nouvelle fenêtre, à côté de celle-ci, où le moteur n'écrit rien.
-            case "profile.isolated" or "window.private":
+            case "window.private":
+                HidePopup(); Open(Settings.DefaultHomePage, isPrivate: true); return true;
+            case "profile.isolated":
                 HidePopup();
                 OpenProfile(Profiles.CreateTemporary(AppPaths.BaseDir, T("Navigation privée", "Private browsing")), replace: false, isPrivate: true);
                 return true;
@@ -100,7 +101,7 @@ public sealed partial class BrowserController
                 return true;
             case "bookmark.add": if (IsWeb(c.Url!)) _db.AddBookmark(c.Url!, c.Title!); break;
             case "bookmark.remove": _db.RemoveBookmark(c.Url!); break;
-            case "zoom.in" or "zoom.out" or "zoom.reset": Zoom(c.Id ?? _tabs.ActiveId, c.Type); return true;
+            case "zoom.in" or "zoom.out" or "zoom.reset" or "zoom.set": Zoom(c.Id ?? _tabs.ActiveId, c.Type, c.Index); return true;
             case "window.minimize":
                 if (Presenter is { } overlapped) overlapped.Minimize();
                 else ShowWindow(WinRT.Interop.WindowNative.GetWindowHandle(_window), 6); // plein écran : réduction demandée à Windows

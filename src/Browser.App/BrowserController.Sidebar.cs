@@ -76,13 +76,13 @@ public sealed partial class BrowserController
         var block = ids.Length > 1;
         ShowMenu(x, y,
         [
-            (T("Session de cet onglet…", "Tab session…"), () => _afterMenu = () => OpenSessionMenu(id, x, y)),
+            .. tab.Private ? [] : new (string, Action?)[] { (T("Session de cet onglet…", "Tab session…"), () => _afterMenu = () => OpenSessionMenu(id, x, y)) },
             (tab.Pinned ? (block ? T("Détacher les deux pages", "Unpin both pages") : T("Détacher l'onglet", "Unpin tab"))
                 : (block ? T("Épingler les deux pages", "Pin both pages") : T("Épingler l'onglet", "Pin tab")), () => PinTabs(id, !tab.Pinned)),
             .. GroupEntries(tab),
             .. ShortcutEntry(tab),
             ("", null),
-            (T("Dupliquer l'onglet", "Duplicate tab"), () => { var copy = Open(tab.Url, sessionId: tab.SessionId); if (tab.GroupId is { } g) _tabs.AddToGroup(copy.Id, g); }),
+            (T("Dupliquer l'onglet", "Duplicate tab"), () => { var copy = Open(tab.Url, sessionId: tab.SessionId, isPrivate: tab.Private); if (tab.GroupId is { } g) _tabs.AddToGroup(copy.Id, g); }),
             (T("Fermer l'onglet", "Close tab"), () => Close(id)),
             (T("Fermer les autres onglets", "Close other tabs"), () =>
             {

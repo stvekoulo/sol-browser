@@ -7,6 +7,7 @@ internal static class NativePermissions
 {
     public static async Task SyncAsync(CoreWebView2Profile profile)
     {
+        if (PrivateBrowsing.IsProfile(profile.ProfileName)) return;
         var store = new PermissionStore(PermissionStore.FileForProfile(AppPaths.DataDir, profile.ProfileName));
         // Sol's saved consent is authoritative, including when its file is missing or corrupt.
         var currentPermissions = await profile.GetNonDefaultPermissionSettingsAsync();

@@ -16,7 +16,7 @@ public sealed partial class PageHost
 
     private void RestoreGitLabSession(CoreWebView2Profile profile)
     {
-        if (AppPaths.Private || !_gitLabRestored.Add(profile.ProfileName)) return;
+        if (AppPaths.Private || PrivateBrowsing.IsProfile(profile.ProfileName) || !_gitLabRestored.Add(profile.ProfileName)) return;
         var path = GitLabFile(profile.ProfileName);
         if (!File.Exists(path)) return;
         try
@@ -61,7 +61,7 @@ public sealed partial class PageHost
         if (AppPaths.Private) return;
         await Task.WhenAll(_closingProfiles.Values.ToArray());
         foreach (var (name, cookies) in _sessionCookies.ToArray()) SaveGitLabSession(name, cookies);
-        foreach (var profile in Profiles.ToArray())
+        foreach (var profile in Profiles.Where(p => !PrivateBrowsing.IsProfile(p.ProfileName)).ToArray())
         {
             try { SaveGitLabSession(profile.ProfileName, await profile.CookieManager.GetCookiesAsync("")); }
             catch (Exception error) when (error is InvalidOperationException or COMException)

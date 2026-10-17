@@ -9,6 +9,8 @@ import {Icon} from './Icons';
 import type {Content,Item,Profile,Setting,Wallpaper} from './PopupTypes';
 import {fontLabels} from './bridge';
 import {HomeField,SiteData,WallpaperSettings,TintSettings} from './SettingsFields';
+import {RangeSlider} from '@/components/motion/range-slider';
+import './settings-scale.css';
 export default function SettingsPopup({content,rootRef,settingsSection,setSettingsSection,opening}:{content:Extract<Content,{popup:'settings'}>;rootRef:RefObject<HTMLDivElement|null>;settingsSection:string;setSettingsSection:(section:string)=>void;opening:number}){
 const root=rootRef;
     return (
@@ -27,24 +29,20 @@ const root=rootRef;
     <div className="shortcuts-list">{content.shortcuts.map(s=><div key={s.action} className="shortcut-setting"><span>{s.title}</span><kbd>{s.keys}</kbd></div>)}</div>
   </details>
 </div>
-<div className="theme-row" hidden={settingsSection !== 'appearance'}>
-<span className="row-title">{t('Taille de l’interface', 'Interface size')}</span>
+<div className="theme-row settings-scale" hidden={settingsSection !== 'appearance'}>
+<div className="settings-scale-heading"><span className="row-title">{t('Taille de l’interface', 'Interface size')}</span>
+<Button variant="ghost" size="sm" pressScale={0.97} className="pill-action" aria-label={t('Réinitialiser la taille de l’interface à 100 %','Reset interface size to 100%')} onClick={()=>send({type:'settings.set',id:'uiScale',index:0})}>{Math.round(content.uiScale*100)} %</Button></div>
 <span className="row-sub">{t('Barres, boutons et menus. Le zoom des sites reste indépendant.', 'Bars, buttons and menus. Website zoom stays independent.')}</span>
-<div className="popup-segment" role="radiogroup" aria-label={t('Taille de l’interface','Interface size')}>
-{[1,.9,.8].map((scale,index)=><Button variant="ghost" size="sm" pressScale={0.97} key={scale} role="radio" aria-checked={content.uiScale===scale} className={'popup-seg-btn'+(content.uiScale===scale?' active':'')} onClick={()=>send({type:'settings.set',id:'uiScale',index})}>{Math.round(scale*100)} %</Button>)}
-</div></div>
-        <div className="setting-row static" hidden={settingsSection !== 'general'}>
+<RangeSlider aria-label={t('Taille de l’interface','Interface size')} min={80} max={100} step={5} value={Math.round(content.uiScale*100)} formatValueText={value=>`${value} %`} onValueChange={value=>send({type:'settings.set',id:'uiScale',index:[1,.9,.8,.95,.85].indexOf(value/100)})}/>
+</div>
+        <div className="theme-row settings-scale" hidden={settingsSection !== 'general'}>
+          <div className="settings-scale-heading"><span className="row-title">{t('Zoom des pages', 'Page zoom')}</span>
+            <Button variant="ghost" size="sm" pressScale={0.97} className="pill-action" aria-label={t('Revenir à 100 %', 'Reset to 100%')} title={t('Revenir à 100 %', 'Reset to 100%')} onClick={() => send({ type: 'zoom.reset' })}>{content.zoom} %</Button>
+          </div>
           <span className="setting-text">
-            <span className="row-title">{t('Zoom des pages', 'Page zoom')}</span>
             <span className="row-sub">{t('Conservé pour toutes les pages de ce profil. Ctrl +, Ctrl − ou Ctrl avec la molette.', 'Saved for all pages in this profile. Ctrl +, Ctrl − or Ctrl with the mouse wheel.')}</span>
           </span>
-          <span className="stepper" role="group" aria-label={t('Zoom des pages', 'Page zoom')}>
-            <Button variant="ghost" size="sm" pressScale={0.97} aria-label={t('Réduire', 'Zoom out')} onClick={() => send({ type: 'zoom.out' })}>−</Button>
-            <Button variant="ghost" size="sm" pressScale={0.97} className="stepper-value" aria-label={t('Revenir à 100 %', 'Reset to 100%')} title={t('Revenir à 100 %', 'Reset to 100%')} onClick={() => send({ type: 'zoom.reset' })}>
-              {content.zoom} %
-            </Button>
-            <Button variant="ghost" size="sm" pressScale={0.97} aria-label={t('Agrandir', 'Zoom in')} onClick={() => send({ type: 'zoom.in' })}>+</Button>
-          </span>
+          <RangeSlider aria-label={t('Zoom des pages','Page zoom')} min={50} max={200} step={5} value={content.zoom} formatValueText={value=>`${value} %`} onValueChange={value=>send({type:'zoom.set',index:value})}/>
         </div>
         <div className="theme-row" hidden={settingsSection !== 'appearance'}>
           <span className="row-title">{t('Thème', 'Theme')}</span>

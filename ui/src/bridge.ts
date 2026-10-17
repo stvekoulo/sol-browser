@@ -10,6 +10,7 @@ export type Tab = {
   pinned: boolean;
   groupId: string | null;
   sessionId: string;
+  privateMode?: boolean;
   sessionName: string;
   asleep?: boolean; // déchargé (fermé dans un groupe, épinglé fermé, ou pas encore rouvert)
   device: string | null; // simulateur : nom de l'appareil affiché
@@ -31,7 +32,7 @@ export type State = {
   tabs: Tab[];
   groups: TabGroup[];
   activeId: string | null;
-  privateMode: boolean; // fenêtre de navigation privée
+  privateMode: boolean; // onglet actif en navigation privée
   shield: boolean; // blocage des publicités et des traqueurs en service
   extensions?: { id: string; name: string; icon: string | null }[];
   // Raccourcis de la carte latérale ; tabId : l'onglet ouvert dans le raccourci, qui n'a pas de ligne dans la liste.

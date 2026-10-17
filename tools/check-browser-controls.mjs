@@ -5,7 +5,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {sidebarHost} from './sidebar-check-host.mjs';
 const payload=Buffer.alloc(4*1024*1024);for(let i=0;i<payload.length;i++)payload[i]=i%251;
 function serve(req,res){
-  if(req.url.startsWith('/suggest?')){res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(['climat',['climat du bénin demain','climat du bénin cette semaine']]));return true;}
+  if(req.url.startsWith('/suggest?')){const q=new URL(req.url,'http://localhost').searchParams.get('q');setTimeout(()=>{res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify([q,[`${q} du bénin demain`,`${q} du bénin cette semaine`]]));},250);return true;}
   if(!req.url.startsWith('/file/'))return false;
   const start=Number(req.headers.range?.match(/bytes=(\d+)/)?.[1]??0);
   const name=req.url.split('/').at(-1);res.writeHead(start?206:200,{'Content-Type':'text/plain','Content-Disposition':`attachment; filename="${name}"`,...(name.includes('unknown')&&!start?{}:{'Content-Length':payload.length-start}),'Accept-Ranges':'bytes',ETag:'"sol-controls"',...(start?{'Content-Range':`bytes ${start}-${payload.length-1}/${payload.length}`}:{})});
@@ -58,9 +58,32 @@ try{
   await sidebar.evaluate(`document.querySelector('[data-action="notes.manage"]').click()`);await host.wait(()=>state().then(s=>s.activeId===noteId),'notes left click');
   await cmd(sidebar,{type:'tab.activate',id:source});
   await host.wait(()=>top.evaluate(`document.querySelector('.address-pill.focused')?.dataset.tabId===${JSON.stringify(source)}`),'source address ready');
+  await popup.evaluate(`window.__suggestionOpens=0;chrome.webview.addEventListener('message',e=>{if(e.data.fresh)window.__suggestionOpens++})`);
   const selector='.address-pill.focused input';await input(top,selector,'climat');
   await host.wait(()=>top.evaluate(`document.querySelector(${JSON.stringify(selector)}).getAttribute('aria-expanded')==='true'`),'suggestions available');
   await host.wait(()=>popup.evaluate(`document.body.textContent.includes('climat du bénin demain')`),'online fixture suggestions');
+  assert.equal(await popup.evaluate('window.__suggestionOpens'),1,'local and online results share one opening');
+  await delay(250);
+  await popup.evaluate(`window.__suggestionPanel=document.querySelector('[data-slot="morphing-modal"]');window.__suggestionStable=true;window.__watchSuggestions=true;const sample=()=>{if(!window.__watchSuggestions)return;const panel=window.__suggestionPanel;window.__suggestionStable&&=panel.isConnected&&panel===document.querySelector('[data-slot="morphing-modal"]')&&Number(getComputedStyle(panel).opacity)>.99;requestAnimationFrame(sample)};sample()`);
+  for(const text of ['s',' voyages']){
+    await top.call('Input.insertText',{text});
+    const typed=await top.evaluate(`document.querySelector(${JSON.stringify(selector)}).value`);
+    await host.wait(()=>popup.evaluate(`document.querySelector('[role="option"]')?.textContent.includes(${JSON.stringify(typed)})`),'local results update while typing');
+    await host.wait(()=>popup.evaluate(`document.body.textContent.includes(${JSON.stringify(typed+' du bénin demain')})`),'online results update while typing');
+  }
+  assert.equal(await popup.evaluate('window.__suggestionOpens'),1,'typing never reopens suggestions');
+  assert.equal(await popup.evaluate('window.__suggestionStable'),true,'the same suggestion panel stays opaque throughout typing');
+  await popup.evaluate('window.__watchSuggestions=false');
+  await popup.evaluate(`chrome.webview.dispatchEvent(new MessageEvent('message',{data:{popup:'suggestions',items:[{url:'https://${'long-domain-'.repeat(12)}.test/path',title:'${'Texte très long '.repeat(20)}',kind:'history'},{url:'https://search.test',title:'${'Recherche '.repeat(30)}',kind:'search'}]}}))`);
+  for(const width of [488,360,280]){
+    await popup.call('Emulation.setDeviceMetricsOverride',{width,height:600,deviceScaleFactor:1,mobile:false});
+    await host.wait(()=>popup.evaluate(`(()=>{const panel=document.querySelector('.suggestions-popup');return panel&&panel.getBoundingClientRect().right<=innerWidth+1&&[...panel.querySelectorAll('.row,.row-title,.row-pill')].every(el=>{const r=el.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth+1})})()`),'suggestion text fits narrow popup');
+    assert.equal(await popup.evaluate(`getComputedStyle(document.querySelector('.row-pill>span')).textOverflow`),'ellipsis','long domains truncate inside their badge');
+    assert.equal(await popup.evaluate(`(()=>{const label=document.querySelectorAll('.row-pill>span')[1];return label.clientWidth+1>=label.scrollWidth})()`),true,'the search label remains readable beside long text');
+  }
+  await popup.call('Page.captureScreenshot',{format:'png'}).then(r=>writeFile(resolve(host.base,'suggestions-narrow.png'),Buffer.from(r.data,'base64')));
+  await popup.call('Emulation.clearDeviceMetricsOverride');
+  await input(top,selector,'climat');await host.wait(()=>popup.evaluate(`document.body.textContent.includes('climat du bénin demain')`),'original query restored');
   await press(top,'ArrowDown',40);await press(top,'ArrowDown',40);assert.equal(await top.evaluate(`document.querySelector(${JSON.stringify(selector)}).value`),'climat du bénin demain');
   await press(top,'ArrowDown',40);await press(top,'ArrowDown',40);assert.equal(await top.evaluate(`document.querySelector(${JSON.stringify(selector)}).value`),'climat');
   await press(top,'ArrowUp',38);await press(top,'ArrowUp',38);await host.wait(()=>top.evaluate(`document.querySelector(${JSON.stringify(selector)}).selectionStart===document.querySelector(${JSON.stringify(selector)}).value.length`),'caret at end');
@@ -81,5 +104,5 @@ try{
   for(const name of ['cancel-active.txt','cancel-paused-unknown.txt'])assert.equal(await access(resolve(host.base,'downloads',name)).then(()=>true,()=>false),false);
   assert.equal(await dock.evaluate(`document.querySelector('.popup-header-title').textContent`),'Téléchargements');
   await dock.call('Page.captureScreenshot',{format:'png'}).then(r=>writeFile(resolve(host.base,'downloads-canceled.png'),Buffer.from(r.data,'base64')));
-  console.log(JSON.stringify({passed:'single search focus outline; notes bottom and context split/reuse; narrow footer; editable toolbar suggestions; native pause/resume and exact bytes; cancel active/paused; completed file preserved',evidence:host.base}));
+  console.log(JSON.stringify({passed:'single search focus outline; notes bottom and context split/reuse; narrow footer; suggestions open once and stay opaque while typing and online results arrive; editable toolbar suggestions; native pause/resume and exact bytes; cancel active/paused; completed file preserved',evidence:host.base}));
 }catch(error){if(sidebar){console.error('STATE',await state().catch(()=>null));console.error('SIDEBAR INPUT',await sidebar.evaluate(`({focus:document.activeElement?.tagName,input:document.querySelector('.sidebar-url-form input').outerHTML})`).catch(()=>null))}if(top)console.error('ADDRESS',await top.evaluate(`({focus:document.activeElement?.tagName,inputs:[...document.querySelectorAll('.address-pill')].map(p=>({class:p.className,input:p.querySelector('input')?.outerHTML}))})`).catch(()=>null));if(popup)console.error('POPUP',await popup.evaluate('document.body.textContent').catch(()=>null));if(dock)console.error('DOWNLOADS',await latest().catch(()=>null));throw error;}finally{if(sidebar)await host.close(sidebar).catch(()=>{});await host.dispose();}

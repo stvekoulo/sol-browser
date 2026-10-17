@@ -51,7 +51,7 @@ public static class CommandParser
         ["download.cancel"] = ["id"], ["download.pause"]=["id"], ["download.resume"]=["id"], ["download.open"] = ["id"], ["download.reveal"] = ["id"],
         ["downloads.open"] = ["x", "y"],
         ["window.minimize"] = [], ["window.maximize"] = [], ["window.close"] = [], ["window.drag"] = [],
-        ["zoom.in"] = [], ["zoom.out"] = [], ["zoom.reset"] = [],
+        ["zoom.in"] = [], ["zoom.out"] = [], ["zoom.reset"] = [], ["zoom.set"] = ["index"],
         ["permission.answer"] = ["index"], ["permissions.clear"] = [], ["permissions.forget"] = ["id"], ["site-data.clear"] = [],
         ["group.new"] = ["id"], ["group.create"] = ["id", "title"], ["group.add"] = ["id", "query"], ["group.remove"] = ["id"],
         ["group.toggle"] = ["id"], ["group.menu"] = ["id", "x", "y"], ["group.update"] = ["id", "title"],
@@ -90,6 +90,7 @@ public static class CommandParser
             var cmd = new Command(type, Str(root, "id"), Str(root, "url"), Str(root, "title"),
                 Str(root, "input"), Str(root, "query"), Int(root, "index"), Num(root, "ratio"),
                 Num(root, "x"), Num(root, "y"), Num(root, "width"), Num(root, "height"));
+            if (type == "zoom.set" && (cmd.Index is not (>= 50 and <= 200) || cmd.Index % 5 != 0)) return null;
             return required.All(field => Has(cmd, field)) ? cmd : null;
         }
         catch (JsonException)

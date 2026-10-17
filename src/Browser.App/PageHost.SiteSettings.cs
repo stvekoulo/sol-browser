@@ -57,7 +57,7 @@ public sealed partial class PageHost
         if (!settings.MemorySaver && core.IsSuspended) core.Resume();
         if (!settings.MemorySaver && _hiddenSince.ContainsKey(id)) _hiddenSince[id] = DateTime.UtcNow;
         var iCloud = (await core.Profile.GetBrowserExtensionsAsync()).Any(e => e.IsEnabled && e.Id is "pejdijmoenmkgeppbflobdenhhabjlaj" or "mfbcdcnpokpoajjciilocoachedjkima");
-        core.Settings.IsPasswordAutosaveEnabled = settings.SavePasswords && !AppPaths.Private && !iCloud;
+        core.Settings.IsPasswordAutosaveEnabled = settings.SavePasswords && !IsPrivate(id) && !iCloud;
         // Thème clair ou sombre imposé : les sites qui proposent les deux versions suivent le même choix.
         core.Profile.PreferredColorScheme = settings.Theme switch
         {
@@ -145,7 +145,7 @@ public sealed partial class PageHost
         s.AreHostObjectsAllowed = false;
         s.IsWebMessageEnabled = true;
         // Mots de passe : gestionnaire du moteur (proposition d'enregistrement, stockage chiffré, remplissage).
-        s.IsPasswordAutosaveEnabled = settings.SavePasswords && !AppPaths.Private; // rien à retenir d'une fenêtre privée
+        s.IsPasswordAutosaveEnabled = settings.SavePasswords && !AppPaths.Private && !PrivateBrowsing.IsProfile(core.Profile.ProfileName);
         s.IsSwipeNavigationEnabled = true;
         s.IsZoomControlEnabled = false; // le zoom est géré par le navigateur (Ctrl +, Ctrl -, Ctrl molette), pas par le moteur // balayage horizontal : page précédente ou suivante
         s.IsGeneralAutofillEnabled = false;

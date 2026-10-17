@@ -24,6 +24,7 @@ public sealed partial class PageHost
             await view.EnsureCoreWebView2Async(environment, options);
         }
         var profile = view.CoreWebView2.Profile;
+        await (_privateCleanup ??= DeleteAbandonedPrivateProfilesAsync(profile));
         RestoreGitLabSession(profile);
         if (_sessionCookies.Remove(profile.ProfileName, out var cookies))
             foreach (var cookie in cookies) profile.CookieManager.AddOrUpdateCookie(cookie);
@@ -65,12 +66,13 @@ public sealed partial class PageHost
             container.SizeChanged += (_, _) => ApplyLayout(_layout.Primary, _layout.Secondary, _layout.Ratio);
         }
         var view = new CursorWebView { Visibility = Visibility.Collapsed, Opacity = 0, DefaultBackgroundColor = UiBridge.InitialBackground };
+        if (tab.Private) _privateTabs.Add(tab.Id);
         _views[tab.Id] = view;
         view.GotFocus += (_, _) => { if (_visible.Contains(tab.Id) && _views.GetValueOrDefault(tab.Id) == view) PageFocused?.Invoke(tab.Id); };
         container.Children.Add(view);
         try
         {
-            await StartEngineAsync(view, tab.SessionId.Length == 0 ? null : "sol-" + tab.SessionId);
+            await StartEngineAsync(view, tab.Private ? PrivateProfileName : tab.SessionId.Length == 0 ? null : "sol-" + tab.SessionId);
             (_bubbles ??= new NativeBubbles(container)).Watch(view.CoreWebView2.BrowserProcessId);
             // Préparer les extensions du profil avant sa première navigation.
             var profile = view.CoreWebView2.Profile;
@@ -163,7 +165,11 @@ public sealed partial class PageHost
                     if (e.Response.Headers.GetHeader("Content-Type").Split(';')[0].Trim().Equals("application/pdf", StringComparison.OrdinalIgnoreCase)) _pdf.Add(tab.Id);
                     else _pdf.Remove(tab.Id);
                     core.Settings.IsZoomControlEnabled = IsPdf(tab.Id);
-                    if (IsPdf(tab.Id)) PageZoom.KeepPlain(e.Request.Uri); // un document reste à 100 % : son lecteur a son propre zoom
+                    if (IsPdf(tab.Id))
+                    {
+                        if (IsPrivate(tab.Id)) _ = PageZoom.TabAsync(core, 1);
+                        else PageZoom.KeepPlain(e.Request.Uri);
+                    }
                     RuntimeChanged?.Invoke();
                 }
             }

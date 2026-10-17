@@ -1,0 +1,4 @@
+.settings-scale:not([hidden]) { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.settings-scale-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.settings-scale-heading > .row-title { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.settings-scale-heading > .pill-action { flex: none; }

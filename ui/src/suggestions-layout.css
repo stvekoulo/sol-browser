@@ -1,0 +1,6 @@
+.suggestions-popup{min-width:0;max-width:100%}
+.suggestions-popup .row{min-width:0}
+.suggestions-popup .row-title{flex-basis:0}
+.suggestions-popup .row-pill{min-width:0;flex-shrink:1}
+.suggestions-popup .row-pill>span{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+@media(max-width:360px){.suggestions-popup .row{gap:6px;padding-right:7px}}

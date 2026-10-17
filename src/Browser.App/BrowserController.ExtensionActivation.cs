@@ -10,7 +10,7 @@ public sealed partial class BrowserController
         await _extensionChanges.WaitAsync();
         try
         {
-            if (AppPaths.Private || _tabs.ActiveId is not { } tabId || _pages.CoreOf(tabId) is not { } core) return;
+            if (PrivateActive || _tabs.ActiveId is not { } tabId || _pages.CoreOf(tabId) is not { } core) return;
             var profile = core.Profile;
             var state = await SharedExtensions.SnapshotAsync();
             if (!state.TryGetValue(extension.Id, out var enabled) || enabled != true) return;

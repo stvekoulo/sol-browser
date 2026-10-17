@@ -2,6 +2,24 @@ using Browser.Core;
 
 public class CommandParserTests
 {
+    [Theory]
+    [InlineData(50)]
+    [InlineData(55)]
+    [InlineData(95)]
+    [InlineData(105)]
+    [InlineData(195)]
+    [InlineData(200)]
+    public void Page_zoom_accepts_five_percent_steps(int percent) =>
+        Assert.Equal(new Command("zoom.set", Index: percent), CommandParser.Parse($$"""{"type":"zoom.set","index":{{percent}}}"""));
+
+    [Theory]
+    [InlineData("{\"type\":\"zoom.set\"}")]
+    [InlineData("{\"type\":\"zoom.set\",\"index\":49}")]
+    [InlineData("{\"type\":\"zoom.set\",\"index\":52}")]
+    [InlineData("{\"type\":\"zoom.set\",\"index\":205}")]
+    [InlineData("{\"type\":\"zoom.set\",\"index\":100.5}")]
+    public void Page_zoom_rejects_values_outside_the_supported_steps(string json) => Assert.Null(CommandParser.Parse(json));
+
     [Fact]
     public void Sidebar_completion_requires_an_integer_step()
     {

@@ -4,6 +4,7 @@ import { t } from './i18n';
 import { useIconLook } from './useIconLook';
 import { focusTab, middleClose, sidebarMenu } from './sidebarActions';
 import { startSlotDrag } from './useSidebarDrag';
+import { Icon } from './Icons';
 
 export function SidebarPinned({ state, icons }: { state: State; icons: Record<string, string | null | undefined> }) {
   const { shortcuts, tabs, activeId } = state;
@@ -28,12 +29,12 @@ export function SidebarPinned({ state, icons }: { state: State; icons: Record<st
         {pinned.map((tab, i) => <button key={tab.id} role="tab" aria-selected={tab.id === activeId}
           className={`pinned-pill ${wideAt(i, pinned.length) ? 'wide' : 'circle'}${tab.id === activeId ? ' active' : ''}${tab.asleep ? ' asleep' : ''}`}
           title={`${tab.title || tab.url}\n${t('Glisser pour déplacer ou détacher', 'Drag to reorder or unpin')}`}
-          data-kind="tab" data-id={tab.id} data-first={tabs.indexOf(tab)} data-last={tabs.indexOf(tab)} data-pinned="true"
+          data-kind="tab" data-id={tab.id} data-first={tabs.indexOf(tab)} data-last={tabs.indexOf(tab)} data-pinned="true" data-private={!!tab.privateMode}
           onContextMenu={e => sidebarMenu('tab.menu', tab.id, e)} onKeyDown={focusTab}
           onClick={() => send({ type: 'tab.activate', id: tab.id })}
           onMouseDown={e => middleClose(e, tab.id)} onAuxClick={e => e.preventDefault()}
           onPointerDown={e => startSlotDrag(e.currentTarget, e)}>
-          {icons[tab.id] ? <img className="favicon" src={icons[tab.id]!} alt="" draggable={false} /> : <span className="favicon letter">{(tab.title || tab.url)[0]?.toUpperCase()}</span>}
+          {tab.privateMode ? <Icon name="private" size={16}/> : icons[tab.id] ? <img className="favicon" src={icons[tab.id]!} alt="" draggable={false} /> : <span className="favicon letter">{(tab.title || tab.url)[0]?.toUpperCase()}</span>}
           {wideAt(i, pinned.length) && <span>{tab.title?.split(' - ')[0].split(' · ')[0] || t('Épinglé', 'Pinned')}</span>}
         </button>)}
       </div>}

@@ -19,7 +19,7 @@ type Setup = {
   first: boolean; name: string; theme: number; font: number; language: number; engine: number; engines: string[];
    pip: boolean; browsers: Browser[];
 };
-type Imported = Record<string, { bookmarks: number; history: number; passwords: number; locked: number } | 'running'>;
+type Imported = Record<string, { bookmarks: number; history: number; passwords: number; locked: number; error?: string } | 'running'>;
 
 const key = (browser: string, folder: string) => `${browser}|${folder}`;
 
@@ -33,12 +33,13 @@ export default function Welcome() {
   const [imported, setImported] = useState<Imported>({});
   const [name, setName] = useState('');
   const [csv, setCsv] = useState<number | null>(null);
+  const [csvError, setCsvError] = useState<string | null>(null);
 
   useEffect(() => {
     const off = onMessage(data => {
-      const message = data as { welcome?: string; id?: string; folder?: string; bookmarks?: number; history?: number; passwords?: number; locked?: number };
+      const message = data as { welcome?: string; id?: string; folder?: string; bookmarks?: number; history?: number; passwords?: number; locked?: number; error?: string };
       if (message.welcome === 'reset') send({ type: 'welcome.ready' });
-      if (message.welcome === 'csv') setCsv(message.passwords ?? 0);
+      if (message.welcome === 'csv') { setCsv(message.passwords ?? 0); setCsvError(message.error ?? null); }
       if (message.welcome === 'state') {
         const next = data as unknown as Setup;
         setSetup(next);
@@ -47,7 +48,7 @@ export default function Welcome() {
         setStep(next.first ? 0 : 1); // déjà accueilli : on vient pour l'import
       }
       if (message.welcome === 'imported' && message.id !== undefined)
-        setImported(all => ({ ...all, [key(message.id!, message.folder ?? '')]: { bookmarks: message.bookmarks ?? 0, history: message.history ?? 0, passwords: message.passwords ?? 0, locked: message.locked ?? 0 } }));
+        setImported(all => ({ ...all, [key(message.id!, message.folder ?? '')]: { bookmarks: message.bookmarks ?? 0, history: message.history ?? 0, passwords: message.passwords ?? 0, locked: message.locked ?? 0, error: message.error } }));
     });
     send({ type: 'welcome.ready' });
     return off;
@@ -101,9 +102,12 @@ export default function Welcome() {
                       : state ? t(`${state.bookmarks} favori${state.bookmarks > 1 ? 's' : ''}, ${state.history} page${state.history > 1 ? 's' : ''} d’historique, ${state.passwords} mot${state.passwords > 1 ? 's' : ''} de passe`, `${state.bookmarks} bookmark${state.bookmarks === 1 ? '' : 's'}, ${state.history} history page${state.history === 1 ? '' : 's'}, ${state.passwords} password${state.passwords === 1 ? '' : 's'}`)
                         + (state.locked ? t(` (${state.locked} protégé${state.locked > 1 ? 's' : ''} par ce navigateur, non importé${state.locked > 1 ? 's' : ''})`, ` (${state.locked} protected by that browser, not imported)`) : '')
                       : t('Favoris, historique et mots de passe', 'Bookmarks, history and passwords')}
+                    {state && state !== 'running' && state.error && <span role="status"> {state.error}</span>}
                   </span>
                 </span>
-                {state && state !== 'running' ? (
+                {state && state !== 'running' && (state.error || state.locked > 0 || state.passwords === 0) ? (
+                  <button className="pill-action" onClick={() => state.error ? run(browser.id, profile.folder) : send({type:'import.csv'})}>{state.error ? t('Réessayer', 'Retry') : t('Importer les mots de passe (CSV)', 'Import passwords (CSV)')}</button>
+                ) : state && state !== 'running' ? (
                   <span className="welcome-done" aria-hidden><Icon d="M3.5 8.5l3 3 6-6.5" size={14} /></span>
                 ) : (
                   <button className="pill-action" disabled={state === 'running'} onClick={() => run(browser.id, profile.folder)}>{t('Importer', 'Import')}</button>
@@ -113,12 +117,12 @@ export default function Welcome() {
           }),
         )}
       </div>
-      <p className="welcome-csv">
+      <p className="welcome-csv" aria-live="polite">
         {csv === null
-          ? t('Mots de passe protégés par votre navigateur ? Exportez-les depuis ses réglages, puis', 'Passwords protected by your browser? Export them from its settings, then')
+          ? t('Pour les mots de passe de tout navigateur (Chrome, Edge, Firefox, Brave, Safari…), exportez-les en CSV depuis ses réglages, puis', 'For passwords from any browser (Chrome, Edge, Firefox, Brave, Safari…), export them as CSV from its settings, then')
           : csv > 0
             ? t(`${csv} mot${csv > 1 ? 's' : ''} de passe importé${csv > 1 ? 's' : ''} du fichier.`, `${csv} password${csv === 1 ? '' : 's'} imported from the file.`)
-            : t('Aucun mot de passe trouvé dans ce fichier.', 'No password found in this file.')}{' '}
+            : csvError ?? t('Aucun mot de passe trouvé dans ce fichier.', 'No password found in this file.')}{' '}
         <button onClick={() => send({ type: 'import.csv' })}>{csv === null ? t('importez le fichier CSV', 'import the CSV file') : t('Importer un autre fichier', 'Import another file')}</button>
       </p>
     </>,

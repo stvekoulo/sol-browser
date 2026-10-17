@@ -50,7 +50,7 @@ internal static class SharedExtensions
 
     public static async Task<bool> SyncAsync(CoreWebView2Profile profile, string? reloadId = null)
     {
-        if (AppPaths.Private) return true;
+        if (AppPaths.Private || PrivateBrowsing.IsProfile(profile.ProfileName)) return true;
         await Gate.WaitAsync();
         try
         {

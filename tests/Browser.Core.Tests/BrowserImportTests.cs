@@ -17,6 +17,16 @@ public class BrowserImportTests : IDisposable
         return dir;
     }
 
+    [Fact]
+    public void A_profile_with_only_saved_passwords_is_available_for_import()
+    {
+        var dir = Profile(@"Google\Chrome\User Data", "Default");
+        File.WriteAllBytes(Path.Combine(dir, "Login Data"), []);
+        var source = Assert.Single(BrowserImport.Detect(Path.Combine(_dir, "Local"), Path.Combine(_dir, "Roaming")));
+        Assert.Equal("chrome", source.Id);
+        Assert.Equal("Default", Assert.Single(source.Profiles).Folder);
+    }
+
     private const string Bookmarks = """
         { "roots": {
             "bookmark_bar": { "type": "folder", "children": [

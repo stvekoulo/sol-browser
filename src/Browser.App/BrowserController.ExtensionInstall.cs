@@ -11,7 +11,7 @@ public sealed partial class BrowserController
 
     private async Task ReloadExtensionAsync(string id)
     {
-        if (AppPaths.Private || EngineProfile is null || !ExtensionCatalog.IsId(id) || id == AdBlock.ExtensionId) return;
+        if (PrivateActive || EngineProfile is null || !ExtensionCatalog.IsId(id) || id == AdBlock.ExtensionId) return;
         await _extensionChanges.WaitAsync();
         try
         {
@@ -30,7 +30,7 @@ public sealed partial class BrowserController
     /// <param name="quiet">Mise à jour en arrière-plan : un échec est noté au journal, sans déranger.</param>
     private async Task<bool> InstallExtensionAsync(string source, string? knownId, bool quiet = false)
     {
-        if (AppPaths.Private || EngineProfile is not { } profile) return false;
+        if (PrivateActive || EngineProfile is not { } profile) return false;
         await _extensionChanges.WaitAsync();
         string? backup = null, destination = null;
         var wasEnabled = true;
@@ -113,7 +113,7 @@ public sealed partial class BrowserController
 
     private async Task ChangeExtensionAsync(string id, bool remove)
     {
-        if (AppPaths.Private || EngineProfile is not { } profile || !ExtensionCatalog.IsId(id) || id == AdBlock.ExtensionId) return;
+        if (PrivateActive || EngineProfile is not { } profile || !ExtensionCatalog.IsId(id) || id == AdBlock.ExtensionId) return;
         await _extensionChanges.WaitAsync();
         try
         {

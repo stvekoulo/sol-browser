@@ -33,7 +33,7 @@ public sealed partial class BrowserController
         Add(T("Extensions", "Extensions"), new("extensions.open"), keywords: "extensions modules");
         Add(T("Réglages", "Settings"), new("settings.open", X: x, Y: 70), keywords: "settings parametres preferences");
         Add(T("Espaces et profils", "Spaces and profiles"), new("profile.menu", X: x, Y: 70), keywords: "profile espace compte");
-        if (active is not null) Add(T("Session de cet onglet", "Tab session"), new("session.menu", Id: active.Id, X: x, Y: 70), keywords: "compte session cookies admin user invite");
+        if (active is { Private: false }) Add(T("Session de cet onglet", "Tab session"), new("session.menu", Id: active.Id, X: x, Y: 70), keywords: "compte session cookies admin user invite");
         Add(T("Plein écran", "Full screen"), new("window.maximize"), keywords: "fullscreen plein ecran");
         if (active is not null)
         {
@@ -99,6 +99,7 @@ public sealed partial class BrowserController
     {
         if (index < 0 || index >= _settings.Shortcuts.Count) return;
         var shortcut = _settings.Shortcuts[index];
+        if (PrivateActive) { Open(shortcut.Url); return; }
         if (_shortcutTabs.TryGetValue(shortcut, out var open)) Activate(open);
         else _shortcutTabs[shortcut] = Open(shortcut.Url, pinned: true).Id; // épinglé : jamais groupé, épargné par « fermer les autres »
     }
@@ -106,6 +107,7 @@ public sealed partial class BrowserController
     // Le site annonce son nom (« GitHub », « YouTube »…) : le raccourci le prend à la place du nom tiré de l'adresse.
     private async Task LearnShortcutNameAsync(string tabId)
     {
+        if (_pages.IsPrivate(tabId)) return;
         if (ShortcutFor(_tabs.Tabs.FirstOrDefault(t => t.Id == tabId)?.Url) is not { NameLocked: false } shortcut || _pages.CoreOf(tabId) is not { } core) return;
         try
         {
@@ -200,6 +202,7 @@ public sealed partial class BrowserController
     // Un onglet vient d'afficher l'icône de son site : le raccourci de ce site la prend (c'est la plus fidèle).
     private void LearnShortcutIcon(string tabId, string? data)
     {
+        if (_pages.IsPrivate(tabId)) return;
         if (data is null || data.Length > MaxShortcutIcon * 2) return;
         if (ShortcutFor(_tabs.Tabs.FirstOrDefault(t => t.Id == tabId)?.Url) is not { } shortcut || shortcut.Icon == data) return;
         shortcut.Icon = data;

@@ -12,7 +12,7 @@ public sealed partial class BrowserController
     // Bouton de la barre : les extensions actives qui ont une fenêtre, puis l'accès à leur gestion.
     private async Task OpenExtensionsMenuAsync(double x, double y)
     {
-        if (AppPaths.Private) return;
+        if (PrivateActive) return;
         if (ClosesPanel("extensions")) return;
         var entries = new List<(string Label, Action? Run)>();
         if (EngineProfile is { } profile)
@@ -70,7 +70,7 @@ public sealed partial class BrowserController
 
     private async Task OpenExtensionsAsync()
     {
-        if (AppPaths.Private || EngineProfile is not { } profile) return;
+        if (PrivateActive || EngineProfile is not { } profile) return;
         HidePopup();
         var json = await ExtensionsJsonAsync();
         if (_closingWindow || EngineProfile?.ProfileName != profile.ProfileName) return;
@@ -86,7 +86,7 @@ public sealed partial class BrowserController
 
     private async Task RefreshPinnedExtensionsAsync()
     {
-        if (AppPaths.Private || EngineProfile is not { } profile) return;
+        if (PrivateActive || EngineProfile is not { } profile) return;
         _pinsInitialized = true;
         _pinProfileName = profile.ProfileName;
         var extensions = await profile.GetBrowserExtensionsAsync();
@@ -103,7 +103,7 @@ public sealed partial class BrowserController
 
     private async Task PinExtensionAsync(string id)
     {
-        if (AppPaths.Private || !ExtensionCatalog.IsId(id) || EngineProfile is not { } profile
+        if (PrivateActive || !ExtensionCatalog.IsId(id) || EngineProfile is not { } profile
             || !(await profile.GetBrowserExtensionsAsync()).Any(e => e.Id == id)) return;
         if (!_settings.PinnedExtensions.Remove(id)) _settings.PinnedExtensions.Add(id);
         JsonFileStore.Save(AppPaths.Settings, _settings);
@@ -158,7 +158,7 @@ public sealed partial class BrowserController
     // Sert aussi à une mise à jour qui demande de nouveaux accès.
     private async Task OfferStoreExtensionAsync(string id)
     {
-        if (_installingExtension || AppPaths.Private || EngineProfile is not { } profile) return;
+        if (_installingExtension || PrivateActive || EngineProfile is not { } profile) return;
         _installingExtension = true;
         var staging = Path.Combine(ExtensionsDir, "store-" + Guid.NewGuid().ToString("N"));
         try
@@ -217,7 +217,7 @@ public sealed partial class BrowserController
     // remplace l'extension si elle ne demande aucun accès de plus. Sinon elle attend l'accord de l'utilisateur.
     private async Task UpdateExtensionsAsync(bool manual)
     {
-        if (AppPaths.Private || _extensionCheck == "checking" || EngineProfile is not { } profile) return;
+        if (PrivateActive || _extensionCheck == "checking" || EngineProfile is not { } profile) return;
         async Task ShowAsync(string state) { _extensionCheck = state; if (_extensionsOpen) _popup.Post(await ExtensionsJsonAsync()); }
         await ShowAsync("checking");
         var updated = 0;

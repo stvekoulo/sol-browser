@@ -105,4 +105,44 @@ public class PasswordImportTests : IDisposable
         Assert.Equal(0, PasswordImport.ApplyPending(pending, Path.Combine(_dir, "pas-encore")));
         Assert.True(File.Exists(pending));
     }
+
+    [Fact]
+    public void Passwords_saved_in_an_open_browsers_write_ahead_log_are_imported()
+    {
+        if (!Dpapi) return;
+        var (source, key) = Browser("open-source");
+        using var db = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = Path.Combine(source, "Default", "Login Data"), Pooling = false }.ToString());
+        db.Open();
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = "PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0;";
+        cmd.ExecuteNonQuery();
+        using var transaction = db.BeginTransaction(deferred: true);
+        cmd.Transaction = transaction;
+        cmd.CommandText = "SELECT COUNT(*) FROM logins";
+        Assert.Equal(0L, cmd.ExecuteScalar());
+        Save(source, "https://recent.test/", "ada", Seal(key, "recent-secret"));
+        var read = PasswordImport.Read(source, Path.Combine(source, "Default"), Path.Combine(_dir, "tmp"));
+        Assert.Equal("recent-secret", Assert.Single(read.Logins).Password);
+        Assert.Equal(0, read.Unreadable);
+    }
+
+    [Fact]
+    public void Older_windows_passwords_do_not_require_a_local_state_key()
+    {
+        if (!Dpapi) return;
+        var (source, _) = Browser("legacy");
+        Save(source, "https://legacy.test/", "ada", ProtectedData.Protect(Encoding.UTF8.GetBytes("legacy-secret"), null, DataProtectionScope.CurrentUser));
+        File.Delete(Path.Combine(source, "Local State"));
+        var read = PasswordImport.Read(source, Path.Combine(source, "Default"), Path.Combine(_dir, "tmp"));
+        Assert.Equal("legacy-secret", Assert.Single(read.Logins).Password);
+    }
+
+    [Fact]
+    public void An_unreadable_password_database_reports_failure_instead_of_an_empty_success()
+    {
+        var source = Directory.CreateDirectory(Path.Combine(_dir, "broken")).FullName;
+        File.WriteAllText(Path.Combine(source, "Login Data"), "not a database");
+        Assert.Throws<IOException>(() => PasswordImport.Read(source, source, Path.Combine(_dir, "tmp")));
+        Assert.Empty(Directory.GetFiles(Path.Combine(_dir, "tmp")));
+    }
 }

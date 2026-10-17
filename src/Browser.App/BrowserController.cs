@@ -107,7 +107,7 @@ public sealed partial class BrowserController
         {
             var opener = _tabs.Tabs.FirstOrDefault(t => t.Id == source);
             if (opener is null) return null;
-            var tab = _tabs.Open(url, sessionId: opener.SessionId);
+            var tab = _tabs.Open(url, sessionId: opener.SessionId, isPrivate: opener.Private);
             Refresh();
             return tab;
         };
@@ -128,10 +128,10 @@ public sealed partial class BrowserController
             if (command.Type == "start.ready")
             {
                 _bridge.BroadcastTheme();
-                _pages.PostStart(id, _startPosted[id] = StartJson());
+                _pages.PostStart(id, _startPosted[id] = StartJson(_pages.IsPrivate(id)));
                 _ = PostStartWallpaperAsync(id);
                 foreach (var url in _db.Bookmarks().Select(b => b.Url).Take(48)) FetchStartIcon(url);
-                if (!AppPaths.Private)
+                if (!_pages.IsPrivate(id))
                     foreach (var visit in _db.RecentHistory(12)) FetchStartIcon(visit.Url);
             }
             else if (command.Type == "start.navigate") _pages.Navigate(id, Resolve(command.Input!));
@@ -168,7 +168,7 @@ public sealed partial class BrowserController
         {
             if (!_pinsInitialized) { _ = RefreshPinnedExtensionsAsync(); _ = UpdateExtensionsLaterAsync(); }
             _ = LearnShortcutNameAsync(id);
-            if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { } tab && IsWeb(tab.Url) && tab.Url is not (Settings.DefaultHomePage or QuickNotes.PageUrl)) FetchStartIcon(tab.Url);
+            if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { Private: false } tab && IsWeb(tab.Url) && tab.Url is not (Settings.DefaultHomePage or QuickNotes.PageUrl)) FetchStartIcon(tab.Url);
             Refresh();
         };
         _pages.FaviconChanged += (id, data) =>

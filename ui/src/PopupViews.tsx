@@ -16,6 +16,7 @@ import {menuIconPath,isClosing} from './PopupIcons';
 import {ProfileList,SessionPicker} from './PopupProfiles';
 import {NameForm,ShortcutForm,ComparePicker} from './PopupForms';
 import SettingsPopup from './SettingsPopup';
+import './suggestions-layout.css';
 import LibraryPopup from './LibraryPopup';
 export default function PopupViews({content,rootRef,opening,selected,settingsSection,setSettingsSection}:{content:Content;rootRef:RefObject<HTMLDivElement|null>;opening:number;selected:number;settingsSection:string;setSettingsSection:(section:string)=>void}){
 const root=rootRef;
@@ -49,7 +50,7 @@ const root=rootRef;
 
   if (content.popup === 'suggestions')
     return (
-      <div ref={root} className="popup" role="listbox" aria-label="Suggestions">
+      <div ref={root} className="popup suggestions-popup" role="listbox" aria-label="Suggestions">
         {content.items.map((item, index) => (
           <Row
             key={index}

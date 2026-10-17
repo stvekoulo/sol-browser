@@ -12,7 +12,8 @@ public sealed partial class BrowserController
     private void SaveSession()
     {
         if (AppPaths.Private) return; // navigation privée : la fenêtre ne laisse pas d'onglets derrière elle
-        var tabs = _tabs.Tabs.ToList();
+        var tabs = _tabs.Tabs.Where(t => !t.Private).ToList();
+        var groups = _tabs.Groups.Where(g => tabs.Any(t => t.GroupId == g.Id)).ToList();
         int? IndexOf(string? id) => tabs.FindIndex(t => t.Id == id) is >= 0 and var i ? i : null;
         JsonFileStore.Save(AppPaths.Session, new Session
         {
@@ -20,12 +21,12 @@ public sealed partial class BrowserController
             SessionIds = tabs.Select(t => t.SessionId).ToList(),
             TranslationOriginals = tabs.Select(t => _translationOriginals.GetValueOrDefault(t.Id, "")).ToList(),
             Titles = tabs.Select(t => t.Title).ToList(),
-            PinnedCount = _tabs.PinnedCount,
+            PinnedCount = tabs.Count(t => t.Pinned),
             Icons = tabs.Select(t => _favicons.GetValueOrDefault(t.Id) is { Length: <= MaxSessionIcon } icon ? icon : "").ToList(),
             Devices = tabs.Select(t => _pages.DeviceState(t.Id) is var (device, landscape) ? device + (landscape ? "|L" : "") : "").ToList(),
             ShortcutOf = tabs.Select(t => _settings.Shortcuts.FindIndex(s => _shortcutTabs.GetValueOrDefault(s) == t.Id) is >= 0 and var rank ? rank : (int?)null).ToList(),
-            Groups = _tabs.Groups.Select(g => new SessionGroup { Name = g.Name, Color = g.Color, Icon = g.Icon, Collapsed = g.Collapsed }).ToList(),
-            GroupOf = tabs.Select(t => t.GroupId is null ? (int?)null : _tabs.Groups.ToList().FindIndex(g => g.Id == t.GroupId)).ToList(),
+            Groups = groups.Select(g => new SessionGroup { Name = g.Name, Color = g.Color, Icon = g.Icon, Collapsed = g.Collapsed }).ToList(),
+            GroupOf = tabs.Select(t => t.GroupId is null ? (int?)null : groups.FindIndex(g => g.Id == t.GroupId)).ToList(),
             ActiveIndex = IndexOf(_tabs.ActiveId) ?? 0,
             PrimaryIndex = IndexOf(_split.PrimaryId),
             SecondaryIndex = IndexOf(_split.SecondaryId),
@@ -60,9 +61,11 @@ public sealed partial class BrowserController
     // La page d'accueil porte des images (icônes, aperçus) : elle n'est renvoyée que si son contenu a changé.
     private void PostStartPages(IEnumerable<Tab> starts)
     {
-        var json = StartJson();
         foreach (var tab in starts)
+        {
+            var json = StartJson(tab.Private);
             if (_startPosted.GetValueOrDefault(tab.Id) != json) _pages.PostStart(tab.Id, _startPosted[tab.Id] = json);
+        }
         foreach (var gone in _startPosted.Keys.Where(id => _tabs.Tabs.All(t => t.Id != id)).ToList()) _startPosted.Remove(gone);
     }
 
@@ -89,12 +92,13 @@ public sealed partial class BrowserController
         finally { _fetchingFavoriteIcons = false; }
     }
 
-    private string StartJson()
+    private string StartJson(bool isPrivate = false)
     {
-        IReadOnlyList<Visit> history = AppPaths.Private ? [] : _db.RecentHistory(13).Where(v => v.Url != Settings.DefaultHomePage).Take(12).ToList();
+        isPrivate |= AppPaths.Private;
+        IReadOnlyList<Visit> history = isPrivate ? [] : _db.RecentHistory(13).Where(v => v.Url != Settings.DefaultHomePage).Take(12).ToList();
         return JsonSerializer.Serialize(new
         {
-            @event = "start", privateMode = AppPaths.Private, lang = Language.Current, wallpaper = _settings.StartWallpaper,
+            @event = "start", privateMode = isPrivate, lang = Language.Current, wallpaper = _settings.StartWallpaper,
             // Une photo va suivre (message « start-wallpaper ») : la page n'affiche pas l'image de Sol en l'attendant.
             wallpaperPhoto = CurrentWallpaper is not null,
             // Les favoris du profil, dans l'ordre de la bibliothèque : quatre rangées, puis le reste sur demande.
@@ -138,8 +142,8 @@ public sealed partial class BrowserController
         {
             tabs = _tabs.Tabs.Select(t => new
             {
-                id = t.Id, url = t.Url, title = t.Title, pinned = t.Pinned,
-                sessionId = t.SessionId, sessionName = t.SessionId.Length == 0 ? T("Session actuelle", "Current session") : _sessions.Name(t.SessionId),
+                id = t.Id, url = t.Url, title = t.Title, pinned = t.Pinned, privateMode = t.Private || AppPaths.Private,
+                sessionId = t.SessionId, sessionName = t.Private ? T("Navigation privée", "Private browsing") : t.SessionId.Length == 0 ? T("Session actuelle", "Current session") : _sessions.Name(t.SessionId),
                 groupId = t.GroupId,
                 asleep = _pages.IsAsleep(t.Id), // déchargé : affiché atténué, il se recharge quand on y revient
                 device = _pages.DeviceOf(t.Id) is { } simulated ? DeviceLabel(simulated) : null, // simulateur : appareil affiché
@@ -157,7 +161,7 @@ public sealed partial class BrowserController
             }),
             groups = _tabs.Groups.Select(g => new { id = g.Id, name = g.Name, color = g.Color, icon = g.Icon, collapsed = g.Collapsed }),
             activeId = _tabs.ActiveId,
-            privateMode = AppPaths.Private, // fenêtre de navigation privée
+            privateMode = PrivateActive,
             shield = false,
             shortcuts = _settings.Shortcuts.Select(s => new { url = s.Url, name = s.Name, icon = s.Icon, tabId = _shortcutTabs.GetValueOrDefault(s) }),
             extensions = _pinnedExtensions,
