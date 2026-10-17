@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFile,writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
+import {setTimeout as delay} from 'node:timers/promises';
 import {sidebarHost} from './sidebar-check-host.mjs';
 
 const requests=[];
@@ -20,19 +21,26 @@ try{
  for(let run=0;run<2;run++){
    requests.length=0;
    const ui=await host.launch();
-   await host.wait(()=>requests.includes('/0')&&requests.includes('/1'),'restored pins and shortcut prepare after startup',5000);
-   assert(!requests.includes('/3'),'ordinary restored tabs remain unloaded');
-   const first=await host.connect(host.origin+'/0'),shortcut=await host.connect(host.origin+'/1');
-   await host.wait(()=>Promise.all([first,shortcut].map(page=>page.evaluate('document.title==="Restored page"&&document.readyState==="complete"').catch(()=>false))).then(states=>states.every(Boolean)),'pinned pages ready');
-   const count=requests.length,state=await ui.evaluate('window.__sidebarState');
-   const documents=await Promise.all([first.evaluate('performance.timeOrigin'),shortcut.evaluate('performance.timeOrigin')]);
+   await delay(2000);
+   assert.deepEqual(requests,[],'pins, shortcuts and ordinary background tabs must not load at startup');
+   const state=await ui.evaluate('window.__sidebarState');
    await ui.evaluate(`chrome.webview.postMessage(JSON.stringify({type:'tab.activate',id:'${state.tabs[0].id}'}))`);
-   await host.wait(()=>ui.evaluate(`window.__sidebarState.activeId===${JSON.stringify(state.tabs[0].id)}`),'pin activated');
+   await host.wait(()=>requests.includes('/0'),'pin loads on first click');
+   assert(!requests.includes('/1'),'opening one pin must not load the shortcut');
+   const first=await host.connect(host.origin+'/0');
+   await host.wait(()=>first.evaluate('document.title==="Restored page"&&document.readyState==="complete"').catch(()=>false),'pin ready');
    await ui.evaluate(`chrome.webview.postMessage(JSON.stringify({type:'shortcut.open',index:0}))`);
-   await host.wait(()=>ui.evaluate(`window.__sidebarState.activeId===${JSON.stringify(state.tabs[1].id)}`),'restored shortcut activated');
-   assert.deepEqual(await Promise.all([first.evaluate('performance.timeOrigin'),shortcut.evaluate('performance.timeOrigin')]),documents,'activation keeps the prepared documents');
-   assert.equal(requests.length,count,'first access reuses the loaded page instead of starting a new connection');
+   await host.wait(()=>requests.includes('/1'),'shortcut loads on first click');
+   const shortcut=await host.connect(host.origin+'/1');
+   await host.wait(()=>shortcut.evaluate('document.title==="Restored page"&&document.readyState==="complete"').catch(()=>false),'shortcut ready');
+   assert(!requests.includes('/3'),'ordinary background tabs remain asleep');
+   const before=requests.length;
+   await ui.evaluate(`chrome.webview.postMessage(JSON.stringify({type:'tab.activate',id:'${state.tabs[0].id}'}))`);
+   await host.wait(()=>ui.evaluate(`window.__sidebarState.activeId===${JSON.stringify(state.tabs[0].id)}`),'pin revisited');
+   assert.equal(requests.length,before,'returning to the loaded pin does not reload it');
+   await ui.evaluate(`chrome.webview.postMessage(JSON.stringify({type:'tab.activate',id:'${state.activeId}'}))`);
+   await host.wait(()=>ui.evaluate(`window.__sidebarState.activeId===${JSON.stringify(state.activeId)}`),'original tab selected before restart');
    await host.close(ui);
  }
- console.log(JSON.stringify({passed:'pins and restored shortcut load after startup, first access reuses them, ordinary tabs stay asleep, behavior survives restart',evidence:host.base}));
+ console.log(JSON.stringify({passed:'no background pin or shortcut preload at startup; first click loads only the selected tab; return reuses it; same behavior after restart',evidence:host.base}));
 }finally{await host.dispose();}

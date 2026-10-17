@@ -94,34 +94,6 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
         if (Core(id) is { } core && core.Source is Settings.DefaultHomePage or QuickNotes.PageUrl) core.PostWebMessageAsJson(json);
     }
     public event Action<CoreWebView2>? Navigating;
-    public async Task<string?> PreviewUrlAsync(string url, CancellationToken cancellation)
-    {
-        var preview = new WebView2 { Width = 1024, Height = 640, Opacity = 0, IsHitTestVisible = false,
-            HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
-        container.Children.Insert(0, preview);
-        try
-        {
-            await StartEngineAsync(preview);
-            var core = preview.CoreWebView2;
-            Harden(core);
-            core.PermissionRequested += (_, e) => { e.State = CoreWebView2PermissionState.Deny; e.Handled = true; };
-            core.NewWindowRequested += (_, e) => e.Handled = true;
-            core.LaunchingExternalUriScheme += (_, e) => e.Cancel = true;
-            core.DownloadStarting += (_, e) => e.Cancel = true;
-            var loaded = new TaskCompletionSource<bool>();
-            core.DOMContentLoaded += (_, _) => loaded.TrySetResult(true);
-            core.NavigationCompleted += (_, e) => { if (!e.IsSuccess) loaded.TrySetResult(false); };
-            core.Navigate(url);
-            if (!await loaded.Task.WaitAsync(TimeSpan.FromSeconds(18), cancellation)) return null;
-            await Task.Delay(300, cancellation);
-            var json = await core.CallDevToolsProtocolMethodAsync("Page.captureScreenshot", "{\"format\":\"png\",\"captureBeyondViewport\":false}");
-            using var result = System.Text.Json.JsonDocument.Parse(json);
-            return "data:image/png;base64," + result.RootElement.GetProperty("data").GetString();
-        }
-        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException
-            or TimeoutException or OperationCanceledException or System.Text.Json.JsonException) { return null; }
-        finally { container.Children.Remove(preview); CloseView(preview); }
-    }
     public Func<string, string, Tab?>? CreatePopupTab;
     public event Action<string>? PopupClosed;
     public event Action<string, double, double, CoreWebView2ContextMenuRequestedEventArgs>? ContextMenuRequested; // id, x, y dans la fenêtre

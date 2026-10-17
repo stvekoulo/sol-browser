@@ -34,15 +34,6 @@ public sealed partial class BrowserController
     }
 
     private string? _lastActive;
-    private readonly Dictionary<string, string> _startPreviews = new();
-    private readonly HashSet<string> _startPreviewFailed = new();
-    private readonly CancellationTokenSource _startPreviewCancel = new();
-    private bool _loadingStartPreviews;
-    private bool _startPreviewsPending;
-    // Un aperçu se fait en chargeant le site dans une vue cachée : du réseau, du processeur, et une visite que
-    // l'utilisateur n'a pas faite. Une fois par jour suffit, et une seule tentative par site et par session.
-    private static readonly TimeSpan StartPreviewAge = TimeSpan.FromDays(1);
-    private readonly HashSet<string> _startPreviewTried = new();
     private readonly Dictionary<string, string?> _startIcons = new();
     private async void FetchStartIcon(string url)
     {
@@ -60,59 +51,6 @@ public sealed partial class BrowserController
                 LearnShortcutIcon(tab.Id, icon);
             }
         Refresh();
-    }
-    private async void LoadStartPreviews()
-    {
-        if (AppPaths.Private || _closingWindow) return;
-        if (_loadingStartPreviews) { _startPreviewsPending = true; return; }
-        _loadingStartPreviews = true;
-        var directory = Path.Combine(AppPaths.DataDir, "start-previews");
-        try
-        {
-            Directory.CreateDirectory(directory);
-            var sites = _db.FrequentSites(80).Where(v => IsWeb(v.Url) && v.Url != Settings.DefaultHomePage)
-                .DistinctBy(v => SiteShortcut.DomainOf(v.Url)).Take(6).ToList();
-            var files = sites.ToDictionary(s => s.Url, s => Path.Combine(directory,
-                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(s.Url))) + ".png"));
-            _startPreviews.Clear();
-            // Show every cached image before any site can delay the queue, including stale images during refresh.
-            foreach (var site in sites)
-                if (File.Exists(files[site.Url]))
-                    _startPreviews[site.Url] = "data:image/png;base64," + Convert.ToBase64String(await File.ReadAllBytesAsync(files[site.Url], _startPreviewCancel.Token));
-            Refresh();
-            using var slots = new SemaphoreSlim(2);
-            await Task.WhenAll(sites.Where(s => (!File.Exists(files[s.Url]) || File.GetLastWriteTimeUtc(files[s.Url]) <= DateTime.UtcNow - StartPreviewAge)
-                && !_startPreviewTried.Contains(s.Url)).Select(async site =>
-            {
-                await slots.WaitAsync(_startPreviewCancel.Token);
-                try
-                {
-                    if (_closingWindow || !_tabs.Tabs.Any(t => t.Url == Settings.DefaultHomePage && !_pages.IsAsleep(t.Id))) return;
-                    if (!_startPreviewTried.Add(site.Url)) return;
-                    var image = await _pages.PreviewUrlAsync(site.Url, _startPreviewCancel.Token);
-                    if (_closingWindow) return;
-                    if (image is null)
-                    {
-                        if (!_startPreviews.ContainsKey(site.Url)) _startPreviewFailed.Add(site.Url);
-                    }
-                    else
-                    {
-                        _startPreviewFailed.Remove(site.Url);
-                        _startPreviews[site.Url] = image;
-                        await File.WriteAllBytesAsync(files[site.Url], Convert.FromBase64String(image["data:image/png;base64,".Length..]), _startPreviewCancel.Token);
-                    }
-                    Refresh();
-                }
-                finally { slots.Release(); }
-            }));
-            foreach (var file in new DirectoryInfo(directory).GetFiles("*.png").OrderByDescending(f => f.LastWriteTimeUtc).Skip(24)) file.Delete();
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or OperationCanceledException) { }
-        finally
-        {
-            _loadingStartPreviews = false;
-            if (_startPreviewsPending) { _startPreviewsPending = false; LoadStartPreviews(); }
-        }
     }
     private string? StartIcon(string url) => _startIcons.GetValueOrDefault(SiteShortcut.DomainOf(url)) ?? (_tabs.Tabs.FirstOrDefault(t => SiteShortcut.DomainOf(t.Url) == SiteShortcut.DomainOf(url)) is { } tab
         && _favicons.GetValueOrDefault(tab.Id) is { } icon ? icon : _settings.Shortcuts.FirstOrDefault(s => SiteShortcut.DomainOf(s.Url) == SiteShortcut.DomainOf(url))?.Icon);
@@ -154,16 +92,13 @@ public sealed partial class BrowserController
     private string StartJson()
     {
         IReadOnlyList<Visit> history = AppPaths.Private ? [] : _db.RecentHistory(13).Where(v => v.Url != Settings.DefaultHomePage).Take(12).ToList();
-        var frequent = AppPaths.Private ? [] : _db.FrequentSites(80).Where(v => IsWeb(v.Url) && v.Url != Settings.DefaultHomePage)
-            .DistinctBy(v => SiteShortcut.DomainOf(v.Url)).Take(6).ToList();
         return JsonSerializer.Serialize(new
         {
             @event = "start", privateMode = AppPaths.Private, lang = Language.Current, wallpaper = _settings.StartWallpaper,
             // Une photo va suivre (message « start-wallpaper ») : la page n'affiche pas l'image de Sol en l'attendant.
             wallpaperPhoto = CurrentWallpaper is not null,
-            // Les favoris du profil, tous, dans l'ordre de la bibliothèque : la page en montre deux rangées, puis le reste sur demande.
+            // Les favoris du profil, dans l'ordre de la bibliothèque : quatre rangées, puis le reste sur demande.
             favorites = _db.Bookmarks().Take(MaxStartFavorites).Select(b => new { url = b.Url, title = b.Title, icon = StartIcon(b.Url) }),
-            frequent = frequent.Select(v => new { url = v.Url, title = v.Title, preview = _startPreviews.GetValueOrDefault(v.Url), previewFailed = _startPreviewFailed.Contains(v.Url) }),
             history = history.Select(v => new { url = v.Url, title = v.Title, last = v.Last.ToUnixTimeMilliseconds(), icon = StartIcon(v.Url) }),
             groups = _tabs.Groups.Select(g => new { id = g.Id, name = g.Name, color = g.Color, count = _tabs.Tabs.Count(t => t.GroupId == g.Id) }),
         });

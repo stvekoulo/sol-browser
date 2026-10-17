@@ -130,10 +130,9 @@ public sealed partial class BrowserController
                 _bridge.BroadcastTheme();
                 _pages.PostStart(id, _startPosted[id] = StartJson());
                 _ = PostStartWallpaperAsync(id);
-                foreach (var url in _db.Bookmarks().Select(b => b.Url).Take(24)) FetchStartIcon(url);
+                foreach (var url in _db.Bookmarks().Select(b => b.Url).Take(48)) FetchStartIcon(url);
                 if (!AppPaths.Private)
                     foreach (var visit in _db.RecentHistory(12)) FetchStartIcon(visit.Url);
-                LoadStartPreviews();
             }
             else if (command.Type == "start.navigate") _pages.Navigate(id, Resolve(command.Input!));
             else if (command.Type == "start.favorites") _ = FetchFavoriteIconsAsync();
@@ -168,11 +167,9 @@ public sealed partial class BrowserController
         _pages.Loaded += id =>
         {
             if (!_pinsInitialized) { _ = RefreshPinnedExtensionsAsync(); _ = UpdateExtensionsLaterAsync(); }
-            if (_tabs.ActiveId == id) _ = PrepareRestoredPinsAsync();
             _ = LearnShortcutNameAsync(id);
             if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { } tab && IsWeb(tab.Url) && tab.Url is not (Settings.DefaultHomePage or QuickNotes.PageUrl)) FetchStartIcon(tab.Url);
             Refresh();
-            if (_tabs.Tabs.Any(t => t.Url == Settings.DefaultHomePage && !_pages.IsAsleep(t.Id))) LoadStartPreviews();
         };
         _pages.FaviconChanged += (id, data) =>
         {
@@ -205,7 +202,6 @@ public sealed partial class BrowserController
             _ai.Dispose();
             _pages.StopSpelling();
             _capture.Cancel();
-            _startPreviewCancel.Cancel();
             _sessionSave.Stop();
             HidePopup(); // terminer les demandes de permission encore en attente
             SaveSession();

@@ -10,7 +10,7 @@
 }
 
 /* Même retour sur les tuiles de la page d'accueil et les commandes de capture. */
-:where(.start-site, .start-preview, .start-history button, .start-groups button, .capture-options button):active:not(:disabled) {
+:where(.start-site, .start-history button, .start-groups button, .capture-options button):active:not(:disabled) {
   transform: scale(0.97);
   transition: transform 120ms var(--ease-out);
 }

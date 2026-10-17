@@ -16,9 +16,8 @@ Les anciens choix par site ne sont plus appliqués ; leurs fichiers ne sont pas 
 | Suppression d’une session | Refusée tant qu’un onglet l’utilise ; retire aussi ses onglets de la pile de réouverture. |
 | Identité restaurée devenue introuvable | Ouvre l’accueil plutôt que le site avec les connexions d’un autre compte. |
 
-Après l’affichage de la page active, Sol prépare progressivement les épingles et raccourcis
-restaurés dans leurs sessions respectives. Leur premier clic réutilise la page chargée.
-Les onglets ordinaires restent endormis ; les pages de connexion ne sont pas préchargées.
+Au redémarrage, seuls les onglets affichés sont chargés. Les épingles, raccourcis et onglets
+restaurés en arrière-plan restent endormis jusqu’à leur premier clic, dans leur session sauvegardée.
 
 ## Autorisations des sites
 
@@ -68,8 +67,12 @@ et de leurs services externes n’est pas garantie.
 - `dotnet test tests/Browser.Core.Tests -c Release --no-restore`
 - `node tools/check-extension-activation.mjs` : action native avec `activeTab`, menus contextuels,
   popup, panneau, onglet actif et erreur signalée dans Sol.
-- `node tools/check-restored-pins.mjs` : préparation des accès rapides après ouverture et
-  redémarrage, premier clic sans nouvelle navigation, onglets ordinaires endormis.
+- `node tools/check-restored-pins.mjs` : aucun chargement des épingles ou raccourcis en arrière-plan
+  après ouverture et redémarrage ; chargement uniquement au premier clic.
+- `node tools/check-download-reappearance.mjs` : encart natif réaffiché pour chaque téléchargement
+  successif, même quand sa taille ne change pas ; réglage d’activation respecté.
+- `node tools/check-start-favorites.mjs` : quatre rangées de favoris, affichage complet et vue étroite,
+  sans sites fréquents ni vues cachées pour leurs aperçus.
 - `node tools/check-permission-persistence.mjs` : caméra/micro simulés, redémarrage, révocation
   native, refus persistants, demandes simultanées et isolation des sessions.
 - `node tools/check-session-inheritance.mjs` : sessions A/B/C, cookies et stockage d’extension

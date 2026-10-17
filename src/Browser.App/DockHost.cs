@@ -21,7 +21,13 @@ public sealed class DockHost(Grid frame, WebView2 view, UiBridge bridge, Func<Ta
     public void Post(string json)
     {
         _last = json;
-        if (_started) { bridge.Post(json); return; }
+        if (_started)
+        {
+            bridge.Post(json);
+            // Une nouvelle carte de même hauteur ne déclenche pas forcément le ResizeObserver.
+            if (!Visible && _requestedWidth > 0 && _requestedHeight > 0) SetSize(_requestedWidth, _requestedHeight);
+            return;
+        }
         _started = true;
         _ = init(); // l'encart demandera son contenu une fois prêt (voir Ready)
     }
@@ -46,10 +52,15 @@ public sealed class DockHost(Grid frame, WebView2 view, UiBridge bridge, Func<Ta
         var maxHeight = Math.Max(44, Math.Min(420, (parent?.ActualHeight ?? 500) - frame.Margin.Top - frame.Margin.Bottom - 52 * factor));
         frame.Width = Math.Clamp(width, 44, maxWidth);
         frame.Height = Math.Clamp(height, 44, maxHeight);
+        if (!Visible) DebugLog.Write("dock.shown");
         frame.Visibility = Visibility.Visible;
         frame.UpdateLayout();
         CornerClip.Set(view, 16 * (float)(UiBridge.Settings?.UiFactor ?? 0.92)); // beUI Card rounded-2xl.
     }
 
-    public void Hide() => frame.Visibility = Visibility.Collapsed;
+    public void Hide()
+    {
+        if (Visible) DebugLog.Write("dock.hidden");
+        frame.Visibility = Visibility.Collapsed;
+    }
 }

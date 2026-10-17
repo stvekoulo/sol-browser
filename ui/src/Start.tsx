@@ -5,7 +5,7 @@ import { setLang, t, useLang } from './i18n';
 
 import './Start.css';
 
-type Site = { url: string; title: string; last?: number; icon?: string; preview?: string; previewFailed?: boolean };
+type Site = { url: string; title: string; last?: number; icon?: string };
 type StartData = {
   event: 'start';
   privateMode: boolean;
@@ -13,7 +13,6 @@ type StartData = {
   wallpaperPhoto?: boolean;
   lang: string;
   favorites: Site[];
-  frequent: Site[];
   history: Site[];
   groups: { id: string; name: string; color: string; count: number }[];
 };
@@ -24,7 +23,6 @@ const empty: StartData = {
   wallpaper: false,
   lang: '',
   favorites: [],
-  frequent: [],
   history: [],
   groups: [],
 };
@@ -86,7 +84,7 @@ function HistoryIcon({ site }: { site: Site }) {
 export default function Start() {
   const [data, setData] = useState(empty);
   const [photo, setPhoto] = useState<{ url: string; author?: string; page?: string }>({ url: '' });
-  // Favoris : deux rangées, puis « Voir tout ». Le nombre de colonnes suit la largeur de la page.
+  // Favoris : quatre rangées, puis « Voir tout ». Le nombre de colonnes suit la largeur de la page.
   const [allFavorites, setAllFavorites] = useState(false);
   const [columns, setColumns] = useState(9);
   const favoritesGrid = useRef<HTMLDivElement>(null);
@@ -99,7 +97,7 @@ export default function Start() {
     measure();
     return () => observer.disconnect();
   }, []);
-  const shownFirst = columns * 2;
+  const shownFirst = columns * 4;
   const favorites = allFavorites ? data.favorites : data.favorites.slice(0, shownFirst);
 
   useLang();
@@ -168,49 +166,6 @@ export default function Start() {
           {!data.favorites.length && (
             <p className="start-empty">
               {t('Ajoutez vos sites préférés avec l’étoile de la barre d’adresse.', 'Save your favorite sites with the star in the address bar.')}
-            </p>
-          )}
-        </section>
-
-        <section className="start-section">
-          <h2>{t('Fréquemment consultés', 'Frequently visited')}</h2>
-          <div className="start-frequent">
-            {data.frequent.map(site => {
-              const domain = formatDomain(site.url);
-              const letter = (domain || site.title || '?').slice(0, 1).toUpperCase();
-              return (
-                <button
-                  className="start-preview"
-                  key={site.url}
-                  title={site.title || site.url}
-                  onClick={() => open(site.url)}
-                >
-                  <span className="start-preview-image">
-                    {site.preview ? (
-                      <img src={site.preview} alt="" draggable={false} />
-                    ) : (
-                      <span className="start-preview-placeholder">
-                        <span className="start-preview-pedestal" aria-hidden>
-                          <span className="start-preview-badge" style={{ background: tileBackground(domain) }}>
-                            {letter}
-                          </span>
-                        </span>
-                        <span className="start-preview-status">
-                          {site.previewFailed ? t('Aperçu indisponible', 'Preview unavailable') : t('Aperçu en cours…', 'Loading preview…')}
-                        </span>
-                      </span>
-                    )}
-                  </span>
-                  <span className="start-preview-domain">{domain}</span>
-                </button>
-              );
-            })}
-          </div>
-          {!data.frequent.length && (
-            <p className="start-empty">
-              {data.privateMode
-                ? t('Indisponible en navigation privée.', 'Unavailable in private browsing.')
-                : t('Vos sites les plus consultés apparaîtront ici.', 'Your most visited sites will appear here.')}
             </p>
           )}
         </section>

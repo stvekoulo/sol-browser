@@ -33,7 +33,6 @@ await writeFile(resolve(host.profile,'extension-state.json'),JSON.stringify({[ac
 try{
   const ui=await host.launch();
   const command=object=>ui.evaluate(`chrome.webview.postMessage(${JSON.stringify(JSON.stringify(object))})`);
-  for(const path of ['/0','/1']){const pin=await host.connect(host.origin+path);await host.wait(()=>pin.evaluate('document.readyState==="complete"'),'restored pin ready');}
   await command({type:'extensions.menu',x:600,y:100});
   const popup=await host.connect('#popup');
   await host.wait(()=>popup.evaluate('document.body.textContent.includes("Action fixture")'),'action-only extension appears in toolbar menu');
