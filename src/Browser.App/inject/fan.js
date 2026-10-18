@@ -14,8 +14,16 @@
 
   /* ── la géométrie du bloc ─────────────────────────────────
      Les boutons suivent le contour de l'élément décalé d'un écart constant : le long du bord haut, autour du coin
-     sur un arc concentrique, puis le long du bord droit. Aucun ressort ni animation JavaScript. */
+     sur un arc concentrique, puis le long du bord droit. Le ressort d'origine est exécuté par le navigateur. */
   const DOT = 32, R = DOT / 2, SPACING = DOT + 10, GAP = 10;
+  const spring = [0];
+  let springValue = 0, springVelocity = 0;
+  for (let step = 0; step < 180; step++) {
+    springVelocity = (springVelocity + (1 - springValue) * .11) * .66; springValue += springVelocity;
+    if (Math.abs(1 - springValue) < .002 && Math.abs(springVelocity) < .002) break;
+    spring.push(springValue);
+  }
+  spring.push(1);
   const ride = (s, corner, off) => {
     const arc = Math.max(0.001, corner + off), len = (arc * Math.PI) / 2;
     if (s <= 0) return { x: -corner + s, y: -off };
@@ -105,6 +113,24 @@
 
   /* Une seule vue réutilisée par page. La géométrie ne se recalcule que quand elle change. */
   let current = null, frame = 0, selectionFrame = 0, hideTimer = 0;
+  let motions = [], motionEpoch = 0;
+  const animateFan = (on, target) => {
+    const epoch = ++motionEpoch, still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const deep = (target.corner >= R + 2 ? target.corner * Math.SQRT2 : Math.max(R * Math.SQRT2 + 2, target.corner * Math.SQRT2 + target.corner + 2)) / Math.SQRT2;
+    const starts = buttons.map(button => new DOMMatrix(getComputedStyle(button).transform));
+    motions.forEach(animation => animation.cancel());
+    motions = buttons.slice(0, target.actions.length).map((button, index) => {
+      button.style.pointerEvents = on ? 'auto' : 'none'; button.tabIndex = on ? 0 : -1;
+      if (still) { button.style.transform = 'none'; button.hidden = !on; return null; }
+      const tucked = { x: -deep - target.spots[index].x, y: deep - target.spots[index].y, scale: .82 };
+      const from = on ? tucked : { x: starts[index].e, y: starts[index].f, scale: starts[index].a };
+      const to = on ? { x: 0, y: 0, scale: 1 } : tucked;
+      return button.animate(spring.map(u => ({ transform: `translate(${from.x + (to.x - from.x) * u}px,${from.y + (to.y - from.y) * u}px) scale(${from.scale + (to.scale - from.scale) * Math.min(u, 1)})` })), {
+        duration: (spring.length - 1) * 16.67, delay: (on ? index : target.actions.length - 1 - index) * 45, easing: 'linear', fill: 'both',
+      });
+    }).filter(Boolean);
+    if (!on) Promise.all(motions.map(animation => animation.finished)).then(() => { if (epoch === motionEpoch) buttons.forEach(button => { button.hidden = true; }); }).catch(() => {});
+  };
   let dismissed = false;
   const clearDismissal = () => { dismissed = false; removeEventListener('pointermove', resumePointer, true); };
   const resumePointer = e => {
@@ -138,19 +164,21 @@
     const off = GAP + R, mid = (corner + off) * Math.PI / 4;
     const spots = actions.map((_, i) => ride(mid + (i - (actions.length - 1) / 2) * SPACING, corner, off));
     const bounds = spots.reduce((b, s) => ({ l: Math.min(b.l, s.x - R - 6), r: Math.max(b.r, s.x + R + 6), t: Math.min(b.t, s.y - R - 6), b: Math.max(b.b, s.y + R + 6) }), { l: 0, r: 0, t: 0, b: 0 });
-    current = { ...target, actions, spots, bounds };
+    current = { ...target, actions, spots, bounds, corner };
     current.actions.forEach(([id, label], i) => {
       const b = buttons[i]; b.hidden = false; b.title = label; b.setAttribute('aria-label', label);
       if (b.dataset.action !== id) { b.replaceChildren(icon(id)); b.dataset.action = id; }
       b.dataset.i = String(i);
     });
     buttons.slice(current.actions.length).forEach(b => (b.hidden = true));
-    pad.classList.add('on'); place();
+    pad.classList.add('on'); place(); if (current) animateFan(true, current);
   };
   const hide = () => {
     clearTimeout(hideTimer); cancelAnimationFrame(frame); cancelAnimationFrame(selectionFrame);
-    frame = selectionFrame = hideTimer = 0; current = null;
-    pad?.classList.remove('on'); buttons.forEach(b => { b.hidden = true; });
+    frame = selectionFrame = hideTimer = 0;
+    pad?.classList.remove('on');
+    if (current) animateFan(false, current);
+    current = null;
   };
   const leave = () => { if (current && !hideTimer) hideTimer = setTimeout(() => { hideTimer = 0; hide(); }, 180); };
 

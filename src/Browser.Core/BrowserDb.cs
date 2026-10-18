@@ -5,7 +5,7 @@ namespace Browser.Core;
 public sealed record Visit(string Url, string Title, int Count, DateTimeOffset Last);
 public sealed record Bookmark(string Url, string Title);
 
-public sealed class BrowserDb : IDisposable
+public sealed partial class BrowserDb : IDisposable
 {
     private readonly SqliteConnection _db;
 
@@ -18,6 +18,8 @@ public sealed class BrowserDb : IDisposable
                 url TEXT PRIMARY KEY, title TEXT NOT NULL, count INTEGER NOT NULL, last INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS bookmarks (
                 url TEXT PRIMARY KEY, title TEXT NOT NULL, added INTEGER NOT NULL);
+            CREATE TABLE IF NOT EXISTS site_icons (
+                domain TEXT PRIMARY KEY, icon TEXT, checked INTEGER NOT NULL);
             """);
     }
 
@@ -89,9 +91,9 @@ public sealed class BrowserDb : IDisposable
         return cmd.ExecuteScalar() is not null;
     }
 
-    public IReadOnlyList<Bookmark> Bookmarks()
+    public IReadOnlyList<Bookmark> Bookmarks(int limit = int.MaxValue)
     {
-        using var cmd = Command("SELECT url, title FROM bookmarks ORDER BY added");
+        using var cmd = Command("SELECT url, title FROM bookmarks ORDER BY added LIMIT $limit", ("$limit", Math.Max(0, limit)));
         using var r = cmd.ExecuteReader();
         var list = new List<Bookmark>();
         while (r.Read()) list.Add(new Bookmark(r.GetString(0), r.GetString(1)));

@@ -120,12 +120,7 @@ public sealed partial class BrowserController
             if (_closingWindow) return;
             if (command.Type == "start.ready")
             {
-                _bridge.BroadcastTheme();
-                _pages.PostStart(id, _startPosted[id] = StartJson(_pages.IsPrivate(id)));
-                _ = PostStartWallpaperAsync(id);
-                foreach (var url in _db.Bookmarks().Select(b => b.Url).Take(48)) FetchStartIcon(url);
-                if (!_pages.IsPrivate(id))
-                    foreach (var url in _db.RecentHistory(12).Select(v => v.Url).Concat(CategoryViews().SelectMany(c => c.Links.Take(8)).Select(l => l.Url))) FetchStartIcon(url);
+                StartReady(id);
             }
             else if (command.Type == "start.navigate") _pages.Navigate(id, Resolve(command.Input!));
             else if (command.Type == "start.favorites") _ = FetchFavoriteIconsAsync();

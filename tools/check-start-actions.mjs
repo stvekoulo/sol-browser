@@ -58,6 +58,7 @@ try {
     const before=await ui.evaluate('window.__sidebarState.tabs.length');
     await page.call('Input.dispatchMouseEvent',{type:'mouseMoved',x:tile.x,y:tile.y});
     await host.wait(()=>page.evaluate('document.querySelectorAll(".nod-act").length===3'),'hover actions');
+    await host.wait(()=>page.evaluate('[...document.querySelectorAll(".nod-act")].every(b=>b.getAnimations().every(a=>a.playState!=="running"&&!a.pending))'),'original spring settled');
     assert(await page.evaluate('[...document.querySelectorAll(".nod-act")].every(b=>b.tabIndex===0&&getComputedStyle(b).visibility==="visible")'),'all actions are clickable together immediately');
     const opened=await page.evaluate(`(()=>{const b=document.querySelector('.nod-act');const r=b.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`);
     await page.call('Input.dispatchMouseEvent',{type:'mouseMoved',x:opened.x,y:opened.y});

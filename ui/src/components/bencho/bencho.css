@@ -118,7 +118,7 @@
   font-family: var(--font-ui);}
 
 /* Sol : la carte survolée passe devant ses voisines, sinon la suivante dans la grille couvrirait l'éventail. */
-.nod:hover, .nod:focus-within { z-index: 3; }
+.nod:hover, .nod:focus-within, .nod[data-mounted] { z-index: 3; }
 
 /* ── the card is painted OVER the fan ──────────────────────
    Which is what makes the buttons come out of the corner
