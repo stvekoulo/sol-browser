@@ -161,6 +161,7 @@ public sealed partial class BrowserController
         HidePopup();
         _settingsOpen = true;
         _popup.Show(x - Scaled(width), y, width, SettingsJson(), focus: true);
+        _ = LoadAiModelsAsync();
     }
 
     private static readonly string[] Themes = ["page", "light", "dark", "system"];

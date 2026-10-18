@@ -4,7 +4,7 @@ import SolSelect from './SolSelect';
 import { aiError, usagePage } from './solAiMessages';
 import { ThinkingShimmer } from '@/components/agents/loading-states/thinking-shimmer';
 
-export type SolAiState = { connected:boolean; ready:boolean; email:string; signingIn:boolean; error:string|null; isPrivate:boolean; tone:number; length:number; categories:boolean; categorizing:boolean; categoriesError:string|null; categoriesUpdated:number|null };
+export type SolAiState = { connected:boolean; ready:boolean; email:string; signingIn:boolean; error:string|null; isPrivate:boolean; tone:number; length:number; categories:boolean; categorizing:boolean; categoriesError:string|null; categoriesUpdated:number|null; categoriesClassified:number; categoriesPending:number; categoriesBudget:number; models:{slug:string;name:string}[]; model:string };
 
 // Compte ChatGPT de Sol AI, suivant les règles d’interface d’OpenAI : bouton « Continuer avec ChatGPT », badge « Connecté »,
 // mention du forfait utilisé et lien « Gérer l’usage ».
@@ -28,13 +28,20 @@ export default function SolAiAccount({ ai }: { ai: SolAiState }) {
     {ai.ready && <>
       <button className="setting-row" role="switch" aria-checked={ai.categories} onClick={()=>send({type:'settings.set',id:'aiCategories',index:ai.categories?0:1})}>
         <span className="setting-text"><span className="row-title">{t('Classer mes favoris et mon historique','Sort my bookmarks and history')}</span>
-          <span className="row-sub">{t('Une fois par jour, Sol AI range vos sites par catégorie sur la page d’accueil. Le titre et le domaine de vos favoris et pages visitées sont alors envoyés à OpenAI, jamais les adresses complètes.','Once a day, Sol AI sorts your sites into categories on the start page. The title and domain of your bookmarks and visited pages are sent to OpenAI, never full addresses.')}</span></span>
+          <span className="row-sub">{t('Sol AI range vos sites par catégorie sur la page d’accueil. Une grande bibliothèque est classée par lots sur quelques jours, puis seuls les nouveaux sites sont envoyés. Seuls le domaine et un titre partent chez OpenAI, jamais les adresses complètes.','Sol AI sorts your sites into categories on the start page. A large library is sorted in batches over a few days, then only new sites are sent. Only the domain and a title go to OpenAI, never full addresses.')}</span></span>
         <span className={`switch${ai.categories?' on':''}`} aria-hidden="true"/>
       </button>
-      {ai.categories && <div className="ai-toolbar"><span className="row-hint" role="status">{ai.categorizing ? <ThinkingShimmer>{t('Classement en cours…','Sorting…')}</ThinkingShimmer>
+      {ai.categories && <div className="ai-toolbar"><span className="row-hint" role="status">{ai.categorizing ? <ThinkingShimmer>{t(`Classement en cours… ${ai.categoriesClassified.toLocaleString('fr')} / ${(ai.categoriesClassified+ai.categoriesPending).toLocaleString('fr')} sites`,`Sorting… ${ai.categoriesClassified.toLocaleString('en')} / ${(ai.categoriesClassified+ai.categoriesPending).toLocaleString('en')} sites`)}</ThinkingShimmer>
           : ai.categoriesError ? (ai.categoriesError==='categories-empty' ? t('Aucune catégorie n’a pu être établie.','No categories could be made.') : aiError(ai.categoriesError))
-          : ai.categoriesUpdated ? t(`Dernier classement : ${new Date(ai.categoriesUpdated).toLocaleString('fr')}`,`Last sorted: ${new Date(ai.categoriesUpdated).toLocaleString('en')}`) : t('Premier classement en préparation.','First sort pending.')}</span>
+          : ai.categoriesPending > 0 ? t(`${ai.categoriesClassified.toLocaleString('fr')} sites classés, ${ai.categoriesPending.toLocaleString('fr')} restants. ${ai.categoriesBudget > 0 ? 'La suite se fait dans l’heure.' : 'La suite reprend demain.'}`,
+              `${ai.categoriesClassified.toLocaleString('en')} sites sorted, ${ai.categoriesPending.toLocaleString('en')} left. ${ai.categoriesBudget > 0 ? 'More within the hour.' : 'Resumes tomorrow.'}`)
+          : ai.categoriesUpdated ? t(`${ai.categoriesClassified.toLocaleString('fr')} sites classés. Dernier lot : ${new Date(ai.categoriesUpdated).toLocaleString('fr')}`,`${ai.categoriesClassified.toLocaleString('en')} sites sorted. Last batch: ${new Date(ai.categoriesUpdated).toLocaleString('en')}`) : t('Premier classement en préparation.','First sort pending.')}</span>
         <button className="pill-action" disabled={ai.categorizing} onClick={()=>send({type:'ai.categorize'})}>{t('Classer maintenant','Sort now')}</button></div>}
+      <div className="theme-row"><span className="row-title">{t('Modèle','Model')}</span>
+        {ai.models.length ? <SolSelect id="ai-model" label={t('Modèle ChatGPT de Sol AI','Sol AI ChatGPT model')} value={Math.max(0, ai.models.findIndex(m=>m.slug===ai.model)+1)}
+            options={[t('Automatique (recommandé)','Automatic (recommended)'), ...ai.models.map(m=>m.name)]} onChange={index=>send({type:'settings.set',id:'aiModel',index})}/>
+          : <span className="row-hint">{t('Chargement des modèles de votre compte…','Loading your account’s models…')}</span>}
+        <p className="row-hint">{t('Les modèles proposés dépendent de votre abonnement ChatGPT. « Automatique » utilise le modèle recommandé par OpenAI pour votre compte.','Available models depend on your ChatGPT subscription. “Automatic” uses the model OpenAI recommends for your account.')}</p></div>
       <div className="theme-row"><span className="row-title">{t('Ton','Tone')}</span><SolSelect id="ai-tone" label={t('Ton de Sol AI','Sol AI tone')} value={ai.tone} options={[t('Naturel','Natural'),t('Amical','Friendly'),t('Professionnel','Professional')]} onChange={index=>send({type:'settings.set',id:'aiTone',index})}/></div>
       <div className="theme-row"><span className="row-title">{t('Réponses','Responses')}</span><SolSelect id="ai-length" label={t('Longueur des réponses','Response length')} value={ai.length} options={[t('Équilibrées','Balanced'),t('Courtes','Short'),t('Détaillées','Detailed')]} onChange={index=>send({type:'settings.set',id:'aiLength',index})}/></div>
     </>}

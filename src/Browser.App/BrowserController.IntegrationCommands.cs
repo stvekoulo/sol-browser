@@ -14,6 +14,14 @@ public sealed partial class BrowserController
         switch (c.Type)
         {
             case "settings.set":
+                if (id == "aiModel")
+                {
+                    // 0 : automatique ; n : n-ième modèle de la liste proposée au compte.
+                    var models = _chatGpt.Models;
+                    if (c.Index is not { } choice || choice < 0 || choice > models.Count) return true;
+                    _settings.SolAiChatModel = _chatGpt.PreferredModel = choice == 0 ? "" : models[choice - 1].Slug;
+                    JsonFileStore.Save(AppPaths.Settings, _settings); PublishAiSettings(); return true;
+                }
                 if (id == "aiCategories") { if (c.Index is 0 or 1) SetAiCategories(c.Index == 1); return true; }
                 if (id is "aiTone" or "aiLength")
                 {

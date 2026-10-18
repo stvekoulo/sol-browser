@@ -146,7 +146,19 @@ public sealed partial class BrowserController
         connected = !PrivateActive && _chatGpt.Tokens != null, ready = AiReady, email = PrivateActive ? "" : _chatGpt.Tokens?.Email ?? "",
         signingIn = !PrivateActive && _chatGpt.SigningIn, error = PrivateActive ? null : _chatGpt.Error, isPrivate = PrivateActive,
         tone = _settings.SolAiTone, length = _settings.SolAiLength,
+        models = _chatGpt.Models.Select(m => new { slug = m.Slug, name = m.Name }), model = _settings.SolAiChatModel,
         categories = _settings.SolAiCategories, categorizing = _categorizing, categoriesError = _categoriesError,
-        categoriesUpdated = _categories.Categories.Length > 0 ? _categories.UpdatedAt.ToUnixTimeMilliseconds() : (long?)null,
+        categoriesUpdated = _categories.Names.Length > 0 ? _categories.UpdatedAt.ToUnixTimeMilliseconds() : (long?)null,
+        categoriesClassified = _categoriesProgress.Classified, categoriesPending = _categoriesProgress.Pending, categoriesBudget = _categoriesProgress.Budget,
     };
+
+    // Liste des modèles du compte, chargée à l'ouverture des paramètres.
+    private async Task LoadAiModelsAsync()
+    {
+        if (!AiReady || _chatGpt.Models.Count > 0) return;
+        try { await _chatGpt.LoadModelsAsync(CancellationToken.None); }
+        catch (Exception e) when (e is ChatGptException or HttpRequestException or IOException or System.Text.Json.JsonException or TaskCanceledException)
+        { DebugLog.Write("chatgpt.models " + e.GetType().Name); }
+        PublishAiSettings();
+    }
 }

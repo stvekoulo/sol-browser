@@ -138,12 +138,16 @@ public static class ChatGptOAuth
     }
 
     // Premier modèle listé pour ce compte, dans l'ordre du serveur.
-    public static string? FirstModel(string json)
+    public static string? FirstModel(string json) => Models(json).Select(m => m.Slug).FirstOrDefault();
+
+    // Modèles proposés à ce compte, dans l'ordre du serveur, avec leur nom affiché.
+    public static IReadOnlyList<(string Slug, string Name)> Models(string json)
     {
         using var data = JsonDocument.Parse(json);
         return data.RootElement.GetProperty("models").EnumerateArray()
-            .Where(m => m.TryGetProperty("visibility", out var v) && v.GetString() == "list")
-            .Select(m => m.GetProperty("slug").GetString()).FirstOrDefault(s => !string.IsNullOrEmpty(s));
+            .Where(m => m.TryGetProperty("visibility", out var v) && v.GetString() == "list" && m.TryGetProperty("slug", out var s) && s.GetString() is { Length: > 0 })
+            .Select(m => (m.GetProperty("slug").GetString()!, m.TryGetProperty("display_name", out var d) && d.GetString() is { Length: > 0 } name ? name : m.GetProperty("slug").GetString()!))
+            .ToList();
     }
 
     public static string Base64Url(byte[] bytes) => Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
