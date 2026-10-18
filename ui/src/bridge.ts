@@ -150,6 +150,7 @@ export type HostEvent = {
   systemDark?: boolean; // thème de Windows, lu par l'hôte
   privateMode?: boolean;
   uiScale?: number;
+  fan?: { enabled: boolean; trigger: number };
   tint?: { topbar: boolean; sidebar: boolean; menus: boolean; background: boolean };
 };
 

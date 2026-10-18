@@ -190,3 +190,5 @@
 @media (prefers-reduced-motion: reduce) {
   .nod-card, .nod-act { transition: none; }
 }
+
+.nod-inline-slot{min-height:48px}

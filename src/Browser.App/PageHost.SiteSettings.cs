@@ -49,10 +49,16 @@ public sealed partial class PageHost
             try { await ApplySettingsAsync(id, core); }
             catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { /* vue fermée entre-temps */ }
         }
+        foreach (var mirror in _sims.Values.SelectMany(sims => sims.Skip(1)).Select(sim => sim.View.CoreWebView2).OfType<CoreWebView2>().ToArray())
+        {
+            try { await ConfigureFanAsync(mirror); }
+            catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { }
+        }
     }
 
     private async Task ApplySettingsAsync(string id, CoreWebView2 core)
     {
+        await ConfigureFanAsync(core);
         StartSpelling();
         if (!settings.MemorySaver) Wake(id, core);
         else if (_hiddenSince.ContainsKey(id) && !core.IsSuspended) core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low;
@@ -140,10 +146,14 @@ public sealed partial class PageHost
     }
 
     // Une page web est non fiable : aucun objet hôte, aucune permission ; seuls les messages filtrés sont acceptés.
-    private void Harden(CoreWebView2 core)
+    private async Task Harden(CoreWebView2 core)
     {
         var s = core.Settings;
         s.AreHostObjectsAllowed = false;
+        NativeDownloadUi.Suppress(core, () => NativeDownloadsRequested?.Invoke(), disableAccelerators: false);
+        var downloadSignal = System.Text.Json.JsonSerializer.Serialize("sol.downloads:" + FanKey);
+        await core.AddScriptToExecuteOnDocumentCreatedAsync("(() => { const post=chrome.webview.postMessage.bind(chrome.webview); addEventListener('keydown',e=>{if(e.isTrusted&&e.ctrlKey&&!e.altKey&&!e.shiftKey&&e.code==='KeyJ'){e.preventDefault();e.stopImmediatePropagation();post(" + downloadSignal + ");}},true); })()");
+        core.WebMessageReceived += (_, e) => { if (e.Source == core.Source && e.WebMessageAsJson == downloadSignal) NativeDownloadsRequested?.Invoke(); };
         s.IsWebMessageEnabled = true;
         // Mots de passe : gestionnaire du moteur (proposition d'enregistrement, stockage chiffré, remplissage).
         s.IsPasswordAutosaveEnabled = settings.SavePasswords && !AppPaths.Private && !PrivateBrowsing.IsProfile(core.Profile.ProfileName);
@@ -153,7 +163,8 @@ public sealed partial class PageHost
         s.HiddenPdfToolbarItems = CoreWebView2PdfToolbarItems.None; // recherche, pages, rotation, impression et enregistrement natifs
         _ = core.AddScriptToExecuteOnDocumentCreatedAsync(SidewaysScript);
         _ = core.AddScriptToExecuteOnDocumentCreatedAsync("document.addEventListener('pointerdown',e=>{if(e.isTrusted)window.chrome.webview.postMessage('sol.page.pointer')},true)");
-        _ = core.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "fan.js")).Replace("__SOL_FAN_KEY__", FanKey));
+        await ConfigureFanAsync(core);
+        core.DOMContentLoaded += (_, _) => PostFanSettings(core);
         _ = core.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "video-cursor.js")));
         // Mémorise la sélection au clic droit pour Sol AI ; sans effet tant que l'utilisateur n'agit pas.
         _ = core.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "ai.js")));

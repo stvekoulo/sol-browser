@@ -14,7 +14,7 @@ public sealed partial class PageHost
         {
             using var data = JsonDocument.Parse(json);
             var root = data.RootElement;
-            if (root.GetProperty("key").GetString() != FanKey || view.XamlRoot is null) return;
+            if (!settings.FanEnabled || root.GetProperty("key").GetString() != FanKey || view.XamlRoot is null) return;
             var kind = root.GetProperty("kind").GetString() ?? "";
             var action = root.GetProperty("action").GetString() ?? "";
             var value = root.GetProperty("value").GetString() ?? "";

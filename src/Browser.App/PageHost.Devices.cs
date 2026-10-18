@@ -161,7 +161,7 @@ public sealed partial class PageHost
         if (main.CoreWebView2 is not { } source) return false;
         await StartEngineAsync(view, source.Profile.ProfileName);
         if (view.CoreWebView2 is not { } core) return false;
-        Harden(core);
+        await Harden(core);
         core.Settings.AreDefaultContextMenusEnabled = false;
         core.Settings.IsStatusBarEnabled = false;
         core.NewWindowRequested += (sender, e) => _ = OpenWindowAsync(id, e);

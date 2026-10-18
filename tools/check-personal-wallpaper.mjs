@@ -1,0 +1,50 @@
+import assert from 'node:assert/strict';
+import {access,readFile,writeFile} from 'node:fs/promises';
+import {resolve} from 'node:path';
+import {sidebarHost} from './sidebar-check-host.mjs';
+
+const url='https://start.sol/index.html#start';
+const host=await sidebarHost('src/Browser.App/bin/x64/Release/net10.0-windows10.0.19041.0/win-x64/Sol.exe',{visible:true});
+await writeFile(resolve(host.profile,'session.json'),JSON.stringify({Urls:[host.origin+'/2'],ActiveIndex:0}));
+let ui,page;
+try {
+  ui=await host.launch(820,1180);
+  const command=c=>ui.evaluate(`chrome.webview.postMessage(${JSON.stringify(JSON.stringify(c))})`);
+  page=await host.connect(host.origin+'/2');
+  // Ctrl+J injecté dans la vue de contenu doit ouvrir Sol, même sans interception du raccourci par Windows.
+  await page.call('Input.dispatchKeyEvent',{type:'keyDown',key:'j',code:'KeyJ',windowsVirtualKeyCode:74,modifiers:2});
+  await page.call('Input.dispatchKeyEvent',{type:'keyUp',key:'j',code:'KeyJ',windowsVirtualKeyCode:74,modifiers:2});
+  const popup=await host.connect('#popup');
+  await host.wait(()=>popup.evaluate('document.querySelector(".popup-header-title")?.textContent==="Downloads"||document.querySelector(".popup-header-title")?.textContent==="Téléchargements"'),'Sol downloads via content shortcut');
+  await command({type:'popup.close'});
+  console.log(JSON.stringify({stage:'WINDOWS_CTRL_J',profile:host.profile,base:host.base}));
+  if(!process.argv.includes('--picker-only'))await host.wait(()=>access(resolve(host.base,'native-key.checked')).then(()=>true).catch(()=>false),'Windows keyboard verification',180000);
+  await command({type:'popup.close'});
+  await command({type:'tab.open',url});page=await host.connect(url);
+  await host.wait(()=>page.evaluate('!!document.querySelector(".start-content")'),'start');
+  const input=resolve(host.profile,'test-personal-photo.png');
+  const original=Buffer.from((await page.call('Page.captureScreenshot',{format:'png'})).data,'base64');
+  await writeFile(input,original);
+  await command({type:'settings.set',id:'startWallpaper',index:1});
+  await command({type:'settings.open',x:650,y:100});
+  await host.wait(()=>popup.evaluate('!!document.querySelector(".settings-popup")'),'settings');
+  await popup.evaluate(`document.querySelector('[data-tabs-value="appearance"]').click()`);
+  await host.wait(()=>popup.evaluate(`[...document.querySelectorAll('button')].some(b=>/Choisir ma photo|Choose my photo/.test(b.textContent)&&b.offsetParent)`),'personal photo button');
+  await popup.evaluate(`[...document.querySelectorAll('button')].find(b=>/Choisir ma photo|Choose my photo/.test(b.textContent)).click()`);
+  console.log(JSON.stringify({stage:'PICK_IMAGE',input,profile:host.profile,base:host.base}));
+  await host.wait(()=>access(resolve(host.profile,'wallpaper.jpg')).then(()=>true).catch(()=>false),'personal image chosen in Windows picker',180000);
+  await host.wait(async()=>JSON.parse(await readFile(resolve(host.profile,'settings.json'),'utf8')).StartWallpaperCustom===true,'personal wallpaper saved');
+  await command({type:'popup.close'});
+  await host.wait(()=>page.evaluate('document.body.style.backgroundImage.includes("data:image/jpeg;base64,")'),'personal photo displayed');
+  assert.deepEqual(await readFile(input),original,'original photo stays unchanged');
+  const image=await page.evaluate(`new Promise(resolve=>{const url=document.body.style.backgroundImage.match(new RegExp('data:image/jpeg;base64,[A-Za-z0-9+/=]+'))[0];const image=new Image();image.onload=()=>resolve({width:image.naturalWidth,height:image.naturalHeight});image.src=url})`);
+  assert(image.width<=2560&&image.height<=2560);
+  await writeFile(resolve(host.base,'personal-wallpaper.png'),Buffer.from((await page.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+  await host.close(ui);ui=await host.launch();page=await host.connect(url);
+  await host.wait(()=>page.evaluate('document.body.style.backgroundImage.includes("data:image/jpeg;base64,")'),'photo restored after restart');
+  await command({type:'settings.set',id:'wallpaper',index:0});
+  await host.wait(()=>page.evaluate('!document.body.style.backgroundImage'),'back to built-in image');
+  assert.equal(JSON.parse(await readFile(resolve(host.profile,'settings.json'),'utf8')).StartWallpaperCustom,false);
+  await host.close(ui);
+  console.log('PASS Sol downloads shortcut, native image picker, local copy, unchanged original, image restored at restart, reset; '+host.base);
+} finally {await host.dispose();await assert.rejects(access(host.profile));}

@@ -174,6 +174,7 @@ public sealed partial class BrowserController
                 _bridge.Post(JsonSerializer.Serialize(new { @event = "status", text }));
         };
         _pages.DownloadStarting += OnDownloadStarting;
+        _pages.NativeDownloadsRequested += () => { if (!_downloadsOpen) OpenDownloads(Scaled(440), Scaled(640)); };
         _pages.PermissionRequested += OnPermissionRequested;
         _pages.Navigating += core => { if (_asking is { } pending && pending.Core == core) HidePopup(); };
         _window.AppWindow.Changed += (_, e) => { if (e.DidPresenterChange || e.DidSizeChange) { _popup.Rescale(); if (_paletteItems is not null) _popup.Post(PaletteJson()); Refresh(); } };

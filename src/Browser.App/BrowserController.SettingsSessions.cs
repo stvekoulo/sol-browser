@@ -137,6 +137,7 @@ public sealed partial class BrowserController
                 _window.SetBrowserFullScreen(on, maximize: !on);
                 break;
             case "pip": _settings.AutoPip = on; if (!on) _pages.ExitPip(); break;
+            case "fanEnabled": _settings.FanEnabled = on; break;
             case "memory": _settings.MemorySaver = on; break;
             case "scrollbars": _settings.HideScrollbars = !on; break;
             case "blur": _settings.BlurEnabled = on; break;

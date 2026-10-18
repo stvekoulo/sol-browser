@@ -7,6 +7,7 @@ import { setLang, t, useLang } from './i18n';
 import { CornerActions } from '@/components/bencho/CornerActions';
 import { AppWindow, Columns2, Copy, FolderPlus, ListTree, Pencil, SquareArrowOutUpRight } from 'lucide-react';
 import './Start.css';
+import './Start-responsive.css';
 
 type Site = { url: string; title: string; last?: number; icon?: string };
 type StartData = {
@@ -159,6 +160,7 @@ export default function Start() {
               <button
                 className="start-more"
                 aria-expanded={allFavorites}
+                aria-controls="start-favorites"
                 onClick={() => {
                   if (!allFavorites) send({ type: 'start.favorites' }); // les icônes des favoris qui n'étaient pas affichés
                   setAllFavorites(!allFavorites);
@@ -168,7 +170,7 @@ export default function Start() {
               </button>
             )}
           </div>
-          <div className="start-favorites" ref={favoritesGrid} onKeyDown={visible.onKeyDown} style={allFavorites ? { gridTemplateRows: `repeat(${visible.rows}, 102px)`, alignItems: 'start' } : undefined}>
+          <div id="start-favorites" className="start-favorites" ref={favoritesGrid} onKeyDown={visible.onKeyDown} style={allFavorites ? { gridTemplateRows: `repeat(${visible.rows}, 102px)`, alignItems: 'start' } : undefined}>
             {favorites.map((site, index) => (
               // Éventail au coin du favori : nouvel onglet, vue scindée, copier le lien.
               <CornerActions key={site.url} corner={16} style={allFavorites ? { gridRow: Math.floor((visible.first + index) / columns) + 1, gridColumn: (visible.first + index) % columns + 1 } : undefined} actions={[
@@ -198,7 +200,7 @@ export default function Start() {
                   { id: 'all', label: openTopic === category.name ? t('Voir moins', 'Show less') : t('Voir tout', 'Show all'), Icon: ListTree, run: () => setOpenTopic(openTopic === category.name ? '' : category.name) },
                 ]}>
                 <div className={`start-category${openTopic === category.name ? ' open' : ''}`}>
-                  <h3>{category.name}<small>{category.total}</small></h3>
+                  <h3><span>{category.name}</span><small>{category.total}</small></h3>
                   {category.links.slice(0, openTopic === category.name ? undefined : 8).map(site => (
                     <button key={site.url} onClick={() => open(site.url)} title={site.url}>
                       <HistoryIcon site={site} />

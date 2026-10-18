@@ -72,6 +72,7 @@ export async function sidebarHost(executable,{serve=null,downloads=false,capture
     assert.match(relative(resolve('bin'),base),/^sidebar-check-\d+$/);
     await copyFile(resolve(profile,'debug.log'),resolve(base,'native-debug.log')).catch(error=>{if(error.code!=='ENOENT')throw error;});
     await rm(resolve(base,'profiles'),{recursive:true,force:true,maxRetries:30,retryDelay:200});
+    if(downloads)await rm(resolve(base,'downloads'),{recursive:true,force:true,maxRetries:10,retryDelay:200});
   };
   const crash=async()=>{
     if(app&&app.exitCode===null){const exited=once(app,'exit');app.kill();await exited;}
