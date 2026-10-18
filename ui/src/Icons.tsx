@@ -1,5 +1,9 @@
 // Icônes vectorielles du navigateur (16x16, alignement optique et épaisseur homogène).
-export function Icon({ d, fill = false, size = 16 }: { d: string; fill?: boolean; size?: number }) {
+import AnimatedIcon,{type IconName} from './AnimatedIcon';
+import {iconNameForPath} from './iconNames';
+export function Icon({ d='', name,fill = false, size = 16 }: { d?: string;name?:IconName;fill?: boolean; size?: number }) {
+  const animated=name??(!fill?iconNameForPath(d):undefined);
+  if(animated)return <AnimatedIcon name={animated} size={size}/>;
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill={fill ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d={d} />
@@ -19,12 +23,7 @@ export function ShieldIcon() {
 
 // Icône du panneau latéral [| ] dans le bouton pilule en haut à gauche.
 export function SidebarIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <rect x="2" y="2.5" width="12" height="11" rx="2.5" />
-      <path d="M6.2 2.5v11" />
-    </svg>
-  );
+  return <AnimatedIcon name="sidebar"/>;
 }
 
 // Cadenas plein affiché à gauche de l'URL complète dans la carte latérale.
@@ -39,10 +38,5 @@ export function LockIcon() {
 
 // Double feuillet pour copier l'adresse dans la carte latérale.
 export function CopyIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <rect x="5.5" y="5.5" width="7.5" height="7.5" rx="1.8" />
-      <path d="M10.5 5.5V4a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5" />
-    </svg>
-  );
+  return <AnimatedIcon name="copy" size={15}/>;
 }

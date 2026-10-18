@@ -3,6 +3,16 @@ using Browser.Core;
 public class SplitLayoutTests
 {
     [Fact]
+    public void Narrow_pages_keep_a_usable_width_and_invalid_ratios_are_ignored()
+    {
+        Assert.Equal(0.5, SplitLayout.FitRatio(0.2, 400));
+        Assert.Equal(220.0 / 600, SplitLayout.FitRatio(0.2, 600));
+        Assert.Equal(0.2, SplitLayout.FitRatio(0.2, 1500));
+        var split = new SplitLayout(); split.Resize(0.6); split.Resize(double.NaN);
+        Assert.Equal(0.6, split.Ratio);
+    }
+
+    [Fact]
     public void Open_pairs_two_distinct_tabs()
     {
         var s = new SplitLayout();

@@ -110,6 +110,8 @@ public static class WindowsBrowser
         {
             using var pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.Out);
             pipe.Connect(2000);
+            // Le lancement demandé par l'utilisateur transmet son droit de premier plan à la fenêtre existante.
+            if (GetNamedPipeServerProcessId(pipe.SafePipeHandle, out var processId)) AllowSetForegroundWindow(processId);
             using var writer = new StreamWriter(pipe);
             foreach (var target in targets) writer.WriteLine(target);
             if (targets.Count == 0) writer.WriteLine(""); // lancé sans rien à ouvrir : la fenêtre existante passe devant
@@ -138,4 +140,7 @@ public static class WindowsBrowser
         }) { IsBackground = true, Name = "Sol.Ouvrir" };
         thread.Start();
     }
+
+    [DllImport("kernel32.dll")] private static extern bool GetNamedPipeServerProcessId(Microsoft.Win32.SafeHandles.SafePipeHandle pipe, out uint processId);
+    [DllImport("user32.dll")] private static extern bool AllowSetForegroundWindow(uint processId);
 }

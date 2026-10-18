@@ -2,6 +2,16 @@ using Browser.Core;
 
 public class BrowserDbTests
 {
+    [Fact]
+    public void Frequent_sites_sort_by_count_then_recency_and_respect_limit()
+    {
+        using var db = new BrowserDb(":memory:");
+        db.RecordVisit("https://a.test", "A", T0);
+        db.RecordVisit("https://a.test", "A", T0);
+        db.RecordVisit("https://b.test", "B", T0.AddMinutes(1));
+        db.RecordVisit("https://c.test", "C", T0.AddMinutes(2));
+        Assert.Equal(new[] { "https://a.test", "https://c.test" }, db.FrequentSites(2).Select(v => v.Url));
+    }
     private static readonly DateTimeOffset T0 = new(2026, 10, 3, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]

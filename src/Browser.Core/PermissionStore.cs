@@ -4,34 +4,46 @@ namespace Browser.Core;
 /// Réponses déjà données aux demandes d'accès des sites (micro, caméra, position, notifications…), par site et
 /// par type d'accès. Sans réponse enregistrée, le navigateur redemande.
 /// </summary>
-public sealed class PermissionStore(string path)
+public sealed class PermissionStore(string? path)
 {
     private Dictionary<string, bool>? _answers;
 
-    private Dictionary<string, bool> Answers => _answers ??= JsonFileStore.Load<Dictionary<string, bool>>(path);
+    // Une ancienne copie ne doit jamais rétablir un accès révoqué : fichier abîmé = redemander.
+    private Dictionary<string, bool> Answers => _answers ??= path is null ? new() : JsonFileStore.Load<Dictionary<string, bool>>(path, recoverBackup: false);
 
     /// <summary>true = autorisé, false = refusé, null = jamais demandé.</summary>
     public bool? Get(string origin, string kind) => Answers.TryGetValue(Key(origin, kind), out var allowed) ? allowed : null;
 
-    public void Set(string origin, string kind, bool allowed)
+    public bool Set(string origin, string kind, bool allowed)
     {
-        Answers[Key(origin, kind)] = allowed;
-        JsonFileStore.Save(path, Answers);
+        var next = new Dictionary<string, bool>(Answers) { [Key(origin, kind)] = allowed };
+        return Save(next);
     }
 
     /// <summary>Oublie toutes les réponses : chaque site redemandera.</summary>
-    public void Clear()
+    public bool Clear()
     {
-        Answers.Clear();
-        JsonFileStore.Save(path, Answers);
+        return Save(new());
     }
 
     /// <summary>Oublie les réponses données à un site : il redemandera.</summary>
-    public void Forget(string origin)
+    public bool Forget(string origin)
     {
-        foreach (var key in Answers.Keys.Where(k => k.StartsWith(origin + " ", StringComparison.Ordinal)).ToList()) Answers.Remove(key);
-        JsonFileStore.Save(path, Answers);
+        return Save(Answers.Where(p => !p.Key.StartsWith(origin + " ", StringComparison.Ordinal)).ToDictionary());
     }
+
+    private bool Save(Dictionary<string, bool> next)
+    {
+        if (path is not null && !JsonFileStore.Save(path, next)) return false;
+        _answers = next;
+        return true;
+    }
+
+    public static string FileForProfile(string root, string profile) => profile is "" or "Default"
+        ? Path.Combine(root, "permissions.json")
+        : profile.StartsWith("sol-", StringComparison.Ordinal) && TabSessions.ValidId(profile[4..])
+            ? Path.Combine(root, "session-permissions", profile[4..] + ".json")
+            : throw new ArgumentException("Unknown permission profile", nameof(profile));
 
     public int Count => Answers.Count;
 

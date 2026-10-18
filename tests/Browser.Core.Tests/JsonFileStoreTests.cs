@@ -2,6 +2,62 @@ using Browser.Core;
 
 public class JsonFileStoreTests : IDisposable
 {
+    [Fact]
+    public void Full_screen_is_enabled_for_existing_profiles_and_can_be_disabled()
+    {
+        var path = File_("fullscreen.json");
+        File.WriteAllText(path, "{}");
+        var settings = JsonFileStore.Load<Settings>(path);
+        Assert.True(settings.FullScreen);
+        settings.FullScreen = false;
+        Assert.True(JsonFileStore.Save(path, settings));
+        Assert.False(JsonFileStore.Load<Settings>(path).FullScreen);
+    }
+    [Theory]
+    [InlineData(1, 1, 0.92)]
+    [InlineData(0.9, 0.9, 0.89)]
+    [InlineData(0.95, 0.95, 0.905)]
+    [InlineData(0.85, 0.85, 0.875)]
+    [InlineData(0.8, 0.8, 0.86)]
+    [InlineData(0.82, 1, 0.92)]
+    [InlineData(0.7, 1, 0.92)]
+    [InlineData(double.NaN, 1, 0.92)]
+    public void Interface_scale_only_accepts_supported_sizes_and_does_not_change_page_zoom(double scale, double expected, double factor)
+    {
+        var settings = new Settings { PageZoom = 1.5, UiScale = scale };
+        var path = File_("scale.json");
+        JsonFileStore.Save(path, settings);
+        var saved = JsonFileStore.Load<Settings>(path);
+        Assert.Equal(expected, saved.UiScale);
+        Assert.Equal(factor, saved.UiFactor);
+        Assert.Equal(1.5, saved.PageZoom);
+    }
+    [Theory]
+    [InlineData("https://www.google.com")]
+    [InlineData("https://www.google.com/")]
+    [InlineData("")]
+    public void Old_default_home_page_becomes_local_start_page(string url)
+    {
+        Assert.Equal(Settings.DefaultHomePage, new Settings { HomePage = url }.HomePage);
+        Assert.Equal("https://custom.test/", new Settings { HomePage = "https://custom.test/" }.HomePage);
+    }
+    [Fact]
+    public void Preserves_the_page_zoom_in_profile_settings()
+    {
+        var path = File_("settings.json");
+        File.WriteAllText(path, "{\"PageZoom\":0.8}");
+        JsonFileStore.Save(path, JsonFileStore.Load<Settings>(path));
+        Assert.Contains("\"PageZoom\":0.8", File.ReadAllText(path));
+    }
+
+    [Theory]
+    [InlineData(-1, 0.5)]
+    [InlineData(3, 2)]
+    [InlineData(double.NaN, 1)]
+    [InlineData(double.PositiveInfinity, 1)]
+    public void Rejects_invalid_zoom_values(double value, double expected) =>
+        Assert.Equal(expected, new Settings { PageZoom = value }.PageZoom);
+
     private readonly string _dir = Directory.CreateTempSubdirectory("nav-tests").FullName;
     private string File_(string name) => Path.Combine(_dir, name);
     public void Dispose() => Directory.Delete(_dir, recursive: true);
@@ -24,6 +80,36 @@ public class JsonFileStoreTests : IDisposable
         Assert.Equal(1, s.ActiveIndex);
         Assert.Equal(0, s.SecondaryIndex);
         Assert.Equal(0.6, s.Ratio);
+    }
+
+    [Fact]
+    public void Recovers_the_previous_session_after_corruption()
+    {
+        var path = File_("session.json");
+        Assert.True(JsonFileStore.Save(path, new Session { Urls = ["https://saved.test"] }));
+        Assert.True(JsonFileStore.Save(path, new Session { Urls = ["https://latest.test"] }));
+        File.WriteAllText(path, "{ broken");
+        Assert.Equal("https://saved.test", Assert.Single(JsonFileStore.Load<Session>(path).Urls));
+        Assert.True(File.Exists(path + ".corrupt"));
+    }
+
+    [Fact]
+    public void Locked_file_does_not_crash_or_replace_existing_data()
+    {
+        var path = File_("settings.json");
+        Assert.True(JsonFileStore.Save(path, new Settings { PageZoom = 0.8 }));
+        using (var locked = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.None))
+            Assert.False(JsonFileStore.Save(path, new Settings { PageZoom = 1.5 }));
+        Assert.Equal(0.8, JsonFileStore.Load<Settings>(path).PageZoom);
+    }
+
+    [Fact]
+    public void Null_session_collections_are_treated_as_corruption()
+    {
+        var path = File_("session.json");
+        File.WriteAllText(path, "{\"Urls\":null}");
+        Assert.Empty(JsonFileStore.Load<Session>(path).Urls);
+        Assert.True(File.Exists(path + ".corrupt"));
     }
 
     [Fact]

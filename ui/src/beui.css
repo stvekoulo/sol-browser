@@ -1,0 +1,25 @@
+/* Utilities only: the browser's existing resets and adaptive theme stay authoritative. */
+@layer theme, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@source "./components";
+@source "./lib/text-shimmer.ts";
+@theme inline {
+  --color-background: var(--bg-popup);
+  --color-foreground: var(--text);
+  --color-card: var(--bg-tab-hover);
+  --color-card-foreground: var(--text);
+  --color-primary: var(--accent);
+  --color-primary-foreground: #fff;
+  --color-secondary: var(--bg-tab-hover);
+  --color-secondary-foreground: var(--text);
+  --color-muted: var(--bg-tab-hover);
+  --color-muted-foreground: var(--text-dim);
+  --color-accent: var(--bg-tab-hover);
+  --color-accent-foreground: var(--text);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-ring: var(--accent);
+  --color-destructive: #d13a46;
+  --font-sans: var(--font);
+}

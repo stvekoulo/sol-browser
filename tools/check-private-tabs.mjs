@@ -1,0 +1,88 @@
+import assert from 'node:assert/strict';
+import {access,readFile,readdir,writeFile} from 'node:fs/promises';
+import {resolve} from 'node:path';
+import {DatabaseSync} from 'node:sqlite';
+import {setTimeout as delay} from 'node:timers/promises';
+import {sidebarHost} from './sidebar-check-host.mjs';
+
+const host=await sidebarHost(process.argv[2]??'src/Browser.App/bin/x64/Release/net10.0-windows10.0.19041.0/win-x64/Sol.exe');
+let sidebar;
+const cmd=c=>sidebar.evaluate(`chrome.webview.postMessage(${JSON.stringify(JSON.stringify(c))})`);
+const state=()=>sidebar.evaluate('window.__sidebarState');
+const engine=resolve(host.profile,'webview2/EBWebView');
+const privateProfiles=()=>readdir(engine).then(names=>names.filter(n=>/^WV2Profile_sol-private-[a-f0-9]{32}$/.test(n)));
+const active=async()=>{const s=await state();return s.tabs.find(t=>t.id===s.activeId)};
+const navigate=async(id,path)=>{
+  const url=host.origin+path;await cmd({type:'nav.go',id,input:url});
+  const page=await host.connect(url);await host.wait(()=>page.evaluate('document.readyState==="complete"').catch(()=>false),'page loaded');return page;
+};
+const close=async id=>{await cmd({type:'tab.close',id});await host.wait(()=>state().then(s=>s.tabs.every(t=>t.id!==id)),'tab removed')};
+const privateTab=async()=>{
+  const before=(await state()).tabs.length;
+  await sidebar.evaluate(`document.querySelector('[data-action="window.private"]').click()`);
+  await host.wait(()=>state().then(s=>s.tabs.length===before+1&&s.tabs.find(t=>t.id===s.activeId)?.privateMode),'private tab opens');
+  return active();
+};
+const saved=()=>readFile(resolve(host.profile,'session.json'),'utf8').then(JSON.parse);
+try{
+  sidebar=await host.launch();const normal=await active();
+  const normalPage=await host.connect(host.origin+'/2');
+  await normalPage.evaluate('document.cookie="session=normal;path=/;max-age=86400";localStorage.setItem("session","normal")');
+  const first=await privateTab();assert.notEqual(first.id,normal.id);
+  assert.equal((await host.targets()).filter(t=>t.url==='https://ui.navigateur/index.html').length,1,'private tabs use the existing window');
+  const start=await host.connect('https://start.sol/index.html#start');
+  await host.wait(()=>start.evaluate('document.body.textContent.includes("Navigation privée")').catch(()=>false),'private start page');
+  await host.wait(()=>sidebar.evaluate('document.documentElement.dataset.private==="true"'),'private chrome colour');
+  assert.equal(await sidebar.evaluate('document.querySelector(".sidebar-session").disabled'),true,'private tabs cannot become named persistent sessions');
+  assert.equal(await sidebar.evaluate(`!!document.querySelector('[data-id="${first.id}"][data-private=true] .private-tab-mark')`),true,'private tab has a persistent visual marker');
+  const firstPage=await navigate(first.id,'/private-secret-one');
+  await cmd({type:'zoom.in'});await host.wait(()=>firstPage.evaluate('Math.abs(devicePixelRatio-1.05)<.001'),'native zoom works in private tabs');
+  await cmd({type:'zoom.reset'});await host.wait(()=>firstPage.evaluate('devicePixelRatio===1'),'private zoom resets');
+  assert.deepEqual(await firstPage.evaluate('[document.cookie,localStorage.getItem("session")]'),['',null],'normal sign-ins and storage are isolated');
+  await firstPage.evaluate('document.cookie="session=private;path=/;max-age=86400";localStorage.setItem("session","private")');
+  await firstPage.evaluate(`window.open(${JSON.stringify(host.origin+'/private-secret-child')},'_blank');true`);
+  await host.wait(()=>state().then(s=>s.tabs.some(t=>t.url.endsWith('/private-secret-child')&&t.privateMode)),'window.open inherits private mode');
+  const child=await active(),childPage=await host.connect(host.origin+'/private-secret-child');
+  await host.wait(()=>childPage.evaluate('document.readyState==="complete"').catch(()=>false),'private child loaded');
+  assert.deepEqual(await childPage.evaluate('[document.cookie,localStorage.getItem("session")]'),['session=private','private'],'private tabs share their own sign-in');
+  await cmd({type:'tab.open'});await host.wait(()=>state().then(s=>s.tabs.length===15),'new tab inherits private mode');
+  const extra=await active();assert.equal(extra.privateMode,true);await close(extra.id);
+  await cmd({type:'tab.activate',id:normal.id});
+  await host.wait(()=>sidebar.evaluate('document.documentElement.dataset.private==="false"'),'normal chrome restored');
+  assert.deepEqual(await normalPage.evaluate('[document.cookie,localStorage.getItem("session")]'),['session=normal','normal'],'normal connections remain unchanged');
+  assert.equal(await sidebar.evaluate(`!!document.querySelector('[data-id="${first.id}"][data-private=true]')`),true,'inactive private tabs keep their colour');
+  await host.wait(()=>saved().then(s=>s.Urls.every(url=>!url.includes('private-secret'))),'private tabs excluded from session');
+  const db=new DatabaseSync(resolve(host.profile,'browser.db'),{readOnly:true});
+  try{assert.equal(db.prepare("SELECT COUNT(*) AS n FROM visits WHERE url LIKE '%private-secret%'").get().n,0,'private visits never enter history')}finally{db.close()}
+  assert.equal((await privateProfiles()).length,1,'one isolated profile for all private tabs');
+  await cmd({type:'tab.pin',id:first.id,index:1});await close(first.id);
+  assert.deepEqual(await childPage.evaluate('[document.cookie,localStorage.getItem("session")]'),['session=private','private'],'closing a pinned private tab preserves the remaining session');
+  await cmd({type:'tab.activate',id:child.id});
+  await sidebar.call('Page.captureScreenshot',{format:'png'}).then(r=>writeFile(resolve(host.base,'private-tabs.png'),Buffer.from(r.data,'base64')));
+  await close(child.id);await host.wait(()=>privateProfiles().then(names=>names.length===0),'last private tab deletes its engine data');
+  const beforeReopen=(await state()).tabs.length;await cmd({type:'tab.reopen'});
+  assert.equal((await state()).tabs.length,beforeReopen,'closed private tabs cannot be restored');
+  const fresh=await privateTab(),freshPage=await navigate(fresh.id,'/private-secret-fresh');
+  assert.deepEqual(await freshPage.evaluate('[document.cookie,localStorage.getItem("session")]'),['',null],'new private session starts clean');
+  await freshPage.evaluate('document.cookie="session=discard;path=/;max-age=86400";localStorage.setItem("session","discard")');
+  await host.close(sidebar);sidebar=null;
+  for(let i=0;i<100&&(await privateProfiles()).length;i++)await delay(100);
+  assert.equal((await privateProfiles()).length,0,'closing the window removes private data');
+  sidebar=await host.launch();
+  assert.equal((await state()).tabs.some(t=>t.privateMode||t.url.includes('private-secret')),false,'restart restores only normal tabs');
+  const restored=(await state()).tabs.find(t=>t.url===host.origin+'/2');assert(restored);
+  await cmd({type:'tab.activate',id:restored.id});const restoredPage=await host.connect(host.origin+'/2');
+  await host.wait(()=>restoredPage.evaluate('document.readyState==="complete"').catch(()=>false),'normal session restored');
+  assert.deepEqual(await restoredPage.evaluate('[document.cookie,localStorage.getItem("session")]'),['session=normal','normal'],'normal data survives restart');
+  const abandoned=await privateTab(),abandonedPage=await navigate(abandoned.id,'/private-secret-crash');
+  await abandonedPage.evaluate('localStorage.setItem("session","abandoned")');
+  assert.equal((await privateProfiles()).length,1);
+  await host.crash();sidebar=null;
+  sidebar=await host.launch();
+  await host.wait(()=>privateProfiles().then(names=>names.length===0),'startup purges abandoned private profiles');
+  assert.equal((await state()).tabs.some(t=>t.privateMode||t.url.includes('private-secret')),false,'crashed private tabs are never restored');
+  console.log(JSON.stringify({passed:'same-window private tabs; purple markers; isolated and shared private cookies/storage; inherited child tabs; no history or restoration; pinned close; last-tab, shutdown and crash cleanup; normal sessions preserved',evidence:host.base}));
+}finally{
+  if(sidebar)await host.close(sidebar).catch(()=>{});
+  await host.dispose();assert.equal(await access(resolve(host.base,'profiles')).then(()=>true,()=>false),false,'test data and caches removed');
+}

@@ -32,7 +32,7 @@ public static class Suggestions
         // Première ligne : ce que fera la touche Entrée.
         var resolved = AddressInput.Resolve(q, searchUrlTemplate);
         var isSearch = resolved.StartsWith(searchUrlTemplate.Split("{0}")[0], StringComparison.Ordinal);
-        var list = new List<Suggestion> { new(resolved, q, isSearch ? "search" : "go") };
+        var list = new List<Suggestion> { new(resolved, resolved == QuickNotes.PageUrl ? "Notes" : q, isSearch ? "search" : "go") };
 
         list.AddRange(history.Select(v => new Suggestion(v.Url, v.Title, "history")));
 

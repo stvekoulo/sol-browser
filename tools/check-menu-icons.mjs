@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {menuIconPath,menuPaths,isClosing} from '../ui/src/PopupIcons.ts';
+const actions={save:['Enregistrer sous…','Enregistrer le lien sous…','Save image as…'],group:['Nouveau groupe avec cet onglet','New group with this tab'],groupAdd:['Ajouter au groupe « Travail »','Add to group “Work”'],ungroup:['Retirer du groupe','Ungroup'],edit:['Modifier le groupe (nom, couleur, icône)','Rename shortcut'],print:['Imprimer','Print'],cut:['Couper','Cut'],select:['Tout sélectionner','Select all'],note:['Ajouter à une note…','Add to a note…'],session:['Session de ce site…','Site session…'],sleep:['Mettre le groupe en veille','Put group to sleep'],tools:['DevTools natifs · F12','Native DevTools · F12'],spell:['Orthographe','Spelling']};
+for(const [icon,labels] of Object.entries(actions))for(const label of labels)assert.equal(menuIconPath(label),menuPaths[icon],label);
+assert.notEqual(menuIconPath('Reopen last closed tab'),menuIconPath('Close tab'));
+assert.equal(isClosing('Reopen last closed tab'),false);assert.equal(isClosing('Fermer le groupe'),true);
+assert.equal(menuIconPath('Nom personnalisé sans action'),'','unknown actions have no misleading arrow');
+assert.equal(menuIconPath('Spinal'),'','custom labels do not match parts of action words');
+assert.equal(menuIconPath('Credit'),'','custom labels do not look like Edit commands');
+assert.equal(menuIconPath('Ajouter au groupe « Enregistrer sous »'),menuPaths.groupAdd,'the action takes precedence over a custom group name');
+assert.equal(menuIconPath('Add to group “New group”'),menuPaths.groupAdd);
+assert.equal(menuIconPath('ÉNREGISTRER SOUS…'),menuPaths.save);
+assert.notEqual(menuIconPath('Nouveau groupe avec cet onglet'),menuIconPath('Nouvel onglet'));
+console.log('Menu icons passed: French/English actions, group/save/edit/print/notes/session/devtools, reopen tone, normalized accents and unknown labels.');

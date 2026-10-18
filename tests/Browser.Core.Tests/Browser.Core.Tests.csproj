@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -15,6 +15,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="../../src/Browser.App/ChatGptAccount.cs" Link="ChatGptAccount.cs" />
+    <Compile Include="../../src/Browser.App/ChatGptAccount.Storage.cs" Link="ChatGptAccount.Storage.cs" />
+    <Compile Include="../../src/Browser.App/DebugLog.cs" Link="DebugLog.cs" />
     <Using Include="Xunit" />
   </ItemGroup>
 

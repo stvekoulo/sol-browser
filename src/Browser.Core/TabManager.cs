@@ -1,6 +1,6 @@
 namespace Browser.Core;
 
-public sealed record Tab(string Id, string Url, string Title, bool Pinned = false, string? GroupId = null);
+public sealed record Tab(string Id, string Url, string Title, bool Pinned = false, string? GroupId = null, string SessionId = "", bool Private = false);
 
 /// <summary>
 /// Groupe d'onglets : un nom, une couleur libre (« #rrggbb »), une icône facultative (un emoji), et un état
@@ -12,7 +12,7 @@ public sealed record TabGroup(string Id, string Name, string Color, bool Collaps
 /// Onglets ouverts, dans l'ordre de la barre. Les onglets épinglés sont toujours en tête et ne sont jamais
 /// groupés ; les onglets d'un même groupe sont toujours voisins.
 /// </summary>
-public sealed class TabManager
+public sealed partial class TabManager
 {
     /// <summary>Couleurs proposées par défaut, douces ; l'utilisateur peut en choisir n'importe quelle autre.</summary>
     public static readonly IReadOnlyList<string> GroupColors = ["#8fa8e8", "#8ccfa6", "#e3cf7a", "#edb07f", "#eba3c2", "#b9a2ec", "#b3b6bf"];
@@ -44,7 +44,7 @@ public sealed class TabManager
     private readonly List<Tab> _tabs = new();
     private readonly List<TabGroup> _groups = new();
     // ponytail: pile non bornée ; plafonner si la mémoire d'une longue session pose problème
-    private readonly Stack<string> _closed = new();
+    private readonly Stack<Tab> _closed = new();
     private int _nextId = 1, _nextGroupId = 1;
 
     public IReadOnlyList<Tab> Tabs => _tabs;
@@ -53,9 +53,9 @@ public sealed class TabManager
     public int PinnedCount => _tabs.Count(t => t.Pinned);
     public event Action? Changed;
 
-    public Tab Open(string url, bool activate = true, bool pinned = false)
+    public Tab Open(string url, bool activate = true, bool pinned = false, string sessionId = "", bool isPrivate = false)
     {
-        var tab = new Tab($"t{_nextId++}", url, url, pinned);
+        var tab = new Tab($"t{_nextId++}", url, url, pinned, SessionId: isPrivate ? "" : sessionId, Private: isPrivate);
         _tabs.Insert(pinned ? PinnedCount : _tabs.Count, tab);
         if (activate || ActiveId is null) ActiveId = tab.Id;
         Changed?.Invoke();
@@ -66,7 +66,7 @@ public sealed class TabManager
     {
         var i = IndexOf(id);
         if (i < 0) return false;
-        _closed.Push(_tabs[i].Url);
+        if (!_tabs[i].Private) _closed.Push(_tabs[i]);
         _tabs.RemoveAt(i);
         if (ActiveId == id)
             ActiveId = _tabs.Count == 0 ? null : _tabs[Math.Min(i, _tabs.Count - 1)].Id;
@@ -125,7 +125,17 @@ public sealed class TabManager
         return true;
     }
 
-    public Tab? ReopenClosed() => _closed.Count == 0 ? null : Open(_closed.Pop());
+    public Tab? ReopenClosed() => _closed.TryPop(out var tab) ? Open(tab.Url, sessionId: tab.SessionId) : null;
+    public Tab? SetSession(string id, string sessionId)
+    {
+        var i = IndexOf(id); if (i < 0 || _tabs[i].Private) return null;
+        _tabs[i] = _tabs[i] with { SessionId = sessionId }; Changed?.Invoke(); return _tabs[i];
+    }
+    public void ForgetSession(string sessionId)
+    {
+        var kept = _closed.Where(t => t.SessionId != sessionId).Reverse().ToArray();
+        _closed.Clear(); foreach (var tab in kept) _closed.Push(tab);
+    }
 
     public bool Update(string id, string? url = null, string? title = null)
     {
@@ -200,16 +210,7 @@ public sealed class TabManager
         if (NormalizeColor(color) is { } valid) group = group with { Color = valid };
         // Une icône vide la retire ; une icône invalide (trop longue) est ignorée.
         if (icon is not null && (icon.Trim().Length == 0 || NormalizeIcon(icon).Length > 0)) group = group with { Icon = NormalizeIcon(icon) };
-        if (collapsed is { } fold)
-        {
-            // Replier le groupe de l'onglet actif : un onglet d'ailleurs prend la main. S'il n'y en a pas, on ne replie pas.
-            if (fold && _tabs.FirstOrDefault(t => t.Id == ActiveId)?.GroupId == groupId)
-            {
-                if (_tabs.FirstOrDefault(t => t.GroupId != groupId) is not { } other) return false;
-                ActiveId = other.Id;
-            }
-            group = group with { Collapsed = fold };
-        }
+        if (collapsed is { } fold) group = group with { Collapsed = fold };
         _groups[g] = group;
         Changed?.Invoke();
         return true;

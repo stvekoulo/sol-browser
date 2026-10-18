@@ -1,6 +1,7 @@
 // Flou progressif en bas de chaque page. Injecté par l'hôte à la création du document.
 // API DOM uniquement (pas d'innerHTML) pour passer sur les sites qui imposent Trusted Types.
 (() => {
+  if (location.href === 'https://start.sol/index.html#notes') return;
   if (window.top !== window || window.__navBlur) return;
   window.__navBlur = true;
   const HEIGHT = 56, STEPS = [1, 2, 3, 5];
@@ -8,7 +9,7 @@
     const host = document.createElement('div');
     const root = host.attachShadow({ mode: 'closed' });
     const band = document.createElement('div');
-    band.style.cssText = `position:fixed;left:0;right:0;bottom:0;height:${HEIGHT}px;pointer-events:none;z-index:2147483647`;
+    band.style.cssText = `position:fixed;left:0;right:0;bottom:0;height:${HEIGHT}px;pointer-events:none;z-index:2147483646`;
     STEPS.forEach((px, i) => {
       const layer = document.createElement('div');
       const from = (i * 100) / STEPS.length, to = ((i + 1) * 100) / STEPS.length;

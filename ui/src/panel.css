@@ -1,7 +1,7 @@
 /* Panneau du bas (#panel) : inspecteur réseau. Une vue à part, sous les pages. */
 /* Autour de la carte arrondie, la vue (un rectangle) prend la couleur réelle de la page : ses coins s'y fondent. */
 .panel-body { background: var(--page-real, var(--page-bg)); overflow: hidden; }
-.panel-body #root { height: 100vh; padding: 8px 10px 10px 0; box-sizing: border-box; }
+.panel-body #root { height: calc(100vh / var(--ui-scale, 1)); padding: 8px 10px 6px; box-sizing: border-box; }
 
 .net {
   height: 100%;
@@ -18,23 +18,32 @@
 .net-bar { flex: none; display: flex; align-items: center; gap: 10px; padding: 8px 10px 6px 14px; }
 .net-title { font-weight: 600; font-size: 13.5px; }
 .net-filters { margin: 0; }
-.net-filters .popup-seg-btn { font-size: 12.5px; padding: 0 10px; height: 24px; flex: none; }
+.net-filters .popup-seg-btn { font-size: 12px; padding: 0 10px; height: 30px; flex: none; }
 .net-space { flex: 1; }
 .net-bar .pill-action { height: 26px; padding: 0 12px; }
-.net-close { width: 26px; height: 26px; flex: none; border-radius: 50%; display: grid; place-items: center; color: var(--text-dim); }
+.net-close,.net-icon { width: 34px; height: 34px; flex: none; border-radius: 50%; display: grid; place-items: center; color: var(--text-dim); }
 .net-close:hover { background: var(--bg-tab-hover); color: var(--text); }
+.net-icon:hover,.net-icon.on { background:var(--bg-tab-hover);color:var(--text); }
+.net-controls { display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:5px 12px 8px; }
+.net-search { flex:1;min-width:140px;display:flex;align-items:center;gap:7px;padding:5px 10px;border-radius:var(--radius-pill);background:var(--bg-tab-hover);color:var(--text-dim); }
+.net-search input { width:100%;min-width:0;border:0;outline:0;background:transparent;color:var(--text);font:inherit;user-select:text; }
+.net-search:focus-within { box-shadow:inset 0 0 0 1px var(--accent); }
+.net-preserve { display:flex;align-items:center;gap:5px;color:var(--text-dim);font-size:12px; }
+.net-preserve input { accent-color:var(--accent); }
+.net-summary { display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding:4px 14px 8px;color:var(--text-dim);font-size:11.5px;font-variant-numeric:tabular-nums; }
+.net-summary>span:first-child { color:var(--accent); }
 
 .net-main { flex: 1; min-height: 0; display: flex; border-top: 1px solid var(--border); }
 .net-list { flex: 1; min-width: 0; overflow-y: auto; scrollbar-width: thin; padding: 4px 6px 6px; }
 .net-empty { margin: 18px 12px; color: var(--text-dim); }
 
-.net-row {
+.net-row,.net-columns {
   width: 100%;
   display: grid;
   grid-template-columns: 38px 52px minmax(0, 1fr) 76px 66px 62px;
   align-items: center;
   gap: 8px;
-  height: 28px;
+  min-height: 34px;
   padding: 0 8px;
   border-radius: 9px;
   text-align: left;
@@ -43,6 +52,7 @@
 .net-row:hover { background: var(--bg-tab-hover); }
 .net-row.selected { background: var(--bg-pill-solid); box-shadow: var(--shadow-pill-elevated); }
 .net-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.net-columns { position:sticky;top:0;z-index:1;min-height:28px;background:var(--bg-sidebar-card);color:var(--text-dim);font-size:11px; }
 
 .net-status { font-weight: 600; }
 .net-status.ok { color: #2f9e5c; }
@@ -57,6 +67,9 @@
 
 .net-detail { flex: none; width: min(46%, 520px); overflow-y: auto; scrollbar-width: thin; border-left: 1px solid var(--border); padding: 8px 12px 12px; user-select: text; }
 .net-detail-head { display: flex; align-items: center; gap: 8px; }
+.net-detail-actions { display:flex;flex-wrap:wrap;gap:6px;margin:10px 0; }
+.net-detail-tabs { display:flex;max-width:100%;overflow:auto;scrollbar-width:thin; }
+.net-copy { font-size:11.5px;min-height:28px;margin-bottom:5px; }
 .net-detail-url { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 12.5px; }
 .net-section h3 { margin: 12px 0 5px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-dim); }
 .net-note { margin: 0 0 6px; color: var(--text-dim); }
@@ -71,3 +84,20 @@
 .net-pairs > div { display: grid; grid-template-columns: minmax(90px, 32%) minmax(0, 1fr); gap: 10px; }
 .net-pairs dt { color: var(--text-dim); overflow-wrap: anywhere; }
 .net-pairs dd { margin: 0; overflow-wrap: anywhere; }
+.net-bar { flex-wrap:wrap; }
+.net-mock-banner { display:flex; align-items:center; gap:10px; padding:6px 14px; background:var(--bg-pill-solid); font-size:12px; }
+.net-mock-banner span { flex:1; min-width:0; overflow-wrap:anywhere; }
+.net-console,.net-composer { flex:1; min-height:0; overflow:auto; padding:12px 16px; scrollbar-width:thin; }
+.net-console .net-body { margin-bottom:5px; }
+.console-error { color:#e5484d; }.console-warning { color:#c58a28; }
+.net-compose-row { display:flex; flex-wrap:wrap; gap:12px; margin:10px 0; }
+.net-compose-row label { display:flex; flex:1; min-width:120px; flex-direction:column; gap:5px; color:var(--text-dim); }
+.net-compose-row .net-compose-url { flex:4; }
+.net-composer input,.net-composer select,.net-composer textarea { box-sizing:border-box; width:100%; border:1px solid var(--border-card); border-radius:10px; padding:8px; background:var(--bg-tab-hover); color:var(--text); font:12px system-ui; }
+.net-composer textarea { min-height:90px; resize:vertical; font-family:ui-monospace,Consolas,monospace; }
+.net-composer :is(input,select,textarea):focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+.net-compose-actions { display:flex; gap:8px; }
+.net-mock-options { margin:14px 0; border-top:1px solid var(--border); padding-top:10px; }
+.net-mock-options summary { cursor:pointer; font-weight:600; margin-bottom:8px; }
+.net-edit { margin:10px 0; }
+@media(max-width:650px) { .net-row,.net-columns { grid-template-columns:35px 42px minmax(0,1fr); } .net-row .net-type,.net-row .net-num,.net-columns span:nth-child(n+4) { display:none; } .net-main:has(.net-detail) .net-list { display:none; } .net-detail { width:100%; box-sizing:border-box; } }

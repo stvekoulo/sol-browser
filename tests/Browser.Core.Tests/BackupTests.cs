@@ -63,5 +63,10 @@ public class BackupTests : IDisposable
         Assert.True(r > 200 && g < 60 && b < 60);
         Assert.Null(AmbientColor.From([.. white, .. black, .. grey, .. grey]));
         Assert.Null(AmbientColor.From([]));
+        // Bords d'une page : la couleur que la plupart des pixels partagent, à peu près ; rien si les bords sont bigarrés.
+        (byte, byte, byte)[] mustard = [(218, 166, 24), (219, 167, 23), (225, 174, 24), (218, 166, 24), (252, 200, 45)];
+        Assert.Equal(((byte)220, (byte)168, (byte)24), AmbientColor.Edge(mustard));
+        Assert.Null(AmbientColor.Edge([(255, 0, 0), (0, 255, 0), (0, 0, 255), (20, 20, 20)]));
+        Assert.Null(AmbientColor.Edge([]));
     }
 }

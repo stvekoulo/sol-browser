@@ -1,0 +1,44 @@
+/* Une colonne complète à gauche ; la navigation appartient à la page de droite. */
+.sidebar-window-bar{height:28px;flex:none;display:flex;align-items:center;margin:0 2px 0}
+.sidebar-window-bar .lights{margin:0}
+.topbar{grid-template-columns:auto minmax(90px,540px) auto;justify-content:space-between;gap:10px;padding:0 12px;border-radius:0}
+.topbar-left{gap:8px}.topbar-right{max-width:100%}
+@media(max-width:620px){
+  .topbar{gap:6px;padding:0 8px}
+  .topbar-left{gap:5px}.topbar .segment-btn{width:24px}.topbar .sidebar-toggle{width:30px}
+  .topbar-right .profile-btn,.topbar-right .pinned-extension,.topbar-right [data-action="translation.open"]{display:none}
+  .topbar-right{gap:0}.topbar-right .pill-icon-btn{width:28px}
+}
+@media(max-width:450px){
+  .topbar-right>.pill-icon-btn:not([data-action="settings.open"]){display:none}
+  .topbar .topbar-left .lights{gap:5px}.topbar .topbar-left .light{width:10px;height:10px}
+}
+
+.sidebar-tabs{margin-top:12px}
+
+/* Un seul document pilote la coque et les limites des pages WebView2 natives. */
+body.shell-body:has(.topbar),.shell-body #root{height:100%;background:var(--chrome-bg)}
+.workspace{display:flex;width:100%;height:100%;overflow:hidden;background:var(--chrome-bg)}
+.workspace-sidebar{flex:none;height:100%;overflow:hidden;background:var(--bg-sidebar-card);color:var(--text);will-change:width}
+.workspace-sidebar-content{width:var(--sidebar-width);height:100%;overflow:hidden}
+.workspace-right{display:flex;flex:1;flex-direction:column;min-width:0;height:100%;container-type:inline-size}
+.workspace-right .topbar{flex:none}
+.workspace-page{flex:1;min-height:0;background:var(--page-bg)}
+.sidebar-session{display:grid;grid-template-columns:22px minmax(0,1fr) 12px;gap:8px;align-items:center;margin:8px 0 14px;padding:0 8px;height:34px;border:1px solid transparent;border-radius:10px;background:var(--bg-tab-hover);font-size:12px;font-weight:500;text-align:left;transition:background var(--fast) var(--ease-out),border-color var(--fast) var(--ease-out)}
+.sidebar-session:hover{background:var(--bg-pill-solid);border-color:var(--border-card)}
+.sidebar-session>span.sidebar-session-symbol{display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--bg-tab-hover);color:var(--text-dim)}
+.sidebar-session[data-custom-session=true]>.sidebar-session-symbol{color:var(--accent)}
+.sidebar-session>.sidebar-session-name{line-height:1.35}
+.sidebar-session>:last-child{justify-self:end;opacity:.6}
+@container(max-width:620px){
+  .topbar{gap:6px;padding:0 8px}
+  .topbar-right .profile-btn,.topbar-right .pinned-extension,.topbar-right [data-action="translation.open"]{display:none}
+  .topbar-right{gap:0}.topbar-right .pill-icon-btn{width:28px}
+}
+@container(max-width:400px){
+  .topbar{grid-template-columns:auto minmax(45px,1fr) auto;gap:4px;padding:0 5px}
+  .topbar-right>.pill-icon-btn:not([data-action="settings.open"]),.topbar .nav-segment{display:none}
+  .topbar-right.pill-surface{width:auto;max-width:32px}
+  .topbar .topbar-left .lights{gap:4px;margin:0}.topbar .topbar-left .light{width:9px;height:9px}
+  .topbar .sidebar-toggle{width:26px}.topbar-left{gap:4px}
+}

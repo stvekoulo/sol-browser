@@ -17,6 +17,16 @@ public class BrowserImportTests : IDisposable
         return dir;
     }
 
+    [Fact]
+    public void A_profile_with_only_saved_passwords_is_available_for_import()
+    {
+        var dir = Profile(@"Google\Chrome\User Data", "Default");
+        File.WriteAllBytes(Path.Combine(dir, "Login Data"), []);
+        var source = Assert.Single(BrowserImport.Detect(Path.Combine(_dir, "Local"), Path.Combine(_dir, "Roaming")));
+        Assert.Equal("chrome", source.Id);
+        Assert.Equal("Default", Assert.Single(source.Profiles).Folder);
+    }
+
     private const string Bookmarks = """
         { "roots": {
             "bookmark_bar": { "type": "folder", "children": [
@@ -97,6 +107,22 @@ public class BrowserImportTests : IDisposable
         Assert.Equal(Path.Combine(chrome, "Profile 2"), BrowserImport.ProfileDir(found, "chrome", "Profile 2"));
         Assert.Null(BrowserImport.ProfileDir(found, "chrome", @"..\..\ailleurs")); // seul un profil détecté est accepté
         Assert.Null(BrowserImport.ProfileDir(found, "edge", "Default"));
+    }
+
+    [Fact]
+    public void Older_imported_pages_are_searchable_and_available_after_the_first_history_page()
+    {
+        using var db = new BrowserDb(":memory:");
+        var when = DateTimeOffset.UtcNow.AddDays(-30);
+        db.Import([new Bookmark("https://import.test/favorite", "Imported favorite")],
+            Enumerable.Range(0, 125).Select(i => new ImportedVisit($"https://import.test/{i}", i == 0 ? "Older imported 100% page" : $"Imported {i}", 1, when.AddMinutes(i))));
+        db.RecordVisit("https://sol.test/new", "New page", when.AddDays(30));
+        Assert.Equal(126, db.HistoryCount(""));
+        Assert.Equal(100, db.History("", 100, 0).Count);
+        Assert.Equal(26, db.History("", 100, 100).Count);
+        Assert.Equal("https://import.test/0", Assert.Single(db.History("100%", 100, 0)).Url);
+        Assert.Equal(125, db.HistoryCount("import.test"));
+        Assert.True(db.IsBookmarked("https://import.test/favorite"));
     }
 
     [Fact]

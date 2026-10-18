@@ -26,9 +26,6 @@ $project = Join-Path $root 'src\Browser.App\Browser.App.csproj'
 $version = ([xml](Get-Content $project)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
 if (-not $version) { throw "Version absente de $project" }
 
-# Le bloqueur de publicités livré avec le navigateur (non versionné) doit être là.
-if (-not (Test-Path (Join-Path $root 'src\Browser.App\extensions\ubol\manifest.json'))) { & (Join-Path $PSScriptRoot 'get-ublock.ps1') }
-
 Push-Location (Join-Path $root 'ui')
 try { npm run build; if ($LASTEXITCODE -ne 0) { throw 'Interface : compilation en échec' } } finally { Pop-Location }
 

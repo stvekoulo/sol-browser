@@ -2,7 +2,7 @@
 
 # Sol
 
-**Sol browser** est un navigateur web léger pour Windows, avec les onglets dans une carte latérale, un bloqueur de publicités intégré et des outils pour les développeurs web. Son interface prend les couleurs de la page affichée.
+**Sol browser** est un navigateur web léger pour Windows, avec les onglets dans une carte latérale, les extensions du Chrome Web Store et des outils pour les développeurs web. Son interface prend les couleurs de la page affichée.
 
 *[English version](README.md)*
 
@@ -10,7 +10,7 @@
 
 ![Sol en thème sombre](docs/images/browser-dark.png)
 
-> Un projet personnel, partagé tel quel. Les versions 0.1 sont des premières versions : tout n'est pas encore poli.
+> Un projet personnel, partagé tel quel : tout n'est pas encore poli.
 
 ## Ce qu'il fait
 
@@ -25,18 +25,18 @@
 - Des profils aux données séparées, et des fenêtres privées effacées à leur fermeture.
 
 **Vos données**
-- Configuration à la première ouverture : votre nom, la langue, le thème, la police, le moteur de recherche et ce qu'il faut bloquer.
+- Configuration à la première ouverture : votre nom, la langue, le thème, la police et le moteur de recherche.
 - Import depuis Chrome, Edge, Brave, Comet, Arc, Vivaldi et Opera : favoris, historique et mots de passe enregistrés. Les mots de passe qu'un navigateur garde pour lui seul s'importent depuis le fichier CSV qu'il exporte.
 - Sauvegarde : réglages, onglets, favoris, historique et mots de passe dans un seul fichier, chiffré par une clé que vous choisissez. Sol ne garde pas cette clé.
 
 **Apparence**
 - Thème clair, sombre, celui de Windows ou celui de la page.
 - La couleur de l'interface suit la page, y compris la vidéo en cours ou la partie de la page à l'écran. Chaque zone peut être désactivée.
-- Polices de l'interface : système, Inter ou SF Pro.
+- Polices de l'interface : système, Inter, SF Pro, Geist, Manrope, DM Sans, Plus Jakarta Sans, Outfit, Figtree, Nunito ou Lora.
+- Fond du nouvel onglet : l'image de Sol, une photo d'Unsplash au choix, ou une nouvelle chaque jour.
 
 **Moins de distractions**
-- Publicités et traqueurs bloqués par [uBlock Origin Lite](https://github.com/uBlockOrigin/uBOL-home), intégré et tenu à jour.
-- Lecteur flottant : quittez un onglet où une vidéo joue, elle reste à l'écran avec les commandes de Sol.
+- Lecteur flottant : quittez un onglet où une vidéo joue, elle reste à l'écran dans la fenêtre vidéo du moteur (Picture-in-Picture).
 - Les sites demandent une fois l'accès au micro, à la caméra ou à la position ; la réponse est retenue par site et peut être oubliée.
 
 **Économe en mémoire**
@@ -47,9 +47,24 @@
 - Simulateur d'appareils avec leur vraie forme, rotation, et plusieurs écrans côte à côte.
 - Inspecteur réseau : requêtes, filtre API, erreurs, en-têtes et corps des réponses.
 - `:3000` ouvre `http://localhost:3000`, et un serveur pas encore démarré est retenté tout seul.
-- Captures d'une zone, de la partie visible ou de la page entière, en PNG ou en PDF.
+- Captures d'une zone, de la partie visible ou de la page entière, en PNG ou en PDF, avec un aperçu avant d'enregistrer. Un appareil simulé est capturé avec sa coque.
 
 ![La même page sur un téléphone, une tablette et un écran d'ordinateur, côte à côte](docs/images/responsive.png)
+
+## Sol AI
+
+Un assistant facultatif qui utilise **votre propre forfait ChatGPT Plus ou Pro** via *Sign in with ChatGPT* : pas de clé API, pas de facture en plus. Il se connecte dans *Paramètres → Sol*.
+
+<p align="center"><img src="docs/images/sol-ai.svg" width="100%" alt="Votre question part vers ChatGPT, qui demande à Sol de lire, chercher et suivre les liens de l'onglet ouvert, puis rédige la réponse ; cliquer, saisir et naviguer attendent votre accord"></p>
+
+- **Interroger le site, pas un extrait.** Sol AI lit l'onglet ouvert de façon structurée (titres, texte, liens, boutons, champs), y cherche, suit les liens vers les autres pages d'une documentation et met en évidence le passage utilisé. Chaque étape s'affiche en direct.
+- **Votre accord avant d'agir.** Cliquer, remplir un champ ou ouvrir une adresse attend *Autoriser*. Les champs de mot de passe, de carte et de code unique ne sont jamais lus ni remplis.
+- **Actions en un clic.** *Résumer* dans la barre d'adresse ; clic droit sur une sélection pour l'expliquer ou la traduire (six langues), ou dans un champ pour corriger, reformuler ou traduire, puis remplacer le texte.
+- **Panneau de discussion** à droite pour les questions rapides, capable de consulter l'onglet ouvert.
+- **Notes** : chercher, résumer, ou créer une note à partir d'une consigne.
+- **Sujets sur la page d'accueil** : favoris et historique classés par catégorie une fois par jour. Désactivé par défaut ; seuls les titres et domaines sont envoyés.
+
+Seul ce sur quoi vous agissez part chez OpenAI. Les jetons de connexion restent chiffrés sur votre PC, et Sol AI ne fonctionne pas en navigation privée.
 
 ## Télécharger
 
@@ -76,18 +91,18 @@ Les fichiers ne sont **pas signés** : un certificat de signature coûte de l'ar
 Vous pouvez vérifier un téléchargement avec l'empreinte publiée dans chaque version (`SHA256SUMS.txt`) :
 
 ```powershell
-Get-FileHash .\Sol-0.1.4-win-x64-Setup.exe -Algorithm SHA256
+Get-FileHash .\Sol-1.0.12-win-x64-Setup.exe -Algorithm SHA256
 ```
 
 ## Vie privée
 
-- Aucune télémétrie, aucun compte. Sol n'envoie rien à son auteur.
+- Aucun compte ni télémétrie envoyée à l’auteur de Sol. Sol AI est facultatif : il utilise votre propre forfait ChatGPT via Sign in with ChatGPT. Vos questions, les textes choisis et le contexte consulté à votre demande sont envoyés à OpenAI. Le classement des favoris et de l’historique reste désactivé par défaut.
 - Favoris, historique, mots de passe et réglages restent sur votre ordinateur. Une sauvegarde n'en sort que sous la forme du fichier chiffré que vous exportez.
 - Les connexions que Sol établit de lui-même :
   - les suggestions de recherche, envoyées à votre moteur pendant la saisie dans la barre d'adresse (désactivable) ;
   - la recherche d'une nouvelle version de Sol sur GitLab au démarrage (copies installées seulement) ;
-  - la recherche hebdomadaire d'une nouvelle version d'uBlock Origin Lite sur GitHub ;
-  - les icônes des sites de vos raccourcis.
+  - les icônes des sites de vos raccourcis ;
+  - la photo du fond du nouvel onglet, si vous en choisissez une : elle est téléchargée depuis `picsum.photos` (photos d'Unsplash), ainsi que les vignettes quand vous ouvrez la sélection.
 - Les pages web n'ont aucun canal vers le code du navigateur.
 
 ## Raccourcis clavier
@@ -112,7 +127,6 @@ cd ui
 npm ci
 npm run build          # l'interface (React), copiée à côté de l'exécutable par la compilation
 cd ..
-pwsh tools/get-ublock.ps1                      # récupère uBlock Origin Lite (facultatif : sans lui, rien n'est bloqué)
 dotnet test tests/Browser.Core.Tests
 dotnet run --project src/Browser.App
 ```
@@ -127,12 +141,13 @@ Fichiers publiables pour les trois architectures : `pwsh tools/publish.ps1 -Arch
 - **Hôte** : C# / .NET 10 avec WinUI 3 (`src/Browser.App`). Il détient tout l'état.
 - **Logique** : du C# simple et testé, sans dépendance à l'interface (`src/Browser.Core`, tests dans `tests/`).
 - **Interface** : React et TypeScript (`ui/`), chargée depuis des fichiers locaux sous une politique de sécurité stricte. Elle envoie des commandes validées à l'hôte et reçoit l'état en retour.
+- **Sol AI** : l'API Responses de ChatGPT avec *Sign in with ChatGPT* (OAuth avec PKCE, jetons protégés par Windows). Les outils de page s'exécutent dans l'onglet depuis `src/Browser.App/inject/agent.js` ; l'interface utilise les composants agents de [beUI](https://beui.dev).
 - **Installateur et mises à jour** : [Velopack](https://velopack.io), qui lit les versions publiées dans ce dépôt.
 
 ## Publier une version (mainteneurs)
 
 1. Régler `<Version>` dans `src/Browser.App/Browser.App.csproj`.
-2. Poser l'étiquette et la pousser : `git tag v0.1.4 && git push origin v0.1.4`.
+2. Poser l'étiquette et la pousser : `git tag v1.0.12 && git push origin v1.0.12`.
 3. La tâche `release` du pipeline construit les installateurs et les archives des trois architectures, publie leurs empreintes et crée la version sur GitLab. Les copies installées la récupèrent de là.
 
 ## Politique de signature du code
@@ -145,4 +160,4 @@ Les versions ne sont pas encore signées. Une demande à la [SignPath Foundation
 
 ## Licence
 
-[MIT](LICENSE). Les logiciels tiers livrés avec le navigateur, uBlock Origin Lite (GPLv3) en particulier, sont listés dans [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+[MIT](LICENSE). Les logiciels tiers livrés avec Sol sont listés dans [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

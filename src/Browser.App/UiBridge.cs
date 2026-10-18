@@ -7,14 +7,16 @@ using Microsoft.Web.WebView2.Core;
 namespace Browser.App;
 
 // Vue d'interface : synchronise la barre, la sidebar et adapte la couleur de coque à la page active.
-public sealed partial class UiBridge(WebView2 view, string page = "index.html", WebView2? sidebar = null, ColumnDefinition? sidebarColumn = null, PageHost? pages = null)
+public sealed partial class UiBridge(WebView2 view, string page = "index.html", PageHost? pages = null)
 {
+    private bool _activePrivate;
     private const string Origin = "https://ui.navigateur/";
     // Lit les couleurs de la page active : son fond, et sa couleur d'accent (celle qui fait son identité).
     // L'accent vient, dans l'ordre : de la balise theme-color du site, puis de la couleur vive la plus présente
     // parmi son en-tête, ses boutons et ses liens. Un site sans couleur vive n'a pas d'accent.
     private const string ThemeProbeScript = """
         (() => {
+          if (document.hidden) return null;
           // Onglet vide : fond du navigateur. Une page d'erreur du navigateur (même adresse) garde ses propres couleurs.
           if (location.href === 'about:blank' && !document.documentElement.hasAttribute('data-nav-error')) {
             document.documentElement.style.background = '#eef0e2';
@@ -25,17 +27,24 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
             return m ? [+m[1], +m[2], +m[3], m[4] === undefined ? 1 : +m[4]] : null;
           };
           // Résout n'importe quelle couleur CSS (nom, hex, hsl…) sans rien ajouter à la page.
-          const ctx = document.createElement('canvas').getContext('2d');
+          const canvas = document.createElement('canvas');
+          canvas.width = canvas.height = 1;
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
           const resolve = css => {
-            if (!css || !ctx) return null;
-            ctx.fillStyle = '#000'; ctx.fillStyle = css;
-            const v = ctx.fillStyle;
-            if (v.startsWith('#')) return [parseInt(v.slice(1, 3), 16), parseInt(v.slice(3, 5), 16), parseInt(v.slice(5, 7), 16), 1];
-            return parse(v);
+            if (!css || !ctx || !CSS.supports('color', css)) return null;
+            const rgb = parse(css);
+            if (rgb) return rgb;
+            // Les sites modernes renvoient oklch(), color(), lab()… même pour leurs fonds noirs.
+            // Le moteur convertit la couleur en sRGB ; la méthode de sélection du fond reste identique.
+            ctx.clearRect(0, 0, 1, 1);
+            ctx.fillStyle = css; ctx.fillRect(0, 0, 1, 1);
+            const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
+            return [r, g, b, a / 255];
           };
           const lum = ([r, g, b]) => (0.299 * r + 0.587 * g + 0.114 * b) / 255;
           const sat = ([r, g, b]) => { const max = Math.max(r, g, b), min = Math.min(r, g, b); return max === 0 ? 0 : (max - min) / max; };
 
+          if (document.readyState === 'loading') return null;
           const els = [];
           for (const x of [window.innerWidth * 0.5, window.innerWidth * 0.25, 24]) {
             let el = document.elementFromPoint(x, 12);
@@ -45,7 +54,7 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
           let bg = [255, 255, 255];
           for (const el of els) {
             if (!el) continue;
-            const c = parse(getComputedStyle(el).backgroundColor);
+            const c = resolve(getComputedStyle(el).backgroundColor);
             if (c && c[3] > 0.15) { bg = c.slice(0, 3); break; }
           }
 
@@ -69,9 +78,9 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
               if (box.width < 8 || box.height < 8 || box.bottom < 0 || box.top > innerHeight) continue;
               n++;
               const style = getComputedStyle(el);
-              vote(parse(style.backgroundColor), weight * Math.min(3, (box.width * box.height) / 4000 + 0.5));
-              vote(parse(style.color), weight * 0.4);
-              if (el instanceof SVGElement) vote(parse(style.fill), weight * 0.6);
+              vote(resolve(style.backgroundColor), weight * Math.min(3, (box.width * box.height) / 4000 + 0.5));
+              vote(resolve(style.color), weight * 0.4);
+              if (el instanceof SVGElement) vote(resolve(style.fill), weight * 0.6);
             }
           };
           sample('header, nav, [role="banner"]', 3, 6);
@@ -82,7 +91,8 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
           for (const entry of votes.values()) if (!best || entry.w > best.w) best = entry;
 
           const rgb = c => `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
-          return { bg: rgb(bg), dark: lum(bg) < 0.42, accent: best ? rgb(best.c) : null };
+          // sx, sy, vw, vh : où en est le défilement et ce que mesure la zone visible, pour relire les bords de la page (UiEdge.cs).
+          return { bg: rgb(bg), dark: lum(bg) < 0.42, accent: best ? rgb(best.c) : null, sx: scrollX, sy: scrollY, vw: innerWidth, vh: innerHeight };
         })()
         """;
 
@@ -91,6 +101,9 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
 
     /// <summary>Réglages lus pour savoir où la couleur du site doit teinter l'interface.</summary>
     public static Settings? Settings { get; set; }
+
+    public static Windows.UI.Color InitialBackground => Settings?.Theme == "dark" || (Settings?.Theme == "system" && IsSystemDark())
+        ? Windows.UI.Color.FromArgb(255, 28, 28, 30) : Windows.UI.Color.FromArgb(255, 238, 240, 226);
 
     // Thème de Windows, lu par l'hôte : une vue d'interface masquée ne le suit pas de façon fiable par elle-même.
     private static readonly Windows.UI.ViewManagement.UISettings s_system = new();
@@ -107,21 +120,34 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
     static UiBridge() => s_system.ColorValuesChanged += (_, _) => SystemColorsChanged?.Invoke();
 
     /// <summary>Envoie les couleurs de la page active à toutes les vues d'interface, avec les réglages de teinte.</summary>
-    public void BroadcastTheme()
+    public void BroadcastTheme() => PublishTheme(force: true);
+
+    private void PublishTheme(bool force = false)
     {
+        var on = Settings;
+        if (pages is not null && _activeId is not null && pages.CoreOf(_activeId) is { } ownPage && ownPage.Source is Settings.DefaultHomePage or QuickNotes.PageUrl)
+        {
+            var wall = ownPage.Source == Settings.DefaultHomePage && on?.StartWallpaper == true;
+            var darkStart = wall || on?.Theme == "dark" || (on?.Theme == "system" && IsSystemDark());
+            s_lastProbe = (wall ? WallpaperTint : darkStart ? "rgb(9, 9, 11)" : "rgb(238, 240, 226)", darkStart, null);
+        }
         if (s_lastProbe is not var (bg, dark, accent)) return;
         accent = AmbientAccent ?? accent; // ce que la page montre à l'instant, sinon la couleur annoncée par le site
-        var on = Settings;
-        s_lastThemeMsg = JsonSerializer.Serialize(new
+        var json = JsonSerializer.Serialize(new
         {
             @event = "theme", bg, dark, accent, mode = on?.Theme ?? "page", systemDark = IsSystemDark(), lang = Language.Current,
+            privateMode = AppPaths.Private || _activePrivate,
             font = on?.Font ?? "default",
+            uiScale = on?.UiFactor ?? 0.92,
             tint = new { topbar = on?.TintTopbar ?? true, sidebar = on?.TintSidebar ?? true, menus = on?.TintMenus ?? true, background = on?.TintBackground ?? true },
         });
+        if (!force && s_lastThemeMsg == json) return;
+        s_lastThemeMsg = json;
         view.CoreWebView2?.PostWebMessageAsJson(s_lastThemeMsg);
-        sidebar?.CoreWebView2?.PostWebMessageAsJson(s_lastThemeMsg);
         foreach (var floating in _floating) floating.Post(s_lastThemeMsg);
+        ThemePublished?.Invoke(s_lastThemeMsg);
     }
+    public event Action<string>? ThemePublished;
     private string? _activeId;
     private readonly List<UiBridge> _floating = new(); // vues flottantes qui suivent la couleur de la page : menus, encart
 
@@ -132,14 +158,15 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
 
     public async Task InitAsync(string uiFolder, Action<Command> onCommand)
     {
+        var initial = InitialBackground;
+        s_lastProbe ??= ($"rgb({initial.R}, {initial.G}, {initial.B})", initial.R < 128, null);
+        if (pages is not null || s_lastThemeMsg is null) BroadcastTheme();
         await InitViewAsync(view, page, uiFolder, onCommand);
-        if (sidebar is not null)
-            await InitViewAsync(sidebar, "index.html#sidebar", uiFolder, onCommand);
 
         if (pages is not null)
         {
-            pages.Loaded += _ => ProbeActiveThemeAsync(withDelays: true);
-            pages.PageChanged += (_, _, _) => ProbeActiveThemeAsync(withDelays: false);
+            pages.Loaded += id => { if (id == _activeId) ProbeActiveThemeAsync(withDelays: true); };
+            pages.PageChanged += (id, _, _) => { if (id == _activeId) ProbeActiveThemeAsync(withDelays: false); };
             StartAmbient();
         }
     }
@@ -148,8 +175,12 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
     {
         // Fond transparent tant que la vue n'a rien dessiné (apparition, changement de taille) : on voit le fond de
         // la fenêtre, aux couleurs de la page, au lieu d'un rectangle noir ou blanc.
+        target.Opacity = 0; // aucune surface du moteur avant la première peinture React
         target.DefaultBackgroundColor = Microsoft.UI.Colors.Transparent;
-        await target.EnsureCoreWebView2Async(await AdBlock.EnvironmentAsync());
+        var environment = await AdBlock.EnvironmentAsync();
+        var options = environment.CreateCoreWebView2ControllerOptions();
+        options.ProfileName = "SolInterface"; // aucune extension de page ne peut injecter du code dans l’interface privilégiée
+        await target.EnsureCoreWebView2Async(environment, options);
         var core = target.CoreWebView2;
         core.SetVirtualHostNameToFolderMapping("ui.navigateur", uiFolder, CoreWebView2HostResourceAccessKind.Deny);
         core.Settings.AreDefaultContextMenusEnabled = false;
@@ -165,24 +196,15 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
         core.NewWindowRequested += (_, e) => e.Handled = true;
         core.NavigationCompleted += (_, _) => { if (s_lastThemeMsg is not null) core.PostWebMessageAsJson(s_lastThemeMsg); };
 
-        core.WebMessageReceived += (_, e) =>
-        {
-            string json;
-            try { json = e.TryGetWebMessageAsString(); }
-            catch (ArgumentException) { return; }
-            if (!e.Source.StartsWith(Origin, StringComparison.Ordinal)) return;
-
-            if (SidebarHost is { } host && json.Contains("\"sidebar.toggle\"", StringComparison.Ordinal))
-            {
-                var open = host.Toggle();
-                view.CoreWebView2?.PostWebMessageAsJson($$"""{"event":"sidebar","open":{{(open ? "true" : "false")}}}""");
-                return;
-            }
-            if (CommandParser.Parse(json) is { } command)
-                onCommand(command);
-        };
+        BindCommands(target, core, onCommand);
 
         core.Navigate(Origin + targetPage);
+    }
+
+    public void FocusAddress()
+    {
+        view.Focus(FocusState.Programmatic);
+        view.CoreWebView2?.PostWebMessageAsJson("""{"event":"focus-address"}""");
     }
 
     /// <summary>Carte latérale pilotée par le bouton de la barre.</summary>
@@ -191,7 +213,6 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
     public void Post(string json)
     {
         view.CoreWebView2?.PostWebMessageAsJson(json);
-        sidebar?.CoreWebView2?.PostWebMessageAsJson(json);
 
         // Synchronise la couleur de la coque avec l'onglet actif.
         if (json.Contains("\"activeId\":", StringComparison.Ordinal))
@@ -199,43 +220,73 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
             try
             {
                 using var doc = JsonDocument.Parse(json);
+                _activePrivate = doc.RootElement.TryGetProperty("privateMode", out var privacy) && privacy.GetBoolean();
                 if (doc.RootElement.TryGetProperty("activeId", out var prop) && prop.GetString() is { } id)
                 {
                     var changed = id != _activeId;
                     _activeId = id;
-                    ProbeActiveThemeAsync(withDelays: changed);
+                    if (changed) { s_ambient = null; ProbeActiveThemeAsync(withDelays: true); }
                 }
             }
             catch (JsonException) { }
         }
     }
 
+    /// <summary>Couleur de l'interface autour d'une page d'accueil à fond d'image : celle de l'image affichée.</summary>
+    public static string WallpaperTint { get; set; } = "rgb(40, 68, 105)";
+    /// <summary>La couleur de la page affichée a changé sans navigation (nouveau fond d'accueil) : elle est relue.</summary>
+    public void RefreshPageColor() => _ = SampleOnceAsync();
+
+    private int _themeGeneration;
     private async void ProbeActiveThemeAsync(bool withDelays)
     {
+        var generation = ++_themeGeneration;
         await SampleOnceAsync();
         if (!withDelays) return;
         await Task.Delay(350);
+        if (generation != _themeGeneration) return;
         await SampleOnceAsync();
         await Task.Delay(800);
+        if (generation != _themeGeneration) return;
         await SampleOnceAsync();
     }
 
+    private int _themeRequest;
     private async Task SampleOnceAsync()
     {
         if (pages is null || _activeId is null || pages.CoreOf(_activeId) is not { } core) return;
+        var id = _activeId;
+        var source = core.Source;
+        if (source == Settings.DefaultHomePage)
+        {
+            PublishTheme();
+            if (s_lastProbe is var (startBg, _, _) && System.Text.RegularExpressions.Regex.Match(startBg, @"rgb\((\d+), (\d+), (\d+)\)") is { Success: true } sm)
+                PublishPageColor(byte.Parse(sm.Groups[1].Value), byte.Parse(sm.Groups[2].Value), byte.Parse(sm.Groups[3].Value));
+            return;
+        }
+        var request = ++_themeRequest;
         try
         {
             var raw = await core.ExecuteScriptAsync(ThemeProbeScript);
+            if (request != _themeRequest || _activeId != id || core.Source != source || pages.CoreOf(id) != core) return;
             using var doc = JsonDocument.Parse(raw);
             if (doc.RootElement.ValueKind != JsonValueKind.Object) return;
             var bg = doc.RootElement.GetProperty("bg").GetString() ?? "rgb(245, 246, 238)";
             var dark = doc.RootElement.GetProperty("dark").GetBoolean();
+            // Ce que la page montre à ses bords l'emporte sur la couleur qu'elle déclare : c'est là que l'interface la touche.
+            var edge = await EdgeColorAsync(core, id, source, bg, doc.RootElement);
+            if (request != _themeRequest || _activeId != id || core.Source != source || pages.CoreOf(id) != core) return;
+            if (edge is not null && System.Text.RegularExpressions.Regex.Match(edge, @"rgb\((\d+), (\d+), (\d+)\)") is { Success: true } shown)
+            {
+                bg = edge;
+                dark = (0.299 * int.Parse(shown.Groups[1].Value) + 0.587 * int.Parse(shown.Groups[2].Value) + 0.114 * int.Parse(shown.Groups[3].Value)) / 255 < 0.42;
+            }
             // Le fond de la fenêtre suit aussi la page : pas d'éclair sombre derrière une vue en cours de chargement.
             if (System.Text.RegularExpressions.Regex.Match(bg, @"rgb\((\d+), (\d+), (\d+)\)") is { Success: true } m)
-                PageColorChanged?.Invoke(byte.Parse(m.Groups[1].Value), byte.Parse(m.Groups[2].Value), byte.Parse(m.Groups[3].Value));
+                PublishPageColor(byte.Parse(m.Groups[1].Value), byte.Parse(m.Groups[2].Value), byte.Parse(m.Groups[3].Value));
             var accent = doc.RootElement.TryGetProperty("accent", out var accentValue) && accentValue.ValueKind == JsonValueKind.String ? accentValue.GetString() : null;
             s_lastProbe = (bg, dark, accent);
-            BroadcastTheme();
+            PublishTheme();
         }
         catch (Exception) { }
     }

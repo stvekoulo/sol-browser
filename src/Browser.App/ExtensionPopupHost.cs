@@ -1,88 +1,199 @@
+using System.Runtime.InteropServices;
 using System.Text.Json;
+using Browser.Core;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
 namespace Browser.App;
 
 /// <summary>
-/// Fenêtre d'une extension (la page qu'ouvre son bouton), affichée dans un encart flottant sous la barre du haut au
-/// lieu d'un onglet. La vue partage le moteur et le profil des pages : l'extension y est chez elle. L'encart prend la
-/// taille de son contenu et se referme quand on clique ailleurs.
-/// Coins arrondis par CornerClip, comme les menus (jamais d'API de composition sur un cadre flottant).
+/// Fenêtre d'une extension (la page qu'ouvre son bouton). Comme dans Edge, c'est une vraie fenêtre de Windows, sans
+/// habillage de Sol : sans barre de titre, posée sous le bouton, aux coins et à l'ombre dessinés par le système. Elle
+/// peut dépasser de la fenêtre du navigateur. L'extension décide de sa taille, de 25 × 25 à 800 × 600, et la fenêtre
+/// la suit tant qu'elle est ouverte ; elle se referme dès qu'on clique ailleurs.
+/// La vue partage le moteur et le profil des pages : l'extension y est chez elle.
 /// </summary>
-public sealed class ExtensionPopupHost(Grid frame, WebView2 view)
+public sealed class ExtensionPopupHost(Window owner)
 {
-    private const double Edge = 10, MinWidth = 260, MaxWidth = 780, MinHeight = 120, MaxHeight = 620;
-    private bool _started;
-    private double _anchorRight, _top;
-    private DateTime _shownAt;
+    private const double MinSize = 25, MaxWidth = 800, MaxHeight = 600;
+    private const int Gap = 8; // distance gardée avec les bords de l'écran, en pixels
+    private readonly nint _owner = WinRT.Interop.WindowNative.GetWindowHandle(owner);
+    private Window? _window;
+    private WebView2? _view;
+    private (double Right, double Top) _anchor; // sous le bouton, en pixels d'écran
+    private bool _ownerClosed;
     private int _run;
+
+    // Mesurée après la création du DOM : au démarrage du document, html/head peuvent ne pas encore exister.
+    // La racine épouse le contenu ; ses dimensions ne doivent pas rester celles de la vue provisoire.
+    private const string Measure = """
+        (() => {
+          const root = document.documentElement, body = document.body;
+          if (!root || !body || document.readyState === 'loading') return JSON.stringify([0, 0]);
+          const declared = root.computedStyleMap();
+          for (const axis of ['width', 'height']) {
+            const value = declared.get(axis).toString();
+            // Conserver les dimensions explicites de l'extension ; seules les dimensions de viewport deviennent intrinsèques.
+            if (value === 'auto' || value.endsWith('%')) root.style.setProperty(axis, 'max-content', 'important');
+          }
+          const box = root.getBoundingClientRect(), content = body.getBoundingClientRect();
+          const css = getComputedStyle(body);
+          return JSON.stringify([
+            Math.ceil(Math.max(box.width, content.right + (parseFloat(css.marginRight) || 0), body.scrollWidth + content.left)),
+            Math.ceil(Math.max(box.height, content.bottom + (parseFloat(css.marginBottom) || 0), body.scrollHeight + content.top))
+          ]);
+        })()
+        """;
 
     /// <summary>Un lien de l'extension demande un nouvel onglet.</summary>
     public event Action<string>? TabRequested;
 
-    public bool IsOpen => frame.Visibility == Visibility.Visible;
+    public bool IsOpen { get; private set; }
 
-    /// <param name="right">Bord droit de l'encart (celui du bouton), dans la fenêtre.</param>
-    public async Task ShowAsync(string url, double right, double top)
+    private double Scale => owner.Content?.XamlRoot?.RasterizationScale ?? 1;
+
+    /// <param name="right">Bord droit de la fenêtre (celui du bouton), dans la fenêtre du navigateur.</param>
+    public async Task ShowAsync(string url, double right, double top, string profileName, string marker, bool panel = false)
     {
-        if (!_started)
+        var run = ++_run;
+        var origin = new Point();
+        ClientToScreen(_owner, ref origin);
+        _anchor = (origin.X + right * Scale, origin.Y + top * Scale);
+        var window = _window ??= CreateWindow();
+        CloseView();
+        // Une vue neuve à chaque ouverture, fermée ensuite : pour le moteur, cette vue est un onglet comme les autres,
+        // et une vue gardée en réserve resterait « l'onglet courant » des extensions une fois la fenêtre refermée.
+        var view = _view = new WebView2
         {
-            _started = true;
-            await view.EnsureCoreWebView2Async(await AdBlock.EnvironmentAsync());
+            DefaultBackgroundColor = UiBridge.InitialBackground, // le temps du chargement : clair ou sombre, comme l'interface
+            UseSystemFocusVisuals = false,
+            FocusVisualPrimaryThickness = new Thickness(0),
+            FocusVisualSecondaryThickness = new Thickness(0),
+        };
+        window.Content = view;
+        Place(panel ? 380 : 320, panel ? 600 : 200);
+        window.AppWindow.Show(activateWindow: false); // une vue ne démarre son moteur qu'une fois affichée
+        try
+        {
+            var environment = await AdBlock.EnvironmentAsync();
+            var options = environment.CreateCoreWebView2ControllerOptions();
+            options.ProfileName = profileName;
+            await view.EnsureCoreWebView2Async(environment, options);
+            if (run != _run) return;
             var core = view.CoreWebView2;
             core.Settings.IsStatusBarEnabled = false;
+            core.Settings.AreHostObjectsAllowed = false;
+            core.Settings.IsWebMessageEnabled = false;
             core.Settings.IsZoomControlEnabled = false;
+            // Avant le code de l'extension : sa fenêtre voit les onglets comme dans Chrome (voir ExtensionShim).
+            await core.AddScriptToExecuteOnDocumentCreatedAsync(ExtensionShim.Script + "\n" + ExtensionAction.QueryScript(marker));
+            if (run != _run) return;
             core.NewWindowRequested += (_, e) => { e.Handled = true; Hide(); TabRequested?.Invoke(e.Uri); };
             core.WindowCloseRequested += (_, _) => Hide(); // l'extension ferme sa fenêtre elle-même, une fois son action faite
-            core.NavigationCompleted += (_, _) => _ = FitSoonAsync(_run);
-            // Clic ailleurs : l'encart se referme. Le tout premier changement de curseur, à l'ouverture, ne compte pas.
-            view.LostFocus += (_, _) => { if ((DateTime.UtcNow - _shownAt).TotalMilliseconds > 500) Hide(); };
+            core.Navigate(url);
         }
-        _run++;
-        (_anchorRight, _top, _shownAt) = (right, top, DateTime.UtcNow);
-        Place(380, MinHeight); // au plus court : la mesure du contenu ne peut que l'agrandir, jamais le réduire
-        frame.Visibility = Visibility.Visible;
-        frame.UpdateLayout();
-        CornerClip.Set(view, 16);
-        view.CoreWebView2.Navigate(url);
-        await Task.Delay(180);
-        if (IsOpen) view.Focus(FocusState.Programmatic);
+        catch (Exception e) when (e is InvalidOperationException or COMException or ObjectDisposedException)
+        {
+            if (run != _run) return; // remplacée ou refermée pendant son démarrage
+            Hide();
+            throw;
+        }
+        IsOpen = true;
+        window.Activate();
+        view.Focus(FocusState.Programmatic);
+        if (!panel) _ = FollowSizeAsync(run);
     }
 
+    private Window CreateWindow()
+    {
+        var window = new Window { Title = "Sol" };
+        var app = window.AppWindow;
+        app.IsShownInSwitchers = false;
+        if (app.Presenter is OverlappedPresenter presenter)
+        {
+            (presenter.IsResizable, presenter.IsMaximizable, presenter.IsMinimizable) = (false, false, false);
+            presenter.SetBorderAndTitleBar(false, false); // en dernier : les options du presenter peuvent recréer le cadre.
+        }
+        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
+        // WinUI conserve parfois WS_DLGFRAME même sans barre de titre : ce cadre ajoute 3 px blancs par côté.
+        SetWindowLong(hwnd, -16, GetWindowLong(hwnd, -16) & ~0x00C40000); // WS_CAPTION | WS_THICKFRAME
+        SetWindowPos(hwnd, 0, 0, 0, 0, 0, 0x0037); // recalcul du cadre, sans déplacement, taille ni activation
+        // Fenêtre du navigateur pour propriétaire : elle reste au-dessus de lui, sans entrée dans la barre des tâches.
+        if (nint.Size == 8) SetWindowLongPtr(hwnd, -8, _owner); else SetWindowLong(hwnd, -8, (int)_owner);
+        var rounded = 2; // coins et ombre du système (Windows 11) ; sans effet avant
+        var applied = DwmSetWindowAttribute(hwnd, 33, ref rounded, sizeof(int));
+        if (applied != 0) DebugLog.Write($"fenêtre d'extension : coins du système refusés (0x{applied:X8})");
+        var noBorder = unchecked((int)0xFFFFFFFE); // DWMWA_COLOR_NONE : coins et ombre natifs, sans contour blanc.
+        applied = DwmSetWindowAttribute(hwnd, 34, ref noBorder, sizeof(int)); // DWMWA_BORDER_COLOR (Windows 11)
+        if (applied != 0) DebugLog.Write($"fenêtre d'extension : suppression du contour refusée (0x{applied:X8})");
+        window.Activated += (_, e) => { if (e.WindowActivationState == WindowActivationState.Deactivated) Hide(); }; // clic ailleurs
+        app.Closing += (_, e) => { if (!_ownerClosed) { e.Cancel = true; Hide(); } }; // Alt+F4 : elle se cache, elle resservira
+        owner.Closed += (_, _) => { _ownerClosed = true; CloseView(); window.Close(); };
+        return window;
+    }
+
+    private void CloseView()
+    {
+        if (_view is not { } view) return;
+        _view = null;
+        if (_window is not null) _window.Content = null;
+        try { view.Close(); }
+        catch (Exception e) when (e is InvalidOperationException or COMException) { /* jamais démarrée, ou déjà fermée */ }
+    }
+
+    // Sous le bouton, bord droit aligné sur lui, sans sortir de l'écran.
     private void Place(double width, double height)
     {
-        var window = (FrameworkElement)frame.Parent;
-        frame.Width = Math.Clamp(width, MinWidth, Math.Min(MaxWidth, window.ActualWidth - 2 * Edge));
-        frame.Height = Math.Clamp(height, MinHeight, Math.Min(MaxHeight, window.ActualHeight - _top - Edge));
-        frame.Margin = new Thickness(Math.Max(Edge, Math.Min(_anchorRight, window.ActualWidth - Edge) - frame.Width), _top, 0, 0);
+        if (_window is null) return;
+        var area = DisplayArea.GetFromWindowId(owner.AppWindow.Id, DisplayAreaFallback.Nearest).WorkArea;
+        var w = (int)Math.Min(Math.Ceiling(Math.Clamp(width, MinSize, MaxWidth) * Scale), area.Width - 2 * Gap);
+        var h = (int)Math.Min(Math.Ceiling(Math.Clamp(height, MinSize, MaxHeight) * Scale), area.Height - 2 * Gap);
+        // La taille demandée est celle du contenu ; les coins et l'ombre restent gérés par le système.
+        _window.AppWindow.ResizeClient(new Windows.Graphics.SizeInt32(w, h));
+        var outer = _window.AppWindow.Size;
+        var x = (int)Math.Clamp(_anchor.Right - outer.Width, area.X + Gap, Math.Max(area.X + Gap, area.X + area.Width - outer.Width - Gap));
+        var y = (int)Math.Clamp(_anchor.Top, area.Y + Gap, Math.Max(area.Y + Gap, area.Y + area.Height - outer.Height - Gap));
+        _window.AppWindow.Move(new Windows.Graphics.PointInt32(x, y));
     }
 
-    // Une fenêtre d'extension se dimensionne à son contenu, qui arrive souvent après le chargement : on mesure plusieurs fois.
-    private async Task FitSoonAsync(int run)
+    // Tant que la fenêtre est ouverte, elle suit la taille de son contenu : souvent rapproché au chargement (le contenu
+    // arrive par étapes), puis plus espacé (un volet qui se déplie, une liste qui se remplit).
+    private async Task FollowSizeAsync(int run)
     {
-        foreach (var wait in new[] { 60, 250, 700, 1500 })
+        (double Width, double Height) shown = default;
+        for (var tick = 0; ; tick++)
         {
-            await Task.Delay(wait);
-            if (run != _run || !IsOpen) return;
+            await Task.Delay(tick < 25 ? 80 : 350);
+            if (run != _run || !IsOpen || _view?.CoreWebView2 is not { } core) return;
             try
             {
-                var raw = await view.CoreWebView2.ExecuteScriptAsync("JSON.stringify([Math.max(document.body ? document.body.scrollWidth : 0, document.documentElement.scrollWidth), Math.max(document.body ? document.body.scrollHeight : 0, document.documentElement.scrollHeight)])");
+                var raw = await core.ExecuteScriptAsync(Measure);
+                if (run != _run || !IsOpen) return;
                 var size = JsonSerializer.Deserialize<double[]>(JsonSerializer.Deserialize<string>(raw) ?? "[]");
-                if (size is not { Length: 2 } || size[0] < 1 || size[1] < 1) continue;
+                if (size is not { Length: 2 } || !double.IsFinite(size[0]) || !double.IsFinite(size[1]) || size[0] < 1 || size[1] < 1 || (Math.Abs(size[0] - shown.Width) < 1 && Math.Abs(size[1] - shown.Height) < 1)) continue;
+                shown = (size[0], size[1]);
                 Place(size[0], size[1]);
-                frame.UpdateLayout();
-                CornerClip.Set(view, 16);
             }
-            catch (Exception e) when (e is InvalidOperationException or JsonException or System.Runtime.InteropServices.COMException) { return; }
+            catch (JsonException) { } // page en cours de chargement : rien à mesurer encore
+            catch (Exception e) when (e is InvalidOperationException or COMException) { return; }
         }
     }
 
     public void Hide()
     {
-        if (!IsOpen) return;
         _run++;
-        frame.Visibility = Visibility.Collapsed;
-        view.CoreWebView2?.Navigate("about:blank"); // la page de l'extension est déchargée : rien ne tourne encart fermé
+        if (!IsOpen && _view is null) return;
+        IsOpen = false;
+        _window?.AppWindow.Hide();
+        CloseView(); // la page de l'extension est déchargée, et sa vue quitte la liste des onglets du moteur
     }
+
+    [StructLayout(LayoutKind.Sequential)] private struct Point { public int X, Y; }
+    [DllImport("user32.dll")] private static extern bool ClientToScreen(nint hwnd, ref Point point);
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")] private static extern nint SetWindowLongPtr(nint hwnd, int index, nint value);
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongW")] private static extern int SetWindowLong(nint hwnd, int index, int value);
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongW")] private static extern int GetWindowLong(nint hwnd, int index);
+    [DllImport("user32.dll")] private static extern bool SetWindowPos(nint hwnd, nint after, int x, int y, int width, int height, uint flags);
+    [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(nint hwnd, int attribute, ref int value, int size);
 }

@@ -1,3 +1,4 @@
+import {Button} from '@/components/motion/button/base';
 import { useState, type CSSProperties, type RefObject } from 'react';
 import { send } from './bridge';
 import { t } from './i18n';
@@ -65,7 +66,7 @@ export default function GroupEditor({ rootRef, group }: { rootRef: RefObject<HTM
           <legend>{t('Couleur', 'Color')}</legend>
           <div className="swatches">
             {group.presets.map(preset => (
-              <button key={preset} type="button" className={`swatch${preset === color ? ' on' : ''}`} style={{ background: preset }} aria-label={t(`Couleur ${preset}`, `Color ${preset}`)} aria-pressed={preset === color} onClick={() => pick(preset)} />
+              <Button variant="ghost" size="sm" pressScale={0.98} whileHover={undefined} key={preset} type="button" className={`swatch${preset === color ? ' on' : ''}`} style={{ background: preset }} aria-label={t(`Couleur ${preset}`, `Color ${preset}`)} aria-pressed={preset === color} onClick={() => pick(preset)} />
             ))}
           </div>
           <label className="slider">
@@ -101,13 +102,13 @@ export default function GroupEditor({ rootRef, group }: { rootRef: RefObject<HTM
         <fieldset>
           <legend>{t('Icône', 'Icon')}</legend>
           <div className="icons">
-            <button type="button" className={`icon-choice none${icon === '' ? ' on' : ''}`} aria-pressed={icon === ''} title={t('Sans icône', 'No icon')} onClick={() => setIcon('')}>
+            <Button variant="ghost" size="sm" pressScale={0.98} whileHover={undefined} type="button" className={`icon-choice none${icon === '' ? ' on' : ''}`} aria-pressed={icon === ''} title={t('Sans icône', 'No icon')} onClick={() => setIcon('')}>
               {t('Aucune', 'None')}
-            </button>
+            </Button>
             {ICONS.map(choice => (
-              <button key={choice} type="button" className={`icon-choice${choice === icon ? ' on' : ''}`} aria-pressed={choice === icon} aria-label={t(`Icône ${choice}`, `Icon ${choice}`)} onClick={() => setIcon(choice)}>
+              <Button variant="ghost" size="sm" pressScale={0.98} whileHover={undefined} key={choice} type="button" className={`icon-choice${choice === icon ? ' on' : ''}`} aria-pressed={choice === icon} aria-label={t(`Icône ${choice}`, `Icon ${choice}`)} onClick={() => setIcon(choice)}>
                 {choice}
-              </button>
+              </Button>
             ))}
           </div>
           <label className="slider">
@@ -117,8 +118,8 @@ export default function GroupEditor({ rootRef, group }: { rootRef: RefObject<HTM
         </fieldset>
 
         <div className="name-form-actions">
-          <button type="button" className="pill-action" onClick={() => send({ type: 'popup.close' })}>{t('Annuler', 'Cancel')}</button>
-          <button type="submit" className="pill-action primary" disabled={!name.trim()}>{group.create ? t('Créer le groupe', 'Create group') : t('Enregistrer', 'Save')}</button>
+          <Button variant="ghost" size="sm" pressScale={0.98} whileHover={undefined} type="button" className="pill-action" onClick={() => send({ type: 'popup.close' })}>{t('Annuler', 'Cancel')}</Button>
+          <Button variant="ghost" size="sm" pressScale={0.98} whileHover={undefined} type="submit" className="pill-action primary" disabled={!name.trim()}>{group.create ? t('Créer le groupe', 'Create group') : t('Enregistrer', 'Save')}</Button>
         </div>
       </form>
     </div>

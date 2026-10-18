@@ -5,3 +5,4 @@ dist/
 *.user
 src/Browser.App/extensions/
 release/
+landing/

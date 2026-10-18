@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Browser.Core;
 using Microsoft.Web.WebView2.Core;
 
 namespace Browser.App;
@@ -8,7 +9,7 @@ namespace Browser.App;
 /// la page). L'écoute d'un onglet commence quand le panneau l'affiche pour la première fois ; ce qui a été chargé avant
 /// n'est pas connu. Tout ce qui vient de la page (adresses, en-têtes, corps) est transmis comme du texte.
 /// </summary>
-public sealed class NetworkInspector(Action<string> post)
+public sealed partial class NetworkInspector(Action<string> post)
 {
     private sealed class Entry
     {
@@ -25,18 +26,33 @@ public sealed class NetworkInspector(Action<string> post)
     private const int MaxEntries = 400, MaxBody = 60_000, MaxPostData = 20_000;
     private readonly Dictionary<string, List<Entry>> _log = new();
     private readonly HashSet<string> _listening = new();
+    private readonly HashSet<string> _paused = new(), _preserve = new();
     // Les récepteurs d'évènements du moteur sont gardés ici : sans référence, le ramasse-miettes les libère, les
     // requêtes n'arrivent plus et le moteur finit par appeler un objet disparu (plantage constaté en version publiée).
     private readonly Dictionary<string, List<CoreWebView2DevToolsProtocolEventReceiver>> _receivers = new();
     private bool _postPending;
+    private readonly Dictionary<string, List<object>> _console = new();
+    // ponytail: one exact URL mock per tab; use a rule list when simultaneous mocks are needed.
+    private readonly Dictionary<string, NetworkDraft> _mocks = new();
+    private readonly Dictionary<string, CancellationTokenSource> _mockCancel = new(), _replays = new();
+    private readonly Dictionary<string, object> _results = new();
+    private readonly HashSet<string> _canceled = new();
+    private readonly HashSet<string> _mockBusy = new();
+    private readonly Dictionary<string, SemaphoreSlim> _mockLocks = new();
+    public string[] ActiveMocks => _mocks.Keys.Concat(_mockBusy).Distinct().ToArray();
+    private static readonly HttpClient Client = new(new HttpClientHandler { UseCookies = false, AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.All }) { Timeout = TimeSpan.FromSeconds(20) };
 
     /// <summary>Onglet affiché par le panneau ; null : panneau fermé.</summary>
     public string? Shown { get; set; }
+    public bool Listening => Shown is { } tabId && _listening.Contains(tabId);
 
     public async Task ListenAsync(string tabId, CoreWebView2 core)
     {
         if (!_listening.Add(tabId)) return;
+        _preserve.Add(tabId);
         var log = _log[tabId] = new List<Entry>();
+        var console = _console[tabId] = new List<object>();
+        core.NavigationStarting += (_, e) => { if (!e.IsRedirected && !_preserve.Contains(tabId)) Clear(tabId); };
         Entry? Find(JsonElement p) => Text(p, "requestId") is { } id ? log.FindLast(e => e.Id == id) : null;
 
         On(core, "Network.requestWillBeSent", p =>
@@ -48,11 +64,11 @@ public sealed class NetworkInspector(Action<string> post)
                 log.Add(entry = new Entry { Id = id });
                 if (log.Count > MaxEntries) log.RemoveAt(0);
             }
-            (entry.Method, entry.Url, entry.Type) = (Text(request, "method") ?? "", Text(request, "url") ?? "", Text(p, "type") ?? entry.Type);
+            (entry.Method, entry.Url, entry.Type) = (Text(request, "method") ?? "", NetworkTools.SafeUrl(Text(request, "url") ?? ""), Text(p, "type") ?? entry.Type);
             entry.Started = Number(p, "timestamp");
             entry.RequestHeaders = Headers(request);
             var body = Text(request, "postData") ?? "";
-            entry.PostData = body.Length > MaxPostData ? body[..MaxPostData] : body;
+            entry.PostData = NetworkTools.Redact(body.Length > MaxPostData ? body[..MaxPostData] : body);
         });
         On(core, "Network.responseReceived", p =>
         {
@@ -74,7 +90,19 @@ public sealed class NetworkInspector(Action<string> post)
             entry.Failed = p.TryGetProperty("canceled", out var canceled) && canceled.ValueKind == JsonValueKind.True ? "canceled" : Text(p, "errorText") ?? "failed";
             entry.Ms = Math.Max(0, (Number(p, "timestamp") - entry.Started) * 1000);
         });
-        try { await core.CallDevToolsProtocolMethodAsync("Network.enable", "{}"); }
+        On(core, "Runtime.consoleAPICalled", p => {
+            var text = p.TryGetProperty("args", out var args) ? string.Join(" ", args.EnumerateArray().Select(a => a.TryGetProperty("value", out var v) ? v.ToString() : Text(a,"description") ?? Text(a,"type") ?? "")) : "";
+            console.Add(new { level = Text(p,"type") ?? "log", text = NetworkTools.Redact(text) });
+            if (console.Count > 200) console.RemoveAt(0);
+        });
+        On(core, "Runtime.exceptionThrown", p => {
+            if (!p.TryGetProperty("exceptionDetails", out var details)) return;
+            var text = details.TryGetProperty("exception", out var error) ? Text(error,"description") : Text(details,"text");
+            console.Add(new { level = "error", text = NetworkTools.Redact(text ?? "Error") });
+            if (console.Count > 200) console.RemoveAt(0);
+        });
+        On(core, "Fetch.requestPaused", p => { _ = PausedAsync(tabId, core, p.Clone()); });
+        try { await core.CallDevToolsProtocolMethodAsync("Network.enable", "{\"maxTotalBufferSize\":4194304,\"maxResourceBufferSize\":1048576,\"maxPostDataSize\":20000}"); await core.CallDevToolsProtocolMethodAsync("Runtime.enable", "{}"); }
         catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { _listening.Remove(tabId); }
 
         void On(CoreWebView2 target, string name, Action<JsonElement> handle)
@@ -84,6 +112,8 @@ public sealed class NetworkInspector(Action<string> post)
             kept.Add(receiver);
             receiver.DevToolsProtocolEventReceived += (_, e) =>
             {
+                // Les réponses en cours se terminent ; la pause empêche uniquement les nouvelles captures.
+                if (_paused.Contains(tabId) && (name == "Network.requestWillBeSent" || name.StartsWith("Runtime."))) return;
                 try
                 {
                     using var doc = JsonDocument.Parse(e.ParameterObjectAsJson);
@@ -98,15 +128,40 @@ public sealed class NetworkInspector(Action<string> post)
     public void Clear(string tabId)
     {
         _log.GetValueOrDefault(tabId)?.Clear();
+        _console.GetValueOrDefault(tabId)?.Clear();
+        _results.Remove(tabId);
         Post();
     }
+
+    public void Configure(string tabId, string option, bool enabled)
+    {
+        var set = option == "pause" ? _paused : _preserve;
+        if (enabled) set.Add(tabId); else set.Remove(tabId);
+        Post();
+    }
+
+    public string Export(string tabId) => JsonSerializer.Serialize(new
+    {
+        application = "Sol", exportedAt = DateTimeOffset.UtcNow,
+        requests = _log.GetValueOrDefault(tabId, []).Select(e => new
+        {
+            e.Method, e.Url, e.Type, e.Status, e.Mime, e.Size, durationMs = e.Ms, e.Failed,
+            e.RequestHeaders, e.ResponseHeaders, e.PostData,
+        }),
+        console = _console.GetValueOrDefault(tabId, []),
+    }, new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
 
     /// <summary>Onglet fermé : son journal part avec lui.</summary>
     public void Forget(string tabId)
     {
         _log.Remove(tabId);
         _listening.Remove(tabId);
+        _paused.Remove(tabId); _preserve.Remove(tabId);
         _receivers.Remove(tabId);
+        _console.Remove(tabId); _mocks.Remove(tabId); _results.Remove(tabId);
+        _mockLocks.Remove(tabId);
+        if (_mockCancel.Remove(tabId, out var mock)) { mock.Cancel(); mock.Dispose(); }
+        if (_replays.Remove(tabId, out var replay)) replay.Cancel();
     }
 
     // Les requêtes arrivent par rafales : le panneau est mis à jour quatre fois par seconde au plus.
@@ -125,6 +180,10 @@ public sealed class NetworkInspector(Action<string> post)
         post(JsonSerializer.Serialize(new
         {
             panel = "network",
+            tabId = Shown, console = _console.GetValueOrDefault(Shown, []),
+            paused = _paused.Contains(Shown), preserve = _preserve.Contains(Shown),
+            mock = _mocks.GetValueOrDefault(Shown) is { } rule ? new { Url = NetworkTools.SafeUrl(rule.Url), rule.Method, rule.Mode, rule.Status, rule.Delay } : null,
+            result = _results.GetValueOrDefault(Shown), busy = _replays.ContainsKey(Shown), mockBusy = _mockBusy.Contains(Shown),
             items = _log.GetValueOrDefault(Shown, []).Select(e => new
             {
                 id = e.Id, method = e.Method, url = e.Url, type = e.Type, status = e.Status, mime = e.Mime, size = e.Size, ms = e.Ms, failed = e.Failed,
@@ -135,6 +194,7 @@ public sealed class NetworkInspector(Action<string> post)
     /// <summary>Détail d'une requête : en-têtes, corps envoyé, et réponse si elle est du texte encore en mémoire.</summary>
     public async Task PostDetailAsync(string tabId, CoreWebView2 core, string requestId)
     {
+        if (Shown != tabId) return;
         if (_log.GetValueOrDefault(tabId)?.FindLast(e => e.Id == requestId) is not { } entry) return;
         string body = "", note = "";
         try
@@ -151,10 +211,11 @@ public sealed class NetworkInspector(Action<string> post)
         {
             note = "unavailable"; // réponse sans corps, ou déjà sortie de la mémoire du moteur
         }
+        if (Shown != tabId) return;
         post(JsonSerializer.Serialize(new
         {
-            panel = "network-detail", id = entry.Id, url = entry.Url, method = entry.Method, status = entry.Status, mime = entry.Mime,
-            failed = entry.Failed, requestHeaders = entry.RequestHeaders, responseHeaders = entry.ResponseHeaders, postData = entry.PostData, body, note,
+            panel = "network-detail", tabId, id = entry.Id, url = entry.Url, method = entry.Method, status = entry.Status, mime = entry.Mime,
+            failed = entry.Failed, requestHeaders = entry.RequestHeaders, responseHeaders = entry.ResponseHeaders, postData = entry.PostData, body = NetworkTools.Redact(body), note,
         }));
     }
 
@@ -168,62 +229,8 @@ public sealed class NetworkInspector(Action<string> post)
     {
         var headers = new Dictionary<string, string>();
         if (e.TryGetProperty("headers", out var all) && all.ValueKind == JsonValueKind.Object)
-            foreach (var header in all.EnumerateObject()) headers[header.Name] = header.Value.ToString();
+            foreach (var header in all.EnumerateObject()) headers[header.Name] = NetworkTools.Secret(header.Name) ? NetworkTools.Mask : NetworkTools.Redact(header.Value.ToString());
         return headers;
     }
-}
 
-/// <summary>
-/// Panneau du bas (outils de développement) : une vue d'interface dans sa propre rangée, sous les pages. Elle n'est
-/// créée qu'à la première ouverture : un navigateur qui ne s'en sert pas ne la paie pas.
-/// </summary>
-public sealed class PanelHost(Microsoft.UI.Xaml.Controls.RowDefinition row, UiBridge bridge, Func<Task> init, Browser.Core.Settings settings)
-{
-    public const double MinHeight = 140, MaxHeight = 900;
-    private bool _ready;
-
-    public bool IsOpen => row.Height.Value > 0;
-
-    public async Task ShowAsync()
-    {
-        row.Height = new Microsoft.UI.Xaml.GridLength(Math.Clamp(settings.PanelHeight, MinHeight, MaxHeight));
-        if (_ready) return;
-        _ready = true;
-        await init();
-    }
-
-    /// <summary>Change la hauteur du panneau ouvert (son bord haut est tiré à la souris).</summary>
-    public void Resize(double height)
-    {
-        if (!IsOpen) return;
-        settings.PanelHeight = Math.Clamp(Math.Round(height), MinHeight, MaxHeight);
-        row.Height = new Microsoft.UI.Xaml.GridLength(settings.PanelHeight);
-    }
-
-    public void Hide() => row.Height = new Microsoft.UI.Xaml.GridLength(0);
-
-    public void Post(string json) => bridge.Post(json);
-}
-
-/// <summary>
-/// Accueil : une vue d'interface qui couvre toute la fenêtre, à la première ouverture ou quand l'utilisateur demande à
-/// reprendre les données d'un autre navigateur. Créée seulement quand elle sert.
-/// </summary>
-public sealed class WelcomeHost(Microsoft.UI.Xaml.Controls.WebView2 view, UiBridge bridge, Func<Task> init)
-{
-    private bool _ready;
-
-    public bool IsOpen => view.Visibility == Microsoft.UI.Xaml.Visibility.Visible;
-
-    public async Task ShowAsync()
-    {
-        view.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
-        if (_ready) { bridge.Post("""{"welcome":"reset"}"""); return; }
-        _ready = true;
-        await init();
-    }
-
-    public void Hide() => view.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
-
-    public void Post(string json) => bridge.Post(json);
 }

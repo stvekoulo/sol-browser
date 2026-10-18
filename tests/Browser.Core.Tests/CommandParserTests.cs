@@ -2,6 +2,31 @@ using Browser.Core;
 
 public class CommandParserTests
 {
+    [Theory]
+    [InlineData(50)]
+    [InlineData(55)]
+    [InlineData(95)]
+    [InlineData(105)]
+    [InlineData(195)]
+    [InlineData(200)]
+    public void Page_zoom_accepts_five_percent_steps(int percent) =>
+        Assert.Equal(new Command("zoom.set", Index: percent), CommandParser.Parse($$"""{"type":"zoom.set","index":{{percent}}}"""));
+
+    [Theory]
+    [InlineData("{\"type\":\"zoom.set\"}")]
+    [InlineData("{\"type\":\"zoom.set\",\"index\":49}")]
+    [InlineData("{\"type\":\"zoom.set\",\"index\":52}")]
+    [InlineData("{\"type\":\"zoom.set\",\"index\":205}")]
+    [InlineData("{\"type\":\"zoom.set\",\"index\":100.5}")]
+    public void Page_zoom_rejects_values_outside_the_supported_steps(string json) => Assert.Null(CommandParser.Parse(json));
+
+    [Fact]
+    public void Sidebar_completion_requires_an_integer_step()
+    {
+        Assert.Equal(new Command("sidebar.motion.done", Index: 3), CommandParser.Parse("""{"type":"sidebar.motion.done","index":3}"""));
+        Assert.Null(CommandParser.Parse("""{"type":"sidebar.motion.done"}"""));
+        Assert.Null(CommandParser.Parse("""{"type":"sidebar.motion.done","index":1.5}"""));
+    }
     [Fact]
     public void Parses_a_valid_command()
     {
@@ -15,12 +40,30 @@ public class CommandParserTests
         Assert.Equal(new Command("tab.open"), CommandParser.Parse("""{"type":"tab.open"}"""));
         Assert.Equal("https://a.test", CommandParser.Parse("""{"type":"tab.open","url":"https://a.test"}""")!.Url);
     }
+    [Theory]
+    [InlineData("download.pause")]
+    [InlineData("download.resume")]
+    [InlineData("notes.split")]
+    public void Context_actions_require_their_target(string type)
+    {
+        Assert.Null(CommandParser.Parse($$"""{"type":"{{type}}"}"""));
+        Assert.Equal("target",CommandParser.Parse($$"""{"type":"{{type}}","id":"target"}""")!.Id);
+    }
 
     [Fact]
     public void Accepts_host_lifecycle_commands()
     {
         Assert.NotNull(CommandParser.Parse("""{"type":"ui.ready"}"""));
         Assert.NotNull(CommandParser.Parse("""{"type":"window.drag"}"""));
+    }
+
+    [Fact]
+    public void Palette_choices_require_an_identifier()
+    {
+        Assert.Equal(new Command("palette.open"), CommandParser.Parse("""{"type":"palette.open"}"""));
+        Assert.Equal(new Command("palette.pick", Id: "1:2"), CommandParser.Parse("""{"type":"palette.pick","id":"1:2"}"""));
+        Assert.Null(CommandParser.Parse("""{"type":"palette.pick"}"""));
+        Assert.Null(CommandParser.Parse("""{"type":"palette.pick","id":2}"""));
     }
 
     [Fact]

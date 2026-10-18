@@ -8,24 +8,26 @@
       <RowDefinition Height="52" />
       <RowDefinition Height="*" />
     </Grid.RowDefinitions>
-    <WebView2 x:Name="Ui" Grid.Row="0" />
-    <Grid Grid.Row="1">
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition x:Name="SidebarColumn" Width="296" />
+      <ColumnDefinition Width="*" />
+    </Grid.ColumnDefinitions>
+    <local:DividerGrip x:Name="SidebarGrip" Canvas.ZIndex="10" Grid.RowSpan="2" Grid.Column="0" Width="8" HorizontalAlignment="Right" Background="Transparent" />
+    <WebView2 x:Name="Ui" Grid.RowSpan="2" Grid.ColumnSpan="2" Opacity="0" />
+    <!-- Navigation et pages partagent la colonne de droite ; la sidebar occupe toute la hauteur. -->
+    <Grid x:Name="ContentArea" Grid.Row="1" Grid.Column="1">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="*" />
+        <RowDefinition x:Name="PanelRow" Height="0" />
+      </Grid.RowDefinitions>
+      <!-- Panneau de discussion Sol AI à droite des pages, créé à la première ouverture. -->
       <Grid.ColumnDefinitions>
-        <ColumnDefinition x:Name="SidebarColumn" Width="296" />
         <ColumnDefinition Width="*" />
+        <ColumnDefinition x:Name="ChatColumn" Width="0" />
       </Grid.ColumnDefinitions>
-      <WebView2 x:Name="Sidebar" Grid.Column="0" />
-      <!-- Bord droit de la carte latérale : le tirer change sa largeur. Dans la marge de la carte, donc sur rien d'utile. -->
-      <local:DividerGrip x:Name="SidebarGrip" Grid.Column="0" Width="8" HorizontalAlignment="Right" Background="Transparent" />
-      <!-- Les pages, et dessous le panneau des outils de développement (fermé : hauteur nulle). -->
-      <Grid Grid.Column="1">
-        <Grid.RowDefinitions>
-          <RowDefinition Height="*" />
-          <RowDefinition x:Name="PanelRow" Height="0" />
-        </Grid.RowDefinitions>
-        <WebView2 x:Name="Panel" Grid.Row="1" />
-        <!-- Bord haut du panneau : le tirer change sa hauteur. Dans la marge du haut de la carte du panneau. -->
-        <local:RowGrip x:Name="PanelGrip" Grid.Row="1" Height="8" VerticalAlignment="Top" Background="Transparent" />
+      <WebView2 x:Name="Chat" Grid.Column="1" Grid.RowSpan="2" Canvas.ZIndex="2" Visibility="Collapsed" />
+      <WebView2 x:Name="Panel" Grid.Row="1" />
+      <local:RowGrip x:Name="PanelGrip" Grid.Row="1" Height="8" VerticalAlignment="Top" Background="Transparent" />
       <Grid x:Name="Pages" Grid.Row="0">
         <Grid.ColumnDefinitions>
           <ColumnDefinition x:Name="PrimaryColumn" Width="*" />
@@ -34,12 +36,14 @@
         </Grid.ColumnDefinitions>
         <local:DividerGrip x:Name="Divider" Grid.Column="1" Background="#40808080" />
       </Grid>
-      </Grid>
     </Grid>
+    <Border x:Name="StartupShield" Grid.RowSpan="2" Grid.ColumnSpan="2" Background="#EEF0E2" Canvas.ZIndex="100">
+      <TextBlock x:Name="StartupText" HorizontalAlignment="Center" VerticalAlignment="Center" Text="" TextWrapping="Wrap" MaxWidth="420" />
+    </Border>
     <!-- Accueil de première ouverture : toute la fenêtre, créé seulement quand il sert. -->
-    <WebView2 x:Name="Welcome" Grid.RowSpan="2" Visibility="Collapsed" Canvas.ZIndex="40" />
+    <WebView2 x:Name="Welcome" Grid.RowSpan="2" Grid.ColumnSpan="2" Visibility="Collapsed" Canvas.ZIndex="40" />
     <!-- Pastille du balayage à deux doigts (page précédente ou suivante) : sort du bord pendant le geste. -->
-    <Border x:Name="SwipeHint" Grid.Row="1" Width="48" Height="48" CornerRadius="24" Margin="14,0,14,0"
+    <Border x:Name="SwipeHint" Grid.Row="1" Grid.Column="1" Width="48" Height="48" CornerRadius="24" Margin="14,0,14,0"
             Background="#E61C1C1E" BorderBrush="#33FFFFFF" BorderThickness="1"
             HorizontalAlignment="Left" VerticalAlignment="Center" Opacity="0" IsHitTestVisible="False"
             RenderTransformOrigin="0.5,0.5">
@@ -52,7 +56,7 @@
       <FontIcon x:Name="SwipeGlyph" Glyph="&#xE76B;" FontSize="16" Foreground="White" />
     </Border>
     <!-- Encart flottant en bas à droite : téléchargements en cours. -->
-    <Grid x:Name="DockFrame" Grid.RowSpan="2" Width="1" Height="1" Margin="0,0,18,18"
+    <Grid x:Name="DockFrame" Grid.RowSpan="2" Grid.ColumnSpan="2" Width="1" Height="1" Margin="0,0,18,18"
           HorizontalAlignment="Right" VerticalAlignment="Bottom" CornerRadius="20"
           Translation="0,0,32">
       <Grid.Shadow>
@@ -60,17 +64,12 @@
       </Grid.Shadow>
       <WebView2 x:Name="Dock" />
     </Grid>
-    <!-- Fenêtre d'une extension, ouverte depuis la barre du haut. Créée seulement quand elle sert. -->
-    <Grid x:Name="ExtensionFrame" Grid.RowSpan="2" Width="380" Height="320" Visibility="Collapsed"
-          HorizontalAlignment="Left" VerticalAlignment="Top" CornerRadius="16"
-          Translation="0,0,32">
-      <Grid.Shadow>
-        <ThemeShadow />
-      </Grid.Shadow>
-      <WebView2 x:Name="Extension" />
+    <Grid x:Name="CaptureFrame" Grid.RowSpan="2" Grid.ColumnSpan="2" Width="1" Height="1" Visibility="Collapsed"
+          HorizontalAlignment="Left" VerticalAlignment="Top" CornerRadius="20" Translation="0,0,32">
+      <WebView2 x:Name="CaptureControls" />
     </Grid>
     <!-- Vue posée par-dessus la page : suggestions, bibliothèque, menus. -->
-    <Grid x:Name="PopupFrame" Grid.RowSpan="2" Width="1" Height="1"
+    <Grid x:Name="PopupFrame" Grid.RowSpan="2" Grid.ColumnSpan="2" Width="1" Height="1"
           HorizontalAlignment="Left" VerticalAlignment="Top" CornerRadius="20"
           Translation="0,0,32">
       <Grid.Shadow>

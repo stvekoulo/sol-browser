@@ -4,6 +4,31 @@ namespace Browser.Core;
 
 public sealed class Settings
 {
+    public int NotesArchiveDays { get; set; }
+    // Classement quotidien des favoris et de l'historique par Sol AI : envoi à OpenAI, donc désactivé par défaut.
+    public bool SolAiCategories { get; set; }
+    public bool SolAiWelcomeShown { get; set; }
+    private int _solAiTone, _solAiLength;
+    public int SolAiTone { get => _solAiTone; set => _solAiTone = value is >= 0 and <= 2 ? value : 0; }
+    public int SolAiLength { get => _solAiLength; set => _solAiLength = value is >= 0 and <= 2 ? value : 0; }
+    public bool FullScreen { get; set; } = true;
+    private double _uiScale = 1;
+    /// <summary>Taille de l'interface choisie dans les réglages : 80 à 100 %, par pas de 5 %.</summary>
+    public double UiScale { get => _uiScale; set => _uiScale = value is 1 or 0.95 or 0.9 or 0.85 or 0.8 ? value : 1; }
+    /// <summary>
+    /// Facteur réellement appliqué : de 0,86 à 0,92, interpolé entre les paliers de 5 %.
+    /// Les tailles sont proches pour garder une interface confortable.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public double UiFactor => Math.Round(0.62 + _uiScale * 0.3, 3);
+    private double _pageZoom = 1;
+    /// <summary>Zoom commun aux pages du profil, conservé au redémarrage (50 à 200 %).</summary>
+    public double PageZoom
+    {
+        get => _pageZoom;
+        set => _pageZoom = double.IsFinite(value) ? Math.Clamp(value, 0.5, 2) : 1;
+    }
+
     public string SearchUrlTemplate { get; set; } = "https://www.google.com/search?q={0}";
     public bool BlurEnabled { get; set; } = true;
     /// <summary>Masque les barres de défilement des pages. Désactivé : une barre fine apparaît pendant le défilement.</summary>
@@ -27,11 +52,23 @@ public sealed class Settings
     /// <summary>Envoie la saisie de la barre d'adresse au moteur de recherche pour obtenir des complétions.</summary>
     public bool OnlineSuggestions { get; set; } = true;
     public string SuggestUrlTemplate { get; set; } = "https://suggestqueries.google.com/complete/search?client=firefox&ie=utf-8&oe=utf-8&q={0}";
-    public const string DefaultHomePage = "https://www.google.com";
+    public const string DefaultHomePage = "https://start.sol/index.html#start";
     /// <summary>Page ouverte dans un nouvel onglet. (Nouveau nom : l'ancien réglage « HomeUrl » valait toujours about:blank.)</summary>
-    public string HomePage { get; set; } = DefaultHomePage;
+    private string _homePage = DefaultHomePage;
+    public string HomePage
+    {
+        get => _homePage;
+        set => _homePage = string.IsNullOrWhiteSpace(value) || value is "https://www.google.com" or "https://www.google.com/" ? DefaultHomePage : value;
+    }
+    /// <summary>Affiche l'image d'arrière-plan sur la page d'accueil d'un nouvel onglet.</summary>
+    public bool StartWallpaper { get; set; }
+    /// <summary>Photo choisie pour ce fond (voir StartWallpapers) ; 0 : l'image livrée avec Sol.</summary>
+    public int StartWallpaperPhoto { get; set; }
+    /// <summary>Une photo différente chaque jour, à la place de la photo choisie.</summary>
+    public bool StartWallpaperDaily { get; set; }
     /// <summary>Langue de l'interface : "system" (celle de Windows), "fr" ou "en".</summary>
     public string Language { get; set; } = "system";
+    public int Spelling { get; set; } = 3; // 0 : désactivée, 1 : français, 2 : anglais, 3 : les deux
     /// <summary>L'accueil de première ouverture (nom, import, apparence) a été vu.</summary>
     public bool Onboarded { get; set; }
     /// <summary>Nom que l'utilisateur donne au profil par défaut ; vide : « Défaut ».</summary>
@@ -41,23 +78,21 @@ public sealed class Settings
     /// ces deux dernières livrées avec le navigateur, et leurs versions grasses "inter-bold" et "sf-bold".
     /// </summary>
     public string Font { get; set; } = "default";
-    /// <summary>Bloque les requêtes vers les domaines connus de publicité et de pistage.</summary>
-    public bool BlockAds { get; set; } = true;
+    /// <summary>Active uBlock Origin Lite pour bloquer les publicités et les traqueurs.</summary>
     /// <summary>Met en veille les onglets inactifs, puis les décharge de la mémoire s'ils le restent longtemps.</summary>
     public bool MemorySaver { get; set; } = true;
     /// <summary>Quitter un onglet où une vidéo joue la garde à l'écran dans un lecteur flottant.</summary>
     public bool AutoPip { get; set; } = true;
-    /// <summary>Largeur du lecteur flottant, réglée par l'utilisateur.</summary>
-    public double PipWidth { get; set; } = 392;
-    /// <summary>Place du lecteur flottant : écart avec le bord droit et le bord bas de la zone des pages.</summary>
-    public double PipRight { get; set; } = 18;
-    public double PipBottom { get; set; } = 18;
     /// <summary>Largeur de la carte latérale, réglée en tirant son bord droit.</summary>
     public double SidebarWidth { get; set; } = 296;
     /// <summary>Hauteur du panneau des outils de développement, réglée en tirant son bord haut.</summary>
     public double PanelHeight { get; set; } = 300;
     /// <summary>Écrans affichés côte à côte par la comparaison d'écrans ; vide : le choix par défaut.</summary>
     public List<string> CompareDevices { get; set; } = new();
+    private List<string> _pinnedExtensions = new();
+    public List<string> PinnedExtensions { get => _pinnedExtensions; set => _pinnedExtensions = value?.Where(ExtensionCatalog.IsId).Distinct().ToList() ?? []; }
+    /// <summary>Dernière recherche de mises à jour des extensions du store (UTC) : une par demi-journée suffit.</summary>
+    public DateTime ExtensionsChecked { get; set; }
     /// <summary>Raccourcis de la carte latérale. Ceux-ci sont proposés au départ ; l'utilisateur les modifie ou les retire.</summary>
     public List<SiteShortcut> Shortcuts { get; set; } =
     [
@@ -99,6 +134,8 @@ public sealed class SiteShortcut
 
 public sealed class Session
 {
+    public List<string> SessionIds { get; set; } = new();
+    public List<string> TranslationOriginals { get; set; } = new();
     public List<string> Urls { get; set; } = new();
     /// <summary>Titre de chaque adresse de <see cref="Urls"/> : affiché tant que la page n'a pas été rechargée.</summary>
     public List<string> Titles { get; set; } = new();
@@ -129,25 +166,43 @@ public sealed class SessionGroup
 
 public static class JsonFileStore
 {
-    public static T Load<T>(string path) where T : new()
+    private static readonly JsonSerializerOptions Options = new() { RespectNullableAnnotations = true };
+    public static T Load<T>(string path, bool recoverBackup = true) where T : new()
     {
-        if (!File.Exists(path)) return new T();
-        try
+        foreach (var candidate in recoverBackup ? new[] { path, path + ".bak" } : new[] { path })
         {
-            return JsonSerializer.Deserialize<T>(File.ReadAllText(path)) ?? new T();
+            if (!File.Exists(candidate)) continue;
+            try { return JsonSerializer.Deserialize<T>(File.ReadAllText(candidate), Options) ?? throw new JsonException("Empty JSON document"); }
+            catch (JsonException)
+            {
+                try { File.Move(candidate, candidate + ".corrupt", overwrite: true); }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { System.Diagnostics.Trace.WriteLine(e); }
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { System.Diagnostics.Trace.WriteLine(e); }
         }
-        catch (JsonException)
-        {
-            File.Move(path, path + ".corrupt", overwrite: true);
-            return new T();
-        }
+        return new T();
     }
 
-    public static void Save<T>(string path, T value)
+    public static bool Save<T>(string path, T value)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var tmp = path + ".tmp";
-        File.WriteAllText(tmp, JsonSerializer.Serialize(value));
-        File.Move(tmp, path, overwrite: true);
+        try
+        {
+            path = Path.GetFullPath(path);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            var tmp = path + ".tmp";
+            using (var stream = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                JsonSerializer.Serialize(stream, value, Options);
+                stream.Flush(flushToDisk: true);
+            }
+            if (File.Exists(path)) File.Replace(tmp, path, path + ".bak");
+            else File.Move(tmp, path);
+            return true;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            System.Diagnostics.Trace.WriteLine(e);
+            return false; // garder le fichier précédent si le disque est plein ou le profil verrouillé
+        }
     }
 }

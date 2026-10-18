@@ -2,6 +2,11 @@ using Browser.Core;
 
 public class SuggestionsTests
 {
+    [Theory]
+    [InlineData("/notes")]
+    [InlineData(":notes")]
+    public void Notes_shortcuts_offer_the_internal_page(string input) => Assert.Equal(new Suggestion(QuickNotes.PageUrl, "Notes", "go"), Suggestions.Build(input, [], Search)[0]);
+
     private const string Search = "https://www.google.com/search?q={0}";
     private static readonly DateTimeOffset T0 = new(2026, 10, 3, 12, 0, 0, TimeSpan.Zero);
 

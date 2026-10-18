@@ -150,7 +150,7 @@ public class TabGroupTests
     }
 
     [Fact]
-    public void Collapsing_the_group_of_the_active_tab_activates_a_tab_outside_it()
+    public void Collapsing_the_group_keeps_the_active_page()
     {
         var (m, a, b, c, _) = Four();
         var g = m.CreateGroup(a.Id, "x")!;
@@ -158,17 +158,18 @@ public class TabGroupTests
         m.Activate(b.Id);
         Assert.True(m.UpdateGroup(g.Id, collapsed: true));
         Assert.True(m.Groups[0].Collapsed);
-        Assert.Equal(c.Id, m.ActiveId);
+        Assert.Equal(b.Id, m.ActiveId);
     }
 
     [Fact]
-    public void A_group_holding_every_tab_cannot_collapse()
+    public void A_group_holding_every_tab_can_collapse_without_closing_the_page()
     {
         var m = new TabManager();
         var a = m.Open("https://a.test");
         var g = m.CreateGroup(a.Id, "x")!;
-        Assert.False(m.UpdateGroup(g.Id, collapsed: true));
-        Assert.False(m.Groups[0].Collapsed);
+        Assert.True(m.UpdateGroup(g.Id, collapsed: true));
+        Assert.True(m.Groups[0].Collapsed);
+        Assert.Equal(a.Id, m.ActiveId);
     }
 
     [Fact]
