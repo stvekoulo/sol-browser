@@ -1,4 +1,4 @@
-.start-history .nod-card > button {
+.start-history > button {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -8,12 +8,12 @@
   text-align: left;
   border-radius: 14px;
 }
-.start-history .nod-card > button:hover {
+.start-history > button:hover {
   background: var(--bg-glass-pill-hover);
   color: var(--text);
   box-shadow: var(--shadow-glass-pill);
 }
-.start-history .nod-card > button > span:nth-child(2) {
+.start-history > button > span:nth-child(2) {
   display: flex;
   flex: 1;
   min-width: 0;
@@ -71,6 +71,3 @@
 .start-topic-open { grid-column: 1 / -1; }
 .start-category .start-category-more { justify-content: center; margin-top: 4px; font-size: 12px; color: var(--text-dim); }
 .start-category .start-category-more:hover { color: var(--text); }
-
-/* De l'air au-dessus des favoris : l'éventail d'actions sort par le haut des tuiles. */
-.start-favorites { padding-top: 26px; }

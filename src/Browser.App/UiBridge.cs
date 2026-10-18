@@ -139,7 +139,7 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
             privateMode = AppPaths.Private || _activePrivate,
             font = on?.Font ?? "default",
             uiScale = on?.UiFactor ?? 0.92,
-            fan = new { enabled = on?.FanEnabled ?? true, trigger = on?.FanTrigger ?? 0 },
+            fan = new { enabled = on?.FanEnabled ?? true, trigger = on?.FanTrigger ?? 2 },
             tint = new { topbar = on?.TintTopbar ?? true, sidebar = on?.TintSidebar ?? true, menus = on?.TintMenus ?? true, background = on?.TintBackground ?? true },
         });
         if (!force && s_lastThemeMsg == json) return;

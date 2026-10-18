@@ -26,6 +26,7 @@ try {
   };
   await host.wait(async()=>{await seed();return chat.evaluate('!!document.querySelector(".nod")');},'assistant action wrapper');
   assert.equal(await chat.evaluate('document.querySelectorAll(".nod-act").length'),0,'no unused mounted chat buttons');
+  await command({type:'settings.set',id:'fanTrigger',index:0});
   await move(chat,'.nod');await host.wait(()=>chat.evaluate('document.querySelectorAll(".nod-act:not(:disabled)").length===2'),'hover opens inline chat actions');
   await enabled(0);
   for(const page of [notes,chat]){await move(page,'.nod');assert.equal(await page.evaluate('document.querySelectorAll(".nod-act:not(:disabled)").length'),0);}

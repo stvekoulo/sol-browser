@@ -9,6 +9,7 @@ await writeFile(resolve(host.profile,'notes.json'),JSON.stringify(notes));
 let ui,page;
 try {
   ui=await host.launch(850,1400);
+  await ui.evaluate(`chrome.webview.postMessage('{"type":"settings.set","id":"fanTrigger","index":0}')`);
   await ui.evaluate(`chrome.webview.postMessage('{"type":"tab.open","url":"https://start.sol/index.html#notes"}')`);
   page=await host.connect('https://start.sol/index.html#notes');
   await host.wait(()=>page.evaluate('document.querySelectorAll(".note-card").length===3'),'three notes');
