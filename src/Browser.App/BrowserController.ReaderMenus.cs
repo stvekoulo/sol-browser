@@ -11,10 +11,17 @@ public sealed partial class BrowserController
 
     // Clic droit sur l'en-tête d'un groupe.
     // Fenêtre d'édition d'un groupe : nom, couleur libre, icône. Sert aussi à en créer un autour d'un onglet.
+    private (string? TabId, TabGroup? Group)? _groupEditing;
     private void EditGroup(string? tabId, TabGroup? group)
     {
         HidePopup();
-        _popup.ShowCentered(340, JsonSerializer.Serialize(new
+        _groupEditing = (tabId, group); _groupSuggestion = null;
+        _popup.ShowCentered(340, GroupEditJson(), top: 64);
+    }
+    private string GroupEditJson()
+    {
+        var (tabId, group) = _groupEditing ?? (null, null);
+        return JsonSerializer.Serialize(new
         {
             popup = "group-edit",
             create = group is null,
@@ -23,8 +30,13 @@ public sealed partial class BrowserController
             color = group?.Color ?? TabManager.GroupColors[_tabs.Groups.Count % TabManager.GroupColors.Count],
             icon = group?.Icon ?? "",
             presets = TabManager.GroupColors,
-        }), top: 64);
+            // Sol AI propose un nom, une couleur et une icône d'après les onglets du groupe existant.
+            ai = group is not null && AiReady,
+            suggesting = group is not null && _groupSuggesting == group.Id,
+            suggestion = _groupSuggestion is { } s ? new { name = s.Name, color = s.Color, icon = s.Icon } : null,
+        });
     }
+    private void PublishGroupEditor() { if (_groupEditing is not null && !_closingWindow) _popup.Post(GroupEditJson()); }
 
     // Action à lancer une fois le menu refermé (ouvrir une saisie depuis un menu, par exemple).
     private Action? _afterMenu;

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { EyeTracker } from '@/components/bencho/EyeTracker';
 import { onMessage, send } from './bridge';
 import { t, useLang } from './i18n';
 import SolMarkdown from './SolMarkdown';
@@ -24,8 +25,9 @@ export default function SolChat() {
     send({ type: 'chat.ready' });
     return off;
   }, []);
-  return <div className="sol-chat">
+  return <div className="sol-chat" data-eyt-frame>
     <header className="sol-chat-head">
+      {!!state.messages.length && <EyeTracker className="eyt-inline" size={24} eyeScale={1.5} />}
       <strong>Sol AI</strong>
       <span className="sol-chat-plan">{state.ready ? t('Forfait ChatGPT', 'ChatGPT plan') : ''}</span>
       <button className="pill-action" disabled={state.busy || !state.messages.length} onClick={() => send({ type: 'chat.clear' })}>{t('Nouvelle discussion', 'New chat')}</button>
@@ -33,6 +35,7 @@ export default function SolChat() {
     </header>
     <MessageScroller className="sol-chat-log" label={t('Discussion', 'Conversation')} busy={state.busy}>
       {!state.messages.length && <div className="sol-chat-empty">
+        <EyeTracker className="eyt-inline sol-chat-mascot" size={72} />
         <p>{state.focus === 'notes' ? t('Sol AI peut chercher, résumer et créer vos notes.', 'Sol AI can search, summarize and create your notes.')
           : t('Posez une question. Sol AI peut lire et parcourir l’onglet ouvert, et utiliser vos notes.', 'Ask anything. Sol AI can read and browse the open tab, and use your notes.')}</p>
         {state.ready && <div className="sol-chat-suggestions">{suggestions(state.focus).map(s => <button key={s} className="pill-action" onClick={() => setDraft(s)}>{s}</button>)}</div>}

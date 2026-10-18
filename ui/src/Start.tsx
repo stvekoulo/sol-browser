@@ -3,6 +3,8 @@ import { useIconLook } from './Sidebar';
 import { formatDomain, onMessage, send } from './bridge';
 import { setLang, t, useLang } from './i18n';
 
+import { CornerActions } from '@/components/bencho/CornerActions';
+import { AppWindow, Columns2, Copy, FolderPlus, ListTree, Pencil, SquareArrowOutUpRight } from 'lucide-react';
 import './Start.css';
 
 type Site = { url: string; title: string; last?: number; icon?: string };
@@ -162,7 +164,14 @@ export default function Start() {
           </div>
           <div className="start-favorites" ref={favoritesGrid}>
             {favorites.map((site, index) => (
-              <SiteTile key={site.url} site={site} enter={allFavorites && index >= shownFirst ? index - shownFirst : undefined} />
+              // Éventail au coin du favori : nouvel onglet, vue scindée, copier le lien.
+              <CornerActions key={site.url} corner={16} actions={[
+                { id: 'tab', label: t('Ouvrir dans un nouvel onglet', 'Open in a new tab'), Icon: AppWindow, run: () => send({ type: 'start.open', input: site.url }) },
+                { id: 'split', label: t('Ouvrir en vue scindée', 'Open in split view'), Icon: Columns2, run: () => send({ type: 'start.split', input: site.url }) },
+                { id: 'copy', label: t('Copier le lien', 'Copy link'), Icon: Copy, run: () => send({ type: 'start.copy', input: site.url }) },
+              ]}>
+                <SiteTile site={site} enter={allFavorites && index >= shownFirst ? index - shownFirst : undefined} />
+              </CornerActions>
             ))}
           </div>
           {!data.favorites.length && (
@@ -177,7 +186,12 @@ export default function Start() {
             <h2>{t('Vos sujets', 'Your topics')}</h2>
             <div className="start-categories">
               {data.categories.map(category => (
-                <div key={category.name} className={`start-category${openTopic === category.name ? ' open' : ''}`}>
+                // Un sujet peut devenir un groupe d'onglets : ses sites principaux ouverts ensemble.
+                <CornerActions key={category.name} corner={18} className={openTopic === category.name ? 'start-topic-open' : ''} actions={[
+                  { id: 'group', label: t('Ouvrir en groupe d’onglets', 'Open as a tab group'), Icon: FolderPlus, run: () => send({ type: 'start.topic', title: category.name }) },
+                  { id: 'all', label: openTopic === category.name ? t('Voir moins', 'Show less') : t('Voir tout', 'Show all'), Icon: ListTree, run: () => setOpenTopic(openTopic === category.name ? '' : category.name) },
+                ]}>
+                <div className={`start-category${openTopic === category.name ? ' open' : ''}`}>
                   <h3>{category.name}<small>{category.total}</small></h3>
                   {category.links.slice(0, openTopic === category.name ? undefined : 8).map(site => (
                     <button key={site.url} onClick={() => open(site.url)} title={site.url}>
@@ -193,6 +207,7 @@ export default function Start() {
                     </button>
                   )}
                 </div>
+                </CornerActions>
               ))}
             </div>
           </section>
@@ -202,13 +217,19 @@ export default function Start() {
           <h2>{t('Groupes d’onglets', 'Tab groups')}</h2>
           <div className="start-groups">
             {data.groups.map(group => (
-              <button key={group.id} onClick={() => send({ type: 'start.group', id: group.id })}>
+              // Groupe ouvert : l'afficher ou le modifier (nom, couleur, icône).
+              <CornerActions key={group.id} corner={20} actions={[
+                { id: 'open', label: t('Afficher le groupe', 'Show the group'), Icon: SquareArrowOutUpRight, run: () => send({ type: 'start.group', id: group.id }) },
+                { id: 'edit', label: t('Modifier le groupe', 'Edit the group'), Icon: Pencil, run: () => send({ type: 'start.groupedit', id: group.id }) },
+              ]}>
+              <button onClick={() => send({ type: 'start.group', id: group.id })}>
                 <span className="start-group-dot" style={{ background: group.color }} />
                 <strong>{group.name}</strong>
                 <small>
                   {group.count} {group.count === 1 ? t('onglet', 'tab') : t('onglets', 'tabs')}
                 </small>
               </button>
+              </CornerActions>
             ))}
           </div>
           {!data.groups.length && (

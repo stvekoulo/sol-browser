@@ -237,3 +237,4 @@ html:has(> .popup-body) { overflow:hidden; }
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+.ai-title { display:inline-flex; align-items:center; gap:8px; }

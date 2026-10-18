@@ -1202,14 +1202,14 @@ try {
     await writeFile(resolve(base,'sol-ai-done.png'),Buffer.from((await popup.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
     await popup.evaluate('document.querySelector("[role=tab][aria-label=Question]").click()');
     await popup.evaluate(`chrome.webview.dispatchEvent(new MessageEvent('message',{data:{popup:'ai-action',action:'ask',text:'',source:'Guide',scope:'page',editable:false,truncated:false,language:'fr',target:'en',ready:true,account:'test@example.com',request:{action:'ask',language:'fr',input:''},busy:true,error:null,result:'',agent:{steps:[{id:'1',kind:'read',label:'Lecture de la page',detail:'',status:'complete'},{id:'2',kind:'search',label:'Recherche dans la page',detail:'connect',status:'complete'},{id:'3',kind:'run',label:'Cliquer sur la page',detail:'Ouvrir la référence API',status:'active'}],approval:{id:'3',label:'Cliquer sur la page',detail:'Ouvrir la référence API'}}}}))`);
-    await waitFor(()=>popup.evaluate('document.body.innerText.includes("Autoriser")'),'approval card');
+    await waitFor(()=>popup.evaluate('document.body?.innerText.includes("Autoriser")'),'approval card');
     await writeFile(resolve(base,'sol-ai-agent.png'),Buffer.from((await popup.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
     await command({type:'popup.close'});
     // Panneau de discussion à droite : invitation à se connecter, puis rendu d'une conversation.
     await command({type:'chat.toggle'});
     await waitFor(async()=>(await state()).chatOpen===true,'chat panel open');
     const chat=await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#chat')),'chat view'));
-    await waitFor(()=>chat.evaluate('document.body.innerText.includes("Continuer avec ChatGPT")'),'chat sign-in prompt');
+    await waitFor(()=>chat.evaluate('document.body?.innerText.includes("Continuer avec ChatGPT")'),'chat sign-in prompt');
     await chat.evaluate(`chrome.webview.dispatchEvent(new MessageEvent('message',{data:{chat:true,ready:true,account:'test@example.com',request:{action:'summary',language:'fr',input:''},agent:null,busy:true,error:null,messages:[{from:'user',text:'Capitale du Bénin ?'},{from:'assistant',text:'**Porto-Novo** est la capitale officielle.'}]}}))`);
     await waitFor(()=>chat.evaluate('!!document.querySelector(".sol-chat-log strong") && !!document.querySelector(".sol-chat-input textarea")'),'chat conversation');
     await writeFile(resolve(base,'sol-ai-chat.png'),Buffer.from((await chat.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
@@ -1230,12 +1230,36 @@ try {
     assert.ok((await run(`A.readLink(${JSON.stringify(api.ref)})`)).text.includes('connect'),'same-site link read');
     assert.equal((await run(`A.readLink(${JSON.stringify(snap.links.find(l=>l.text==='Externe').ref)})`)).external,'https://example.com/ext','other sites go through Sol');
     assert.equal((await run('A.show("e99")')).ok,false,'unknown ref rejected');
+    // Un favori pour l'éventail d'actions de la page d'accueil.
+    await command({type:'bookmark.toggle',id:(await state()).tabs.find(t=>t.url===`${origin}/a`).id});
     // Catégories du classement quotidien sur la page d'accueil.
     await command({type:'tab.open',url:'https://start.sol/index.html#start'});
     const start=await connect(await waitFor(async()=>(await targets()).find(t=>t.url==='https://start.sol/index.html#start'),'start page'));
     // Catégories par site : toutes les pages de 127.0.0.1 visitées pendant le test héritent de « Développement ».
     await waitFor(()=>start.evaluate('document.querySelectorAll(".start-category").length===1 && document.querySelector(".start-category h3").textContent.startsWith("Développement") && document.querySelectorAll(".start-category button").length>=2'),'AI categories on start page');
     await writeFile(resolve(base,'sol-ai-start.png'),Buffer.from((await start.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    // Éventail au coin du favori, ouvert au survol.
+    await waitFor(()=>start.evaluate('!!document.querySelector(".start-favorites .nod .start-site")'),'favorite with corner actions');
+    const tile=await start.evaluate('(()=>{const r=document.querySelector(".start-favorites .nod .start-site").getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2}})()');
+    await start.call('Input.dispatchMouseEvent',{type:'mouseMoved',x:tile.x,y:tile.y});
+    await waitFor(()=>start.evaluate('[...document.querySelectorAll(".start-favorites .nod-act")].filter(b=>b.tabIndex===0).length===3'),'corner actions open');
+    await delay(500);
+    await writeFile(resolve(base,'sol-ai-fan.png'),Buffer.from((await start.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    // Éditeur de groupe : sélecteur de couleur beUI.
+    const grouped=(await state()).tabs.find(t=>t.url===`${origin}/a`).id;
+    await command({type:'group.create',id:grouped,title:'Test',query:'#3478f6'});
+    const groupId=await waitFor(async()=>(await state()).groups?.[0]?.id,'group created');
+    await command({type:'group.edit',id:groupId});
+    const editor=await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#popup')),'group editor'));
+    await waitFor(()=>editor.evaluate('!!document.querySelector(".group-color")'),'beUI color picker');
+    await delay(400);
+    await writeFile(resolve(base,'sol-ai-group-color.png'),Buffer.from((await editor.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    await command({type:'popup.close'});
+    // Page Notes : barre latérale plus large.
+    await command({type:'tab.open',url:'https://start.sol/index.html#notes'});
+    const notes=await connect(await waitFor(async()=>(await targets()).find(t=>t.url==='https://start.sol/index.html#notes'),'notes page'));
+    await waitFor(()=>notes.evaluate('!!document.querySelector(".notes-browser")'),'notes sidebar');
+    await writeFile(resolve(base,'sol-ai-notes.png'),Buffer.from((await notes.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
     console.log('PASS Sol AI offers ChatGPT sign-in, stays closed until connected, renders a streamed answer and the chat panel');
     await stop(); console.log(`Evidence: ${base}`); process.exit(0);
   }

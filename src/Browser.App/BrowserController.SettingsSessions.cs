@@ -177,6 +177,7 @@ public sealed partial class BrowserController
     private void HidePopup(bool cancelPermissions = true)
     {
         if (_aiPopup) { _aiPopup = false; CancelAi(); _aiContext = null; _aiBusy = false; }
+        _groupEditing = null;
         _siteReset = null;
         _paletteCommands.Clear();
         _paletteItems = null;

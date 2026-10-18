@@ -1,3 +1,4 @@
+import { EyeTracker } from '@/components/bencho/EyeTracker';
 import { useEffect,useState } from 'react';
 import { formatDomain,send } from './bridge';
 import { t, useLang } from './i18n';
@@ -7,7 +8,10 @@ import NotesStats from './NotesStats';
 import NotesControls from './NotesControls';
 import NotesTags from './NotesTags';
 import { useNotes } from './useNotes';
-import { inView,matchesNote,titleOf,type NoteView } from './notesModel';
+import { inView,matchesNote,titleOf,type Note,type NoteView } from './notesModel';
+import { CornerActions } from '@/components/bencho/CornerActions';
+import { Archive, ArchiveRestore, CopyPlus, MessageCircleQuestion, Pin, PinOff } from 'lucide-react';
+import type { ReactElement } from 'react';
 import './notes.css';
 import {Button} from '@/components/motion/button/base';
 import {Input} from '@/components/motion/input';
@@ -36,10 +40,18 @@ export default function NotesPage() {
   if(sort!=='manual')items.sort((a,b)=>Number(b.pinned)-Number(a.pinned)||(sort==='title'?titleOf(a).localeCompare(titleOf(b)):sort==='oldest'?new Date(a.updated).getTime()-new Date(b.updated).getTime():new Date(b.updated).getTime()-new Date(a.updated).getTime()));
   const views:[NoteView,string,string][]=[['all',t('Tout','All'),'◫'],['idea',t('Idées','Ideas'),'✦'],['note',t('Notes','Notes'),'▤'],['task',t('Tâches','Tasks'),'☑'],['pinned',t('Épinglés','Pinned'),'⌖'],['files',t('Fichiers','Files'),'↧'],['review',t('À revoir','Review'),'↻'],['archive',t('Archives','Archive'),'▱'],['trash',t('Corbeille','Trash'),'⌫'],['stats',t('Activité','Activity'),'▦']];
   const action=(query:string,ids=selection)=>{flush();send({type:'notes.action',query,input:JSON.stringify(ids)});setSelection([]);setSelecting(false);setConfirmPurge(false)};
+  // Éventail au coin de chaque carte : épingler, dupliquer, archiver, et demander un résumé à Sol AI. Jamais de suppression.
+  const fanOn=!showEditor&&!selecting&&view!=='trash';
+  const withFan=(n:Note,card:ReactElement)=>fanOn?<CornerActions key={n.id} corner={18} actions={[
+    {id:'pin',label:n.pinned?t('Désépingler','Unpin'):t('Épingler','Pin'),Icon:n.pinned?PinOff:Pin,run:()=>action(n.pinned?'unpin':'pin',[n.id])},
+    {id:'duplicate',label:t('Dupliquer','Duplicate'),Icon:CopyPlus,run:()=>action('duplicate',[n.id])},
+    {id:'archive',label:n.archived?t('Désarchiver','Unarchive'):t('Archiver','Archive'),Icon:n.archived?ArchiveRestore:Archive,run:()=>action(n.archived?'unarchive':'archive',[n.id])},
+    ...(data.aiEnabled?[{id:'ai',label:t('Résumer avec Sol AI','Summarize with Sol AI'),Icon:MessageCircleQuestion,run:()=>send({type:'chat.ask',id:'notes',input:t(`Résume ma note « ${titleOf(n)} » (identifiant ${n.id}).`,`Summarize my note “${titleOf(n)}” (id ${n.id}).`)})}]:[]),
+  ]}>{card}</CornerActions>:card;
   const move=(from:string,to:string)=>{
     if(!from||from===to)return;const ids=data.items.map(n=>n.id),index=ids.indexOf(from);if(index<0)return;ids.splice(index,1);ids.splice(ids.indexOf(to),0,from);send({type:'notes.order',input:JSON.stringify(ids)});setSort('manual');
   };
-  const navigation=<aside className="notes-browser" aria-label={t('Organisation des notes','Note organization')}><header className="notes-browser-heading"><h1>Notes</h1>{data.aiEnabled&&<Button variant="ghost" size="sm" whileHover={undefined} pressScale={0.98} className="pill-action notes-ai" title={t('Demander à Sol AI de chercher, résumer ou créer des notes','Ask Sol AI to search, summarize or create notes')} onClick={()=>send({type:'chat.toggle',id:'notes'})}>Sol AI</Button>}<Button variant="ghost" size="sm" whileHover={undefined} pressScale={0.98} className="notes-tool" aria-label={t('Nouvelle note','New note')} title={t('Nouvelle note','New note')} onClick={()=>choose('')}><Icon d="M10 3l3 3M4 10l6-7 3 3-6 7-4 1zM11 12v2H2V5h3"/></Button></header>
+  const navigation=<aside className="notes-browser" aria-label={t('Organisation des notes','Note organization')}><header className="notes-browser-heading"><h1>Notes</h1>{data.aiEnabled&&<Button variant="ghost" size="sm" whileHover={undefined} pressScale={0.98} className="pill-action notes-ai" title={t('Demander à Sol AI de chercher, résumer ou créer des notes','Ask Sol AI to search, summarize or create notes')} onClick={()=>send({type:'chat.toggle',id:'notes'})}><EyeTracker className="eyt-inline" size={16} eyeScale={1.8} idle />Sol AI</Button>}<Button variant="ghost" size="sm" whileHover={undefined} pressScale={0.98} className="notes-tool" aria-label={t('Nouvelle note','New note')} title={t('Nouvelle note','New note')} onClick={()=>choose('')}><Icon d="M10 3l3 3M4 10l6-7 3 3-6 7-4 1zM11 12v2H2V5h3"/></Button></header>
       {data.privateMode&&<p className="notes-private">{t('Privé · mémoire uniquement','Private · memory only')}</p>}
       <nav className="notes-navigation"><SharedLayoutBg inset={0} className="notes-nav-motion" pillClassName="notes-nav-hover">{views.map(([key,label,icon])=><Button variant="ghost" size="sm" whileHover={undefined} pressScale={0.98} key={key} aria-current={view===key&&!tag?'page':undefined} className={view===key&&!tag?'active':''} onClick={()=>navigate(key)}><span aria-hidden><NoteSymbol view={key}/></span><span>{label}</span>{key!=='stats'&&<small>{data.items.filter(n=>inView(n,key)).length}</small>}</Button>)}</SharedLayoutBg></nav>
       <NotesTags items={data.items} selected={tag} choose={name=>{navigate('all');setTag(name)}} rename={name=>{setTagEdit(name);setTagName(name)}} flush={flush}/>
@@ -55,11 +67,11 @@ export default function NotesPage() {
       {view==='stats'?<NotesStats items={data.items}/>:<div className={`notes-browser-list note-${showEditor?'list':layout}`}>
         {view==='review'&&items.length>0&&<Button variant="ghost" size="sm" whileHover={undefined} pressScale={0.98} className="pill-action note-random" onClick={()=>choose(items[Math.floor(Math.random()*items.length)].id)}>{t('Redécouvrir une note au hasard','Rediscover a random note')} ↻</Button>}
         {!items.length&&<div className="notes-welcome"><Icon d="M4 2h8v12H4zM6 5h4M6 8h4" size={32}/><h2>{query?t('Aucun résultat','No results'):t('Un espace pour vos idées','A space for your ideas')}</h2><p>{t('Notes, tâches et passages enregistrés, ensemble dans Sol.','Notes, tasks and saved passages, together in Sol.')}</p>{view!=='trash'&&<Button variant="ghost" size="sm" className="pill-action" onClick={()=>choose('')}>{t('Créer une note','Create a note')}</Button>}</div>}
-        {items.map(n=><Card interactive selected={showEditor&&data.draft.id===n.id} role="article" size="compact" className={`note-card${showEditor&&data.draft.id===n.id?' selected':''}`} key={n.id} draggable={!selecting&&view!=='trash'} onDragStart={e=>e.dataTransfer.setData('application/sol-note',n.id)} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();move(e.dataTransfer.getData('application/sol-note'),n.id)}} onContextMenu={e=>{e.preventDefault();setSelecting(true);setSelection([n.id])}}>
+        {items.map(n=>withFan(n,<Card interactive selected={showEditor&&data.draft.id===n.id} role="article" size="compact" className={`note-card${showEditor&&data.draft.id===n.id?' selected':''}`} key={n.id} draggable={!selecting&&view!=='trash'} onDragStart={e=>e.dataTransfer.setData('application/sol-note',n.id)} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();move(e.dataTransfer.getData('application/sol-note'),n.id)}} onContextMenu={e=>{e.preventDefault();setSelecting(true);setSelection([n.id])}}>
           {selecting&&<Checkbox className="sol-checkbox note-card-check" aria-label={t(`Sélectionner ${titleOf(n)}`,`Select ${titleOf(n)}`)} checked={selection.includes(n.id)} onCheckedChange={checked=>setSelection(checked?[...selection,n.id]:selection.filter(id=>id!==n.id))}/>}
           <Button variant="ghost" size="sm" whileHover={undefined} pressScale={0.98} className="notes-preview" aria-label={titleOf(n)} onClick={()=>view==='trash'?setSelection([n.id]):selecting?setSelection(selection.includes(n.id)?selection.filter(id=>id!==n.id):[...selection,n.id]):choose(n.id)}><div className="note-card-top"><span><NoteSymbol view={n.kind}/></span>{n.pinned&&<span title={t('Épinglé','Pinned')}>⌖</span>}<time>{new Date(n.updated).toLocaleDateString()}</time></div><strong>{titleOf(n)}</strong><span className="note-card-excerpt">{n.text.replace(/[#*`\[\]]/g,'').slice(0,280)}</span><div className="note-card-tags">{n.tags.map(tag=><small key={tag}>#{tag}</small>)}</div><div className="note-card-bottom">{n.url&&<small>{formatDomain(n.url)}</small>}{n.files.length>0&&<small>↧ {n.files.length}</small>}{n.kind==='task'&&<small className={n.due&&new Date(n.due).getTime()<Date.now()&&!n.reviewed?'overdue':''}>{n.reviewed?t('Terminée','Done'):n.due?new Date(n.due).toLocaleString():t('À faire','To do')}</small>}</div></Button>
           {view==='trash'&&<div className="note-trash-actions"><Button variant="ghost" size="sm" className="pill-action" onClick={()=>action('restore',[n.id])}>{t('Restaurer','Restore')}</Button><Button variant="ghost" size="sm" className="pill-action" onClick={()=>{setSelecting(true);setSelection([n.id]);setConfirmPurge(true)}}>{t('Supprimer','Delete')}</Button></div>}
-        </Card>)}
+        </Card>))}
       </div>}
     </section>
     {showEditor&&view!=='trash'&&<NoteEditor key={editorKey} data={data} change={change} meta={meta} edit={choose} close={()=>{setShowEditor(false);setFocus(false)}} focus={focus} setFocus={setFocus} flush={flush} openFilters={()=>setRail(true)}/>}

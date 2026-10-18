@@ -207,7 +207,7 @@
   flex-wrap: wrap;
   gap: 10px;
 }
-.start-groups button {
+.start-groups .nod-card > button {
   display: flex;
   align-items: center;
   gap: 9px;
@@ -220,7 +220,7 @@
   min-width: 0;
   max-width: 100%;
 }
-.start-groups button:hover { background: var(--bg-glass-pill-hover); }
+.start-groups .nod-card > button:hover { background: var(--bg-glass-pill-hover); }
 .start-groups strong { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .start-groups small { color: var(--text-dim); white-space: nowrap; }
 .start-group-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }

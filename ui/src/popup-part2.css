@@ -192,13 +192,13 @@
 .name-form { display: flex; flex-direction: column; gap: 10px; padding: 10px 8px 6px; }
 .name-form-title { font-size: 14px; font-weight: 600; }
 .name-form .row-sub { margin: 0; line-height: 1.35; }
-.name-form input {
+.name-form input:not(.group-color input) {
   height: 38px; padding: 0 14px;
   border: 0; border-radius: var(--radius-pill);
   background: var(--bg-pill-solid); box-shadow: var(--shadow-pill-elevated);
   font: inherit; color: var(--text); user-select: text;
 }
-.name-form input:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.name-form input:not(.group-color input):focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .name-form-actions { display: flex; justify-content: flex-end; gap: 6px; }
 .name-form-actions .pill-action { height: 30px; padding: 0 14px; }
 .pill-action:disabled { opacity: 0.45; }
@@ -228,6 +228,11 @@
 .group-preview-icon, .icon-choice { font-family: "Segoe UI Emoji", "Apple Color Emoji", sans-serif; }
 
 .swatches { display: flex; gap: 7px; flex-wrap: wrap; }
+/* Sélecteur de couleur beUI dans l'éditeur de groupe. */
+.group-color { display: flex; flex-direction: column; gap: 10px; }
+.group-color-area { height: 120px !important; border-radius: 14px; overflow: hidden; }
+.group-color-row { display: flex; align-items: center; gap: 8px; }
+.group-color-row > :last-child { flex: 1; min-width: 0; }
 .swatch { width: 24px; height: 24px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12); }
 .swatch.on { outline: 2px solid var(--text); outline-offset: 2px; }
 

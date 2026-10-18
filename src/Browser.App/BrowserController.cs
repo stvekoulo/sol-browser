@@ -128,6 +128,7 @@ public sealed partial class BrowserController
             }
             else if (command.Type == "start.navigate") _pages.Navigate(id, Resolve(command.Input!));
             else if (command.Type == "start.favorites") _ = FetchFavoriteIconsAsync();
+            else if (StartAction(id, command)) { }
             else if (_tabs.Groups.Any(g => g.Id == command.Id) && _tabs.Tabs.FirstOrDefault(t => t.GroupId == command.Id) is { } tab)
             { Activate(tab.Id); Refresh(); }
         };
@@ -221,6 +222,7 @@ public sealed partial class BrowserController
         if (c.Type is not ("popup.size" or "dock.size" or "split.resize")) DebugLog.Write($"commande {c.Type} {c.Id} {c.Index}");
         if (SidebarCommand(c)) return;
         if (ChatCommand(c)) return;
+        if (TabGroupAiCommand(c)) return;
         if (ExecuteCommands0(c)) return;
         if (ExecuteCommands1(c)) return;
         if (ExecuteCommands2(c)) return;

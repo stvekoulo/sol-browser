@@ -19,6 +19,7 @@ for(const [path,info] of Object.entries(lock.packages)) {
 }
 if(!notices.length)throw Error('No UI license notices collected');
 notices.push('beUI source components\n'+await readFile(resolve(ui,'licenses/beui-MIT.txt'),'utf8'));
+notices.push('Bencho blocks (Eye tracker, Action node)\n'+await readFile(resolve(ui,'licenses/bencho-MIT.txt'),'utf8'));
 notices.push('lucide-animated source icons\n'+await readFile(resolve(ui,'licenses/lucide-animated-MIT.txt'),'utf8'));
 await mkdir(resolve(ui,'dist/licenses'),{recursive:true});
 await writeFile(resolve(ui,'dist/licenses/third-party.txt'),notices.join('\n\n────────────────────────\n\n'));

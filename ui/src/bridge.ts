@@ -34,6 +34,7 @@ export type State = {
   activeId: string | null;
   privateMode: boolean; // onglet actif en navigation privée
   aiAvailable?: boolean; chatOpen?: boolean; // panneau de discussion Sol AI
+  aiTabs?: import('./SidebarAiGroups').AiTabsState; // proposition de groupes d'onglets par Sol AI
   shield: boolean; // blocage des publicités et des traqueurs en service
   extensions?: { id: string; name: string; icon: string | null }[];
   // Raccourcis de la carte latérale ; tabId : l'onglet ouvert dans le raccourci, qui n'a pas de ligne dans la liste.
