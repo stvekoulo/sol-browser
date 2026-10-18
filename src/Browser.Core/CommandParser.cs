@@ -35,7 +35,7 @@ public static class CommandParser
         ["ai.connect"] = [], ["ai.approve"] = ["id", "index"], ["ai.connect.cancel"] = [], ["ai.disconnect"] = [], ["ai.categorize"] = [], ["ai.cancel"] = [],
         ["ai.open"] = ["id"], ["ai.run"] = ["query", "title"],
         ["ai.apply"] = [], ["ai.copy"] = [], ["ai.note"] = [],
-        ["chat.toggle"] = [], ["selection.more"] = [], ["selection.copy"] = [], ["selection.search"] = [], ["selection.note"] = [], ["selection.ai"] = ["query"], ["tabs.ai"] = [], ["tabs.ai.apply"] = [], ["tabs.ai.dismiss"] = [], ["group.ai"] = ["id"], ["chat.ready"] = [], ["chat.send"] = ["input"], ["chat.copy"] = ["id"], ["chat.note"] = ["id"], ["chat.ask"] = ["input"], ["chat.cancel"] = [], ["chat.clear"] = [],
+        ["chat.toggle"] = [], ["tabs.ai"] = [], ["tabs.ai.apply"] = [], ["tabs.ai.dismiss"] = [], ["group.ai"] = ["id"], ["chat.ready"] = [], ["chat.send"] = ["input"], ["chat.copy"] = ["id"], ["chat.note"] = ["id"], ["chat.ask"] = ["input"], ["chat.cancel"] = [], ["chat.clear"] = [],
         ["notes.open"] = [], ["notes.draft"] = ["id", "title", "input"],
         ["notes.save"] = [], ["notes.delete"] = ["id"], ["notes.edit"] = ["id"], ["notes.export"] = [],
         ["notes.select"] = ["id"],

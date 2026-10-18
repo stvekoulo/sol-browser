@@ -3,58 +3,64 @@ using System.Text.Json;
 
 namespace Browser.App;
 
-// Barre d'actions au-dessus d'une sélection de texte : copier, Sol AI, expliquer, traduire, et « Plus » pour le reste
-// (résumer, poser une question, rechercher, ajouter à une note). Elle ne prend pas le focus : la page garde la main.
+// Éventail d'actions dans les pages (inject/fan.js) : au coin du texte sélectionné, d'un lien en forme de carte,
+// d'une image ou d'un bloc de code. Sur une sélection, « Plus » ouvre le menu du clic droit pour tout le reste.
 public sealed partial class BrowserController
 {
-    private const double SelectionBarWidth = 300;
-    private (string TabId, PageAiText Text, double X, double Top)? _selection;
-    private bool _selectionBar, _selectionMore;
+    private void WireSelection() => _pages.FanAction += OnPageFan;
 
-    private void WireSelection()
+    private void OnPageFan(string tabId, string kind, string action, double x, double y, PageAiText value)
     {
-        _pages.SelectionChanged += ShowSelectionBar;
-        _pages.SelectionCleared += id => { if (_selectionBar && _selection?.TabId == id) HidePopup(); };
-    }
-
-    private void ShowSelectionBar(string tabId, double x, double top, double bottom, PageAiText text)
-    {
-        // Seulement sur la page affichée, et sans chasser un menu ou une vue déjà ouverts.
-        if (_closingWindow || (tabId != _tabs.ActiveId && !_split.Contains(tabId)) || (_popup.IsOpen && !_selectionBar)) return;
-        HidePopup();
-        _selection = (tabId, text, x, top);
-        _selectionBar = true; _selectionMore = false;
-        _popup.Show(x - Scaled(SelectionBarWidth) / 2, top - 6, SelectionBarWidth, SelectionJson(), focus: false, above: true);
-    }
-
-    private string SelectionJson() => JsonSerializer.Serialize(new
-    {
-        popup = "selection", ai = AiReady && _selection is { } s && !_tabs.Tabs.Any(t => t.Id == s.TabId && t.Private), more = _selectionMore,
-    });
-
-    private bool SelectionCommand(Command c)
-    {
-        if (!c.Type.StartsWith("selection.", StringComparison.Ordinal)) return false;
-        if (!_selectionBar || _selection is not { } s) return true;
-        switch (c.Type)
+        if (_closingWindow) return;
+        var text = value.Text;
+        switch (action)
         {
-            case "selection.more": _selectionMore = !_selectionMore; _popup.Post(SelectionJson()); return true;
-            case "selection.copy":
-                var data = new Windows.ApplicationModel.DataTransfer.DataPackage(); data.SetText(s.Text.Text);
-                Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(data);
-                HidePopup(); return true;
-            case "selection.search":
-                HidePopup();
-                Open(Resolve(s.Text.Text.Length > 300 ? s.Text.Text[..300] : s.Text.Text)); Refresh(); return true;
-            case "selection.note": HidePopup(); AskNoteForSelection(s.TabId, s.Text.Text, s.X, s.Top); return true;
-            case "selection.ai":
-                // « open » : la vue Sol AI complète ; sinon l'action démarre tout de suite (« ask » ouvre la question).
-                var action = c.Query is "explain" or "translate" or "summary" ? c.Query : null;
-                HidePopup();
-                if (AiReady) _ = OpenPageAiAsync(s.TabId, s.Text, action, c.Query == "ask" ? "ask" : null);
-                return true;
-            default: return true;
+            case "tab" when IsWeb(text): Open(text, activate: false); Refresh(); break;
+            case "split" when IsWeb(text) && _tabs.ActiveId == tabId: Split(Open(text, activate: false).Id); Refresh(); break;
+            case "link" when IsWeb(text):
+            case "copy" when kind is "code" or "selection":
+                Copy(text);
+                break;
+            case "explain" when kind == "code" && AiReady: _ = OpenPageAiAsync(tabId, value, "explain"); break;
+            // Sélection : la vue Sol AI s'ouvre sur le passage ; sans compte, le panneau propose la connexion.
+            case "sol" when kind == "selection":
+                if (AiReady) _ = OpenPageAiAsync(tabId, value);
+                else if (!PrivateActive && Chat is not null) { _ = Chat.ShowAsync(); Refresh(); }
+                break;
+            case "more" when kind == "selection": ShowSelectionMenu(tabId, value, x, y); break;
+            case "note" when kind != "image" || IsWeb(text):
+                AskNoteForSelection(tabId, kind == "image" ? $"![]({text})" : kind == "code" ? "```\n" + text + "\n```" : text, x, y);
+                break;
         }
+    }
+
+    private static void Copy(string text)
+    {
+        var data = new Windows.ApplicationModel.DataTransfer.DataPackage(); data.SetText(text);
+        Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(data);
+    }
+
+    // « Plus » de l'éventail d'une sélection : les actions du clic droit sur un passage.
+    private void ShowSelectionMenu(string tabId, PageAiText selection, double x, double y)
+    {
+        var text = selection.Text;
+        var items = new List<(string Label, Action? Run)>();
+        if (AiReady)
+        {
+            foreach (var (label, run) in new[] { (T("Expliquer avec Sol AI", "Explain with Sol AI"), "explain"), (T("Traduire avec Sol AI", "Translate with Sol AI"), "translate"),
+                (T("Résumer avec Sol AI", "Summarize with Sol AI"), "summary") })
+                items.Add((label, () => _afterMenu = () => _ = OpenPageAiAsync(tabId, selection, run)));
+            items.Add((T("Poser une question sur ce passage…", "Ask about this passage…"), () => _afterMenu = () => _ = OpenPageAiAsync(tabId, selection, null, "ask")));
+            items.Add(("", null));
+        }
+        var shown = text.Length > 30 ? text[..30].TrimEnd() + "…" : text;
+        items.Add((T($"Rechercher « {shown} »", $"Search for “{shown}”"), () => { Open(Resolve(text.Length > 300 ? text[..300] : text)); Refresh(); }));
+        items.Add((T("Ajouter à une note…", "Add to a note…"), () => _afterMenu = () => AskNoteForSelection(tabId, text, x, y)));
+        items.Add((T("Copier", "Copy"), () => Copy(text)));
+        items.Add(("", null));
+        items.Add((T("Capturer une zone", "Capture an area"), () => Capture("region")));
+        if (AiReady) items.Add(("Sol AI…", () => _afterMenu = () => _ = OpenPageAiAsync(tabId, selection)));
+        ShowMenu(x, y, items);
     }
 
     // Choix de la note qui reçoit le passage, comme « Ajouter à une note… » du menu contextuel.

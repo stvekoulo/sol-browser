@@ -97,8 +97,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     public Func<string, string, Tab?>? CreatePopupTab;
     public event Action<string>? PopupClosed;
     public event Action<string, double, double, CoreWebView2ContextMenuRequestedEventArgs>? ContextMenuRequested; // id, x, y dans la fenêtre
-    public event Action<string, double, double, double, PageAiText>? SelectionChanged; // id, x, haut, bas dans la fenêtre, texte choisi
-    public event Action<string>? SelectionCleared;
+    public event Action<string, string, string, double, double, PageAiText>? FanAction; // id, élément, action, x, y dans la fenêtre, valeur
     public event Action<string, double, double>? DeviceAreaMenuRequested; // id, x, y : clic droit à côté d'un appareil simulé
     public event Action<string, CoreWebView2DownloadStartingEventArgs>? DownloadStarting; // onglet d'origine
     public event Action<CoreWebView2, CoreWebView2PermissionRequestedEventArgs>? PermissionRequested;

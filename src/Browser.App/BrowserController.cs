@@ -224,7 +224,6 @@ public sealed partial class BrowserController
         if (SidebarCommand(c)) return;
         if (ChatCommand(c)) return;
         if (TabGroupAiCommand(c)) return;
-        if (SelectionCommand(c)) return;
         if (ExecuteCommands0(c)) return;
         if (ExecuteCommands1(c)) return;
         if (ExecuteCommands2(c)) return;

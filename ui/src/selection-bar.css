@@ -1,9 +1,0 @@
-/* Barre d'actions sur la sélection : une rangée compacte, « Plus » en ouvre une seconde. */
-.selection-bar { padding: 4px; gap: 2px; }
-.selection-row { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
-.selection-row-more { padding-top: 2px; border-top: 1px solid var(--border-card); }
-.selection-action { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 9px; border-radius: 10px; font-size: 12.5px; color: var(--text); white-space: nowrap; }
-.selection-action:hover { background: var(--bg-tab-hover); }
-.selection-more { margin-left: auto; color: var(--text-dim); }
-.selection-more svg { transition: rotate 160ms ease; }
-.selection-more svg.open { rotate: 180deg; }

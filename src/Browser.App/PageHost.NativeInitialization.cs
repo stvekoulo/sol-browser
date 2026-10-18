@@ -102,8 +102,7 @@ public sealed partial class PageHost
             if(e.Source is Settings.DefaultHomePage or QuickNotes.PageUrl && e.WebMessageAsJson.StartsWith('"') && e.TryGetWebMessageAsString()=="\"ui.painted\"")
             { view.Opacity=1;ContentPainted?.Invoke();return; }
             if (e.Source == core.Source && e.WebMessageAsJson == "\"sol.page.pointer\"") { PagePressed?.Invoke(); return; }
-            if (e.Source == core.Source && e.WebMessageAsJson == "\"sol.selection.none\"") { SelectionCleared?.Invoke(tab.Id); return; }
-            if (e.Source == core.Source && e.WebMessageAsJson.StartsWith("\"{\\\"sol\\\":\\\"selection\\\"", StringComparison.Ordinal)) { ReportSelection(tab.Id, view, e.TryGetWebMessageAsString()); return; }
+            if (e.Source == core.Source && e.WebMessageAsJson.StartsWith("\"{\\\"sol\\\":\\\"fan\\\"", StringComparison.Ordinal)) { ReportFan(tab.Id, view, e.TryGetWebMessageAsString()); return; }
             // During hash history navigation, WebView2 may still report the previous internal fragment.
             if (e.Source is Settings.DefaultHomePage or QuickNotes.PageUrl && core.Source is Settings.DefaultHomePage or QuickNotes.PageUrl
                 && CommandParser.Parse(e.TryGetWebMessageAsString()) is { } ready)

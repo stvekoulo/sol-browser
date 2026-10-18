@@ -2,14 +2,12 @@ import type {Download} from './Downloads';
 import type {NotesContent} from './QuickNotes';
 import type {SolAiState} from './SolAiAccount';
 import type {AiContent} from './SolAiAction';
-import type {SelectionContent} from './SelectionBar';
 export type Item = { url: string; title: string; kind?: 'search' | 'go' | 'history' | 'site' };
 export type PaletteItem = { id: string; title: string; hint: string; shortcut: string; group: string; keywords: string };
 export type Wallpaper = { id: number; thumb: string; author: string };
 export type Content =
   | { popup: 'palette'; items: PaletteItem[]; listHeight: number }
   | AiContent
-  | SelectionContent
   | NotesContent
   | { popup: 'notes-select'; items: {id:string; title:string}[] }
   | { popup: 'translation'; id: string; target: 'fr' | 'en'; available: boolean; original: boolean }
