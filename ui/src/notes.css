@@ -77,4 +77,5 @@
 .notes-navigation{min-height:0;overflow:auto;scrollbar-width:thin}
 .notes-browser-heading{gap:6px}.notes-browser-heading .notes-ai{white-space:nowrap;margin-left:auto}.notes-heading .notes-ai{white-space:nowrap;margin-left:auto;margin-right:6px}
 /* Éventail au coin des cartes : de la place au-dessus et à droite, sinon le défilement de la liste le coupe. */
-.notes-browser-list.note-cards{padding-top:30px;padding-right:34px}
+.notes-workspace:not(.has-editor) .notes-browser-list.note-cards,
+.notes-workspace:not(.has-editor) .notes-browser-list.note-list{padding-top:76px;padding-right:76px;gap:64px 68px}

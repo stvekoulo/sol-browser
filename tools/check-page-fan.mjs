@@ -23,7 +23,7 @@ const visible=async()=>{
   const walk=n=>{if(n.localName==='button')buttons.push(n);for(const c of [...(n.children??[]),...(n.shadowRoots??[])])walk(c);};walk(node);
   return Promise.all(buttons.map(async node=>{
     const {object}=await page.call('DOM.resolveNode',{nodeId:node.nodeId});
-    try {const result=await page.call('Runtime.callFunctionOn',{objectId:object.objectId,functionDeclaration:`function(){const r=this.getBoundingClientRect();return {hidden:this.hidden,visible:getComputedStyle(this).visibility!=='hidden',label:this.getAttribute('aria-label'),x:r.x,y:r.y,width:r.width,height:r.height}}`,returnByValue:true});return result.result.value;}
+    try {const result=await page.call('Runtime.callFunctionOn',{objectId:object.objectId,functionDeclaration:`function(){const r=this.getBoundingClientRect();return {hidden:this.hidden,visible:getComputedStyle(this).visibility!=='hidden',moving:this.getAnimations().some(a=>a.playState==='running'||a.pending),label:this.getAttribute('aria-label'),x:r.x,y:r.y,width:r.width,height:r.height}}`,returnByValue:true});return result.result.value;}
     finally {await page.call('Runtime.releaseObject',{objectId:object.objectId});}
   }));
 };
@@ -31,12 +31,14 @@ const hover=async selector=>{
   const point=await page.evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`);
   await page.call('Input.dispatchMouseEvent',{type:'mouseMoved',...point});
   await host.wait(async()=>(await visible()).filter(b=>!b.hidden&&b.visible).length===3,'three available commands',5000);
+  await host.wait(async()=>(await visible()).every(b=>!b.moving),'spring animation settled',5000);
 };
 const escape=async()=>{await page.call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});await host.wait(async()=>(await visible()).every(b=>b.hidden),'Escape closes commands',5000);};
 const select=async()=>{
   await page.evaluate(`(()=>{document.querySelector('#selection').scrollIntoView({block:'center'});const r=document.createRange();r.selectNodeContents(document.querySelector('#selection'));getSelection().removeAllRanges();getSelection().addRange(r)})()`);
   await page.call('Input.dispatchKeyEvent',{type:'keyUp',key:'ArrowRight',code:'ArrowRight',modifiers:8});
   await host.wait(async()=>(await visible()).filter(b=>!b.hidden&&b.visible).length===3,'selection commands');
+  await host.wait(async()=>(await visible()).every(b=>!b.moving),'selection spring settled');
 };
 try {
   ui=await host.launch(850,1200);page=await host.connect(host.origin+'/2');

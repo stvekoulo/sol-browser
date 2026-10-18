@@ -36,23 +36,6 @@ public sealed partial class BrowserController
 
     private string? _lastActive;
     private readonly Dictionary<string, string?> _startIcons = new();
-    private async void FetchStartIcon(string url)
-    {
-        var domain = SiteShortcut.DomainOf(url);
-        if (_startIcons.ContainsKey(domain)) return;
-        _startIcons[domain] = null;
-        var icon = await FetchSiteIconAsync(url);
-        if (_closingWindow) return;
-        _startIcons[domain] = icon;
-        if (icon is not null)
-            foreach (var tab in _tabs.Tabs.Where(t => SiteShortcut.DomainOf(t.Url) == domain))
-            {
-                _favicons[tab.Id] = icon;
-                PostFavicon(tab.Id);
-                LearnShortcutIcon(tab.Id, icon);
-            }
-        Refresh();
-    }
     private string? StartIcon(string url) => _startIcons.GetValueOrDefault(SiteShortcut.DomainOf(url)) ?? (_tabs.Tabs.FirstOrDefault(t => SiteShortcut.DomainOf(t.Url) == SiteShortcut.DomainOf(url)) is { } tab
         && _favicons.GetValueOrDefault(tab.Id) is { } icon ? icon : _settings.Shortcuts.FirstOrDefault(s => SiteShortcut.DomainOf(s.Url) == SiteShortcut.DomainOf(url))?.Icon);
 
@@ -61,9 +44,10 @@ public sealed partial class BrowserController
     // La page d'accueil porte des images (icônes, aperçus) : elle n'est renvoyée que si son contenu a changé.
     private void PostStartPages(IEnumerable<Tab> starts)
     {
+        var snapshots = new Dictionary<bool, string>();
         foreach (var tab in starts)
         {
-            var json = StartJson(tab.Private);
+            if (!snapshots.TryGetValue(tab.Private, out var json)) snapshots[tab.Private] = json = StartJson(tab.Private);
             if (_startPosted.GetValueOrDefault(tab.Id) != json) _pages.PostStart(tab.Id, _startPosted[tab.Id] = json);
         }
         foreach (var gone in _startPosted.Keys.Where(id => _tabs.Tabs.All(t => t.Id != id)).ToList()) _startPosted.Remove(gone);
@@ -78,16 +62,10 @@ public sealed partial class BrowserController
         _fetchingFavoriteIcons = true;
         try
         {
-            var missing = _db.Bookmarks().Take(MaxStartFavorites).Select(b => b.Url).Where(IsWeb)
-                .DistinctBy(SiteShortcut.DomainOf).Where(url => !_startIcons.ContainsKey(SiteShortcut.DomainOf(url))).ToList();
-            foreach (var batch in missing.Chunk(4))
-            {
-                foreach (var url in batch) _startIcons[SiteShortcut.DomainOf(url)] = null;
-                var icons = await Task.WhenAll(batch.Select(FetchSiteIconAsync));
-                if (_closingWindow) return;
-                for (var i = 0; i < batch.Length; i++) _startIcons[SiteShortcut.DomainOf(batch[i])] = icons[i];
-                PostStartPages(_tabs.Tabs.Where(t => t.Url == Settings.DefaultHomePage && !_pages.IsAsleep(t.Id)).ToList());
-            }
+            var urls = _db.Bookmarks(MaxStartFavorites).Select(b => b.Url).Where(IsWeb).DistinctBy(SiteShortcut.DomainOf).ToArray();
+            PrimeStartIcons(urls);
+            PostStartPages(_tabs.Tabs.Where(t => t.Url == Settings.DefaultHomePage && !_pages.IsAsleep(t.Id)).ToList());
+            await Task.WhenAll(urls.Select(FetchStartIconAsync));
         }
         finally { _fetchingFavoriteIcons = false; }
     }
@@ -102,7 +80,7 @@ public sealed partial class BrowserController
             // Une photo va suivre (message « start-wallpaper ») : la page n'affiche pas l'image de Sol en l'attendant.
             wallpaperPhoto = CurrentWallpaper is not null,
             // Les favoris du profil, dans l'ordre de la bibliothèque : quatre rangées, puis le reste sur demande.
-            favorites = _db.Bookmarks().Take(MaxStartFavorites).Select(b => new { url = b.Url, title = b.Title, icon = StartIcon(b.Url) }),
+            favorites = _db.Bookmarks(MaxStartFavorites).Select(b => new { url = b.Url, title = b.Title, icon = StartIcon(b.Url) }),
             history = history.Select(v => new { url = v.Url, title = v.Title, last = v.Last.ToUnixTimeMilliseconds(), icon = StartIcon(v.Url) }),
             groups = _tabs.Groups.Select(g => new { id = g.Id, name = g.Name, color = g.Color, count = _tabs.Tabs.Count(t => t.GroupId == g.Id) }),
             categories = StartCategories(isPrivate),
