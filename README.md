@@ -10,7 +10,7 @@
 
 ![Sol in its dark theme](docs/images/browser-dark.png)
 
-> A personal project, shared as is. The 0.1 versions are early releases: expect rough edges.
+> A personal project, shared as is. Expect rough edges.
 
 ## What it does
 
@@ -51,6 +51,21 @@
 
 ![The same page on a phone, a tablet and a desktop screen, side by side](docs/images/responsive.png)
 
+## Sol AI
+
+An optional assistant that runs on **your own ChatGPT Plus or Pro plan** through *Sign in with ChatGPT*: no API key, no extra bill. Connect it in *Settings → Sol*.
+
+<p align="center"><img src="docs/images/sol-ai.svg" width="100%" alt="Your question goes to ChatGPT, which asks Sol to read, search and follow links on the open tab, then writes the answer; clicking, typing and navigating wait for your approval"></p>
+
+- **Ask the site, not a snippet.** Sol AI reads the open tab as structure (headings, text, links, buttons, fields), searches it, follows links to other pages of a documentation and highlights the passage it used. Each step is shown as it happens.
+- **Your approval before acting.** Clicking, typing into a field or opening an address waits for *Allow*. Password, card and one-time-code fields are never read or filled.
+- **One-click actions.** *Summarize* in the address bar; right-click a selection to explain or translate it (six languages), or a text field to fix, rephrase or translate it, then replace the text.
+- **Chat panel** on the right for quick questions, able to look at the open tab.
+- **Notes:** search, summarize, or create a note from an instruction.
+- **Topics on the start page:** bookmarks and history sorted into categories once a day. Off by default; only titles and domains are sent.
+
+Only what you act on goes to OpenAI. Sign-in tokens stay encrypted on your PC, and Sol AI does not run in private windows.
+
 ## Download
 
 Get the latest version from the [Releases](https://gitlab.com/stevencrdkoulo/sol-browser/-/releases) page.
@@ -76,7 +91,7 @@ The files are **not code-signed**: a signing certificate costs money this projec
 You can check a download against the checksum published with each release (`SHA256SUMS.txt`):
 
 ```powershell
-Get-FileHash .\Sol-0.1.4-win-x64-Setup.exe -Algorithm SHA256
+Get-FileHash .\Sol-1.0.12-win-x64-Setup.exe -Algorithm SHA256
 ```
 
 ## Privacy
@@ -126,12 +141,13 @@ Release files for the three architectures: `pwsh tools/publish.ps1 -Arch x64,arm
 - **Host**: C# / .NET 10 with WinUI 3 (`src/Browser.App`). It owns all state.
 - **Logic**: plain, tested C# with no UI dependency (`src/Browser.Core`, tests in `tests/`).
 - **Interface**: React and TypeScript (`ui/`), loaded from local files under a strict content security policy. It sends validated commands to the host and receives the state back.
+- **Sol AI**: the ChatGPT Responses API with *Sign in with ChatGPT* (OAuth with PKCE, tokens protected by Windows). Page tools run in the tab from `src/Browser.App/inject/agent.js`; the interface uses [beUI](https://beui.dev) agent components.
 - **Installer and updates**: [Velopack](https://velopack.io), reading the releases of this repository.
 
 ## Publishing a release (maintainers)
 
 1. Set `<Version>` in `src/Browser.App/Browser.App.csproj`.
-2. Tag and push: `git tag v0.1.4 && git push origin v0.1.4`.
+2. Tag and push: `git tag v1.0.12 && git push origin v1.0.12`.
 3. The `release` pipeline job builds the installers and archives for the three architectures, publishes their checksums, and creates the GitLab release. Installed copies pick it up from there.
 
 ## Code signing policy

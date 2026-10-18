@@ -10,7 +10,7 @@
 
 ![Sol en thème sombre](docs/images/browser-dark.png)
 
-> Un projet personnel, partagé tel quel. Les versions 0.1 sont des premières versions : tout n'est pas encore poli.
+> Un projet personnel, partagé tel quel : tout n'est pas encore poli.
 
 ## Ce qu'il fait
 
@@ -51,6 +51,21 @@
 
 ![La même page sur un téléphone, une tablette et un écran d'ordinateur, côte à côte](docs/images/responsive.png)
 
+## Sol AI
+
+Un assistant facultatif qui utilise **votre propre forfait ChatGPT Plus ou Pro** via *Sign in with ChatGPT* : pas de clé API, pas de facture en plus. Il se connecte dans *Paramètres → Sol*.
+
+<p align="center"><img src="docs/images/sol-ai.svg" width="100%" alt="Votre question part vers ChatGPT, qui demande à Sol de lire, chercher et suivre les liens de l'onglet ouvert, puis rédige la réponse ; cliquer, saisir et naviguer attendent votre accord"></p>
+
+- **Interroger le site, pas un extrait.** Sol AI lit l'onglet ouvert de façon structurée (titres, texte, liens, boutons, champs), y cherche, suit les liens vers les autres pages d'une documentation et met en évidence le passage utilisé. Chaque étape s'affiche en direct.
+- **Votre accord avant d'agir.** Cliquer, remplir un champ ou ouvrir une adresse attend *Autoriser*. Les champs de mot de passe, de carte et de code unique ne sont jamais lus ni remplis.
+- **Actions en un clic.** *Résumer* dans la barre d'adresse ; clic droit sur une sélection pour l'expliquer ou la traduire (six langues), ou dans un champ pour corriger, reformuler ou traduire, puis remplacer le texte.
+- **Panneau de discussion** à droite pour les questions rapides, capable de consulter l'onglet ouvert.
+- **Notes** : chercher, résumer, ou créer une note à partir d'une consigne.
+- **Sujets sur la page d'accueil** : favoris et historique classés par catégorie une fois par jour. Désactivé par défaut ; seuls les titres et domaines sont envoyés.
+
+Seul ce sur quoi vous agissez part chez OpenAI. Les jetons de connexion restent chiffrés sur votre PC, et Sol AI ne fonctionne pas en navigation privée.
+
 ## Télécharger
 
 Prenez la dernière version sur la page [Releases](https://gitlab.com/stevencrdkoulo/sol-browser/-/releases).
@@ -76,7 +91,7 @@ Les fichiers ne sont **pas signés** : un certificat de signature coûte de l'ar
 Vous pouvez vérifier un téléchargement avec l'empreinte publiée dans chaque version (`SHA256SUMS.txt`) :
 
 ```powershell
-Get-FileHash .\Sol-0.1.4-win-x64-Setup.exe -Algorithm SHA256
+Get-FileHash .\Sol-1.0.12-win-x64-Setup.exe -Algorithm SHA256
 ```
 
 ## Vie privée
@@ -126,12 +141,13 @@ Fichiers publiables pour les trois architectures : `pwsh tools/publish.ps1 -Arch
 - **Hôte** : C# / .NET 10 avec WinUI 3 (`src/Browser.App`). Il détient tout l'état.
 - **Logique** : du C# simple et testé, sans dépendance à l'interface (`src/Browser.Core`, tests dans `tests/`).
 - **Interface** : React et TypeScript (`ui/`), chargée depuis des fichiers locaux sous une politique de sécurité stricte. Elle envoie des commandes validées à l'hôte et reçoit l'état en retour.
+- **Sol AI** : l'API Responses de ChatGPT avec *Sign in with ChatGPT* (OAuth avec PKCE, jetons protégés par Windows). Les outils de page s'exécutent dans l'onglet depuis `src/Browser.App/inject/agent.js` ; l'interface utilise les composants agents de [beUI](https://beui.dev).
 - **Installateur et mises à jour** : [Velopack](https://velopack.io), qui lit les versions publiées dans ce dépôt.
 
 ## Publier une version (mainteneurs)
 
 1. Régler `<Version>` dans `src/Browser.App/Browser.App.csproj`.
-2. Poser l'étiquette et la pousser : `git tag v0.1.4 && git push origin v0.1.4`.
+2. Poser l'étiquette et la pousser : `git tag v1.0.12 && git push origin v1.0.12`.
 3. La tâche `release` du pipeline construit les installateurs et les archives des trois architectures, publie leurs empreintes et crée la version sur GitLab. Les copies installées la récupèrent de là.
 
 ## Politique de signature du code
