@@ -142,7 +142,8 @@ public sealed partial class MainWindow : Window
         var welcome = new WelcomeHost(Welcome, welcomeBridge, () => welcomeBridge.InitAsync(uiFolder, c => _controller!.Execute(c)));
         var chatBridge = new UiBridge(Chat, "index.html#chat");
         bridge.AttachPopup(chatBridge);
-        var chat = new ChatHost(ContentArea, ChatColumn, Chat, chatBridge, () => chatBridge.InitAsync(uiFolder, c => _controller!.Execute(c)));
+        var chat = new ChatHost(ContentArea, ChatColumn, Chat, ChatGrip, chatBridge, () => chatBridge.InitAsync(uiFolder, c => _controller!.Execute(c)), settings);
+        WireChatGrip(chat, settings);
         _controller = new BrowserController(this, pages, bridge, popup, dock, panel, welcome, settings) { ExtensionPopup = new ExtensionPopupHost(this), CapturePanel = capture, Chat = chat };
         _controller.NativeZoomChanged += () => SetShortcuts(_shortcutsActive);
         WireDivider();

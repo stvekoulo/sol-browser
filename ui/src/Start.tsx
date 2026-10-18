@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useIconLook } from './Sidebar';
+import { useIconLook } from './useIconLook';
 import { formatDomain, onMessage, send } from './bridge';
+import { useFavoriteWindow } from './useFavoriteWindow';
 import { setLang, t, useLang } from './i18n';
 
 import { CornerActions } from '@/components/bencho/CornerActions';
@@ -50,7 +51,7 @@ function tileBackground(seed: string): string {
 
 const open = (input: string) => send({ type: 'start.navigate', input });
 
-function SiteTile({ site, enter }: { site: Site; enter?: number }) {
+function SiteTile({ site }: { site: Site }) {
   const domain = formatDomain(site.url);
   const name = site.title || domain || site.url;
   const letter = (domain || name).slice(0, 1).toUpperCase();
@@ -59,8 +60,7 @@ function SiteTile({ site, enter }: { site: Site; enter?: number }) {
 
   return (
     <button
-      className={enter === undefined ? 'start-site' : 'start-site is-entering'}
-      style={enter === undefined ? undefined : { animationDelay: `${Math.min(enter * 18, 240)}ms` }}
+      className="start-site"
       title={site.url}
       onClick={() => open(site.url)}
     >
@@ -95,14 +95,20 @@ export default function Start() {
   useLayoutEffect(() => {
     const grid = favoritesGrid.current;
     if (!grid) return;
-    const measure = () => setColumns(Math.max(1, getComputedStyle(grid).gridTemplateColumns.split(' ').length));
+    // Ne pas compter les pistes calculées : les positions virtuelles créent des colonnes implicites pendant un redimensionnement.
+    const measure = () => {
+      const style = getComputedStyle(grid), gap = parseFloat(style.columnGap) || 0;
+      const width = grid.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
+      setColumns(Math.max(1, Math.floor((width + gap) / (72 + gap))));
+    };
     const observer = new ResizeObserver(measure);
     observer.observe(grid);
     measure();
     return () => observer.disconnect();
   }, []);
   const shownFirst = columns * 4;
-  const favorites = allFavorites ? data.favorites : data.favorites.slice(0, shownFirst);
+  const visible = useFavoriteWindow(favoritesGrid, data.favorites.length, columns, allFavorites);
+  const favorites = data.favorites.slice(visible.first, visible.last);
 
   useLang();
   useEffect(() => {
@@ -162,15 +168,15 @@ export default function Start() {
               </button>
             )}
           </div>
-          <div className="start-favorites" ref={favoritesGrid}>
+          <div className="start-favorites" ref={favoritesGrid} onKeyDown={visible.onKeyDown} style={allFavorites ? { gridTemplateRows: `repeat(${visible.rows}, 102px)`, alignItems: 'start' } : undefined}>
             {favorites.map((site, index) => (
               // Éventail au coin du favori : nouvel onglet, vue scindée, copier le lien.
-              <CornerActions key={site.url} corner={16} actions={[
+              <CornerActions key={site.url} corner={16} style={allFavorites ? { gridRow: Math.floor((visible.first + index) / columns) + 1, gridColumn: (visible.first + index) % columns + 1 } : undefined} actions={[
                 { id: 'tab', label: t('Ouvrir dans un nouvel onglet', 'Open in a new tab'), Icon: AppWindow, run: () => send({ type: 'start.open', input: site.url }) },
                 { id: 'split', label: t('Ouvrir en vue scindée', 'Open in split view'), Icon: Columns2, run: () => send({ type: 'start.split', input: site.url }) },
                 { id: 'copy', label: t('Copier le lien', 'Copy link'), Icon: Copy, run: () => send({ type: 'start.copy', input: site.url }) },
               ]}>
-                <SiteTile site={site} enter={allFavorites && index >= shownFirst ? index - shownFirst : undefined} />
+                <SiteTile site={site} />
               </CornerActions>
             ))}
           </div>

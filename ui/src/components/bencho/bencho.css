@@ -171,15 +171,22 @@
   box-shadow: 0 0 0 1px var(--pane-edge);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  /* ── two writers, one scale ────────────────────────────
-     The spring owns how far out of the corner a button is and
-     the hover owns whether it is being pointed at. The component
-     writes --pop and the two are multiplied here. ONLY --zoom IS
-     TRANSITIONED: a transition on `scale` itself would smooth
-     the spring's own frames. */
-  scale: calc(var(--pop, 1) * var(--zoom, 1));
+  /* Les commandes sont déjà à leur place : seul le survol change leur échelle. */
+  scale: var(--zoom, 1);
   transition: --zoom 160ms cubic-bezier(0.24, 1.34, 0.38, 1);}
 
 /* the hover is the size, and nothing else */
 .nod-act:hover { --zoom: 1.12; }
 .nod-act:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Dans un panneau étroit, les commandes restent dans le flux, sous le contenu. */
+.nod[data-layout='inline'] { width: 100%; max-width: 100%; }
+.nod[data-layout='inline'] .nod-fan {
+  position: relative; width: auto; height: auto; display: flex;
+  flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding: 6px 4px;
+}
+.nod[data-layout='inline'] .nod-act { position: relative; flex: none; width: 36px; height: 36px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .nod-card, .nod-act { transition: none; }
+}

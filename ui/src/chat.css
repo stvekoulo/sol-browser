@@ -5,7 +5,7 @@
 .sol-chat-head { display: flex; align-items: center; gap: 6px; }
 .sol-chat-plan { margin-right: auto; margin-left: 4px; font-size: 11px; color: var(--text-dim); }
 .sol-chat-log { flex: 1; min-height: 0; }
-.sol-chat-empty, .sol-chat-hint, .sol-chat-error { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-dim); }
+.sol-chat-empty, .sol-chat-error { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-dim); }
 .sol-chat-empty { padding: 24px 8px; text-align: center; }
 .sol-chat-error { padding: 4px 8px; }
 .sol-chat-connect { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; font-size: 13px; }
@@ -21,7 +21,6 @@
 .sol-chat-log, .sol-chat-input, .sol-chat-connect { min-width: 0; max-width: 100%; }
 .sol-chat-log { overflow-x: hidden; overflow-wrap: anywhere; }
 .sol-chat-log pre { max-width: 100%; overflow-x: auto; }
-.sol-chat-hint { overflow-wrap: anywhere; }
 .sol-chat-connect .pill-action { white-space: normal; }
 @media (max-width: 340px) {
   .sol-chat { padding: 8px; }
@@ -31,3 +30,13 @@
 .sol-chat-suggestions { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 12px; }
 .sol-chat-head .eyt-inline { margin-right: 2px; }
 .sol-chat-mascot { margin: 0 auto 14px; }
+
+/* Contraindre aussi les éléments intermédiaires : masquer le débordement seul coupe le texte. */
+.sol-chat-log [role='log'], .sol-chat-log [data-slot='message'],
+.sol-chat-log [data-slot='message-content'], .sol-chat-log [data-slot='message-bubble'],
+.sol-chat-log .nod-card { min-width: 0; max-width: 100%; }
+.sol-chat-log [data-slot='message-bubble'] { width: 100%; }
+.sol-chat-log [data-variant='ghost'] > div { min-width: 0; max-width: 100%; }
+.sol-chat-log .sol-markdown { min-width: 0; overflow-wrap: anywhere; }
+.sol-chat-log .markdown-table { overflow-wrap: normal; }
+.sol-chat-log [role='log'] { display: flex; flex-direction: column; gap: 12px; }

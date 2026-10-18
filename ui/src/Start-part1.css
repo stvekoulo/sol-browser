@@ -103,14 +103,6 @@
   .start-more:hover { background: var(--bg-glass-pill-hover); }
 }
 :root[data-wallpaper="true"] .start-more { background: rgba(255, 255, 255, 0.16); }
-/* Favoris révélés par « Voir tout » : ils arrivent à la suite, sans déplacer ceux qui étaient là. */
-.start-site.is-entering { animation: start-site-in 200ms var(--ease-out) backwards; }
-@keyframes start-site-in { from { opacity: 0; transform: translateY(6px) scale(0.97); } }
-@media (prefers-reduced-motion: reduce) {
-  .start-site.is-entering { animation: start-site-fade 160ms ease backwards; }
-  @keyframes start-site-fade { from { opacity: 0; } }
-}
-
 /* Grille Safari des Favoris : jusqu'à 9 tuiles squircle par rangée, centrées avec leur libellé dessous. */
 .start-favorites {
   display: grid;
