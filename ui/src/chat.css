@@ -29,3 +29,5 @@
   .sol-chat-head .pill-action:nth-last-child(2) { margin-right: auto; }
 }
 .sol-chat-suggestions { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 12px; }
+.sol-chat-head .eyt-inline { margin-right: 2px; }
+.sol-chat-mascot { margin: 0 auto 14px; }

@@ -112,7 +112,7 @@ public sealed partial class PageHost
             if (e.Source == QuickNotes.PageUrl && core.Source == QuickNotes.PageUrl)
             {
                 if (CommandParser.Parse(e.TryGetWebMessageAsString()) is { } notes && notes.Type is
-                    "notes.ready" or "chat.toggle" or "notes.open" or "notes.draft" or "notes.save" or "notes.edit" or "notes.discard" or "notes.delete" or "notes.export" or "notes.visit" or "notes.link" or
+                    "notes.ready" or "chat.toggle" or "chat.ask" or "notes.open" or "notes.draft" or "notes.save" or "notes.edit" or "notes.discard" or "notes.delete" or "notes.export" or "notes.visit" or "notes.link" or
                     "notes.autosave" or "notes.meta" or "notes.action" or "notes.version" or "notes.tag" or "notes.comment" or "notes.import" or "notes.attach" or "notes.file" or "notes.detach" or "notes.order" or "notes.dates" or "notes.archive-policy")
                     NotesRequested?.Invoke(tab.Id, notes);
                 return;
@@ -124,7 +124,8 @@ public sealed partial class PageHost
                 return;
             }
             if (e.Source != Settings.DefaultHomePage || core.Source != Settings.DefaultHomePage) return;
-            if (CommandParser.Parse(e.TryGetWebMessageAsString()) is { } command && command.Type is "start.ready" or "start.navigate" or "start.group" or "start.favorites")
+            if (CommandParser.Parse(e.TryGetWebMessageAsString()) is { } command && command.Type is "start.ready" or "start.navigate" or "start.group" or "start.favorites"
+                or "start.open" or "start.split" or "start.copy" or "start.topic" or "start.groupedit")
                 StartRequested?.Invoke(tab.Id, command);
         };
         await ApplySettingsAsync(tab.Id, core);

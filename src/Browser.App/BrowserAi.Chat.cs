@@ -29,6 +29,11 @@ public sealed partial class BrowserController
                 Refresh(); return true;
             case "chat.ready": _bridge.BroadcastTheme(); PublishChat(); return true;
             case "chat.send": _ = SendChatAsync(c.Input ?? ""); return true;
+            // Depuis une note ou un sujet : le panneau s'ouvre et la question part tout de suite.
+            case "chat.ask":
+                if (Chat is null || PrivateActive) return true;
+                if (c.Id == "notes") _chatFocus = "notes";
+                _ = Chat.ShowAsync(); Refresh(); _ = SendChatAsync(c.Input ?? ""); return true;
             case "chat.cancel": try { _chatCancel?.Cancel(); } catch (ObjectDisposedException) { } return true;
             case "chat.clear":
                 if (_chatBusy) return true;

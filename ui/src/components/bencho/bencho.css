@@ -1,0 +1,172 @@
+/* Bencho blocks (Eye tracker, Action node): Copyright (c) 2026 Lorenzo Cabra, MIT; see ui/licenses/bencho-MIT.txt.
+   Les jetons de Bencho sont reliés à ceux de Sol sur la racine de chaque bloc : rien ne fuit dans le reste de l'interface. */
+
+/* ══ Eye tracker ═══════════════════════════════════════════
+   See lab/Watcher.tsx. The frame holds the largest ball the
+   Size knob allows, so the wall never rescales it. */
+.eyt {
+  /* Sol : la balle a la couleur de l'encre et les yeux celle du fond,
+     donc une balle claire aux yeux sombres en thème sombre, et l'inverse en clair. */
+  --bg: var(--bg-popup, var(--page-bg));
+  --card: var(--bg-sidebar-card);
+  --fill-slab: var(--text);
+  --fill-on: var(--bg-popup, var(--page-bg));
+  --font-ui: var(--font);
+  --ink: var(--text);
+  width: 200px;
+  height: 200px;
+  display: grid;
+  place-items: center;}
+
+/* Sol : dans un en-tête ou un bouton, le cadre prend la taille de la balle. */
+.eyt.eyt-inline { width: auto; height: auto; display: inline-grid; flex: none; }
+
+.eyt-ball {
+  width: var(--eyt-size, 100px);
+  height: var(--eyt-size, 100px);
+  overflow: visible;}
+
+/* the ball is the Fill's own slab and the eyes its ink: white
+   with dark eyes on a light fill, near-black with light eyes on
+   a dark one */
+.eyt-body { fill: var(--fill-slab, #ffffff); }
+
+.eyt-eye { fill: var(--fill-on, #0b0b0d); }
+
+/* a press on the toy opens a chat bubble off its lower right: the
+   pet's bubble, its square corner pointing back at the face */
+.eyt { position: relative; }
+
+/* a press gives a little under the finger and springs back out */
+.eyt-ball[data-poke] {
+  cursor: pointer;
+  transform-origin: center;
+  transition: scale 420ms cubic-bezier(0.24, 1.34, 0.38, 1);
+  -webkit-tap-highlight-color: transparent;}
+
+.eyt-ball[data-poke]:active { scale: 0.96; transition-duration: 160ms; transition-timing-function: ease; }
+
+.eyt-say {
+  position: absolute;
+  z-index: 5;
+  left: calc(50% + var(--eyt-size, 100px) * 0.36);
+  top: calc(50% + var(--eyt-size, 100px) * 0.3);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 34px;
+  padding: 0 16px;
+  border-radius: 6px 14px 14px 14px;
+  background: var(--tint, #3b5bff);
+  box-shadow: inset 0 -1.5px 0 rgba(0, 0, 0, 0.1);
+  color: #ffffff;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 400;
+  white-space: nowrap;
+  transform-origin: top left;
+  opacity: 0;
+  scale: 0.85;
+  pointer-events: none;
+  transition: opacity 160ms ease, scale 220ms cubic-bezier(0.24, 1.34, 0.38, 1), background-color 220ms ease;
+  letter-spacing: 0em;}
+
+.eyt-say[data-on] { opacity: 1; scale: 1; }
+
+.eyt-caret {
+  width: 1.5px;
+  height: 13px;
+  border-radius: 1px;
+  background: #ffffff;
+  animation: pet-caret 1s steps(1) infinite;}
+
+@keyframes pet-caret {
+  50% { opacity: 0; }}
+
+@media (prefers-reduced-motion: reduce) { .eyt-caret { animation: none; } }
+
+/* ══ Action node ══════════════════════════════════════════
+   A card whose controls live in its top-right corner until the
+   pointer asks for them. The component owns the geometry —
+   every number that decides where a button sits is in
+   CornerActions.tsx, because it is arithmetic on an arc and not
+   a style. What is here is what the buttons are MADE of.
+
+   Sol : la carte est celle de Sol (favori, note, sujet…), avec son propre fond ;
+   le bloc n'impose ni largeur, ni marge, ni couleur à la carte. */
+.nod {
+  --card: var(--bg-sidebar-card);
+  --fill-slab: var(--bg-pill-solid, var(--bg-popup));
+  --fill-on: var(--text);
+  --pane-edge: var(--border-card);
+  --font-ui: var(--font);
+  position: relative;
+  min-width: 0;
+  font-family: var(--font-ui);}
+
+/* Sol : la carte survolée passe devant ses voisines, sinon la suivante dans la grille couvrirait l'éventail. */
+.nod:hover, .nod:focus-within { z-index: 3; }
+
+/* ── the card is painted OVER the fan ──────────────────────
+   Which is what makes the buttons come out of the corner
+   rather than out of the middle of the card: at rest they sit
+   under the card with nothing of them showing. */
+.nod-card {
+  position: relative;
+  z-index: 1;
+  border-radius: var(--nod-r, 20px);
+  /* it lifts a hair while the fan is out: the card is the thing
+     the buttons came out of, and a card that answers at the
+     same moment they do reads as one object doing one thing. */
+  transition: translate 220ms cubic-bezier(0.24, 1.34, 0.38, 1);}
+
+.nod-card[data-on] { translate: 0 -1px; }
+
+/* ── the fan ───────────────────────────────────────────────
+   A zero-sized box pinned to the card's top-right corner: the
+   anchor is a POINT. Under the card, so the buttons are hidden
+   until they travel out. */
+.nod-fan {
+  position: absolute;
+  z-index: 0;
+  width: 0;
+  height: 0;}
+
+/* ── the pad that makes the fan reachable ───────────────
+   Invisible, and inert until the fan is out: a pad that could
+   open it would put a trigger in blank space beside the card. */
+.nod-reach {
+  position: absolute;
+  pointer-events: none;}
+
+.nod-reach[data-on] { pointer-events: auto; }
+
+@property --zoom { syntax: "<number>"; inherits: false; initial-value: 1; }
+
+.nod-act {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--fill-slab, var(--card));
+  color: var(--fill-on, var(--ink));
+  /* Sol : un trait léger, pour détacher le bouton d'une carte de même teinte */
+  box-shadow: 0 0 0 1px var(--pane-edge);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  /* ── two writers, one scale ────────────────────────────
+     The spring owns how far out of the corner a button is and
+     the hover owns whether it is being pointed at. The component
+     writes --pop and the two are multiplied here. ONLY --zoom IS
+     TRANSITIONED: a transition on `scale` itself would smooth
+     the spring's own frames. */
+  scale: calc(var(--pop, 1) * var(--zoom, 1));
+  transition: --zoom 160ms cubic-bezier(0.24, 1.34, 0.38, 1);}
+
+/* the hover is the size, and nothing else */
+.nod-act:hover { --zoom: 1.12; }
+.nod-act:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

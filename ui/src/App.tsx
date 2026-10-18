@@ -1,3 +1,4 @@
+import { EyeTracker } from '@/components/bencho/EyeTracker';
 import {WindowControls,useWindowDrag} from './WindowControls';
 import { useEffect, useState } from 'react';
 import { isStartPage, onState, send, type State } from './bridge';
@@ -92,7 +93,7 @@ export default function App({sidebarOpen=true}:{sidebarOpen?:boolean}) {
           {extension.icon ? <img src={extension.icon} alt="" /> : <span>{extension.name.slice(0,1)}</span>}
         </button>)}
         {state.aiAvailable && <button className="pill-icon-btn" aria-label={t('Discuter avec Sol AI', 'Chat with Sol AI')} title={t('Discuter avec Sol AI', 'Chat with Sol AI')} aria-pressed={!!state.chatOpen} onClick={() => send({ type: 'chat.toggle' })}>
-          <Icon d="M3 3.5h10v7H7l-3 2.5v-2.5H3zM6 7h.01M8 7h.01M10 7h.01" />
+          <EyeTracker className="eyt-inline" size={17} eyeScale={1.8} idle />
         </button>}
         <button
           className="pill-icon-btn"

@@ -40,8 +40,8 @@
 @media (max-width:650px) { .notes-workspace { grid-template-columns:190px minmax(0,1fr); } .notes-document-toolbar { padding:10px 14px; } .notes-document-toolbar > span { display:none; } .notes-title { font-size:21px; } }
 @media (max-width:420px) { .notes-workspace { grid-template-columns:135px minmax(0,1fr); } .notes-browser-heading { padding:16px 10px; } .notes-paper { padding:14px; } .notes-browser-heading h1 { font-size:17px; } }
 
-.notes-workspace{position:relative;grid-template-columns:180px minmax(0,1fr);overflow:hidden;font-variant-numeric:tabular-nums}
-.notes-workspace.has-editor{grid-template-columns:155px minmax(180px,260px) minmax(320px,1fr)}
+.notes-workspace{position:relative;grid-template-columns:232px minmax(0,1fr);overflow:hidden;font-variant-numeric:tabular-nums}
+.notes-workspace.has-editor{grid-template-columns:208px minmax(190px,270px) minmax(320px,1fr)}
 .notes-browser-heading{padding:20px 16px 12px;gap:10px}.notes-browser-heading h1{font-size:20px}
 .notes-tool{min-width:38px;min-height:38px;flex:none}.notes-tool:focus-visible,.notes-menu summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .notes-tool:active,.notes-preview:active{transform:scale(.96)}
@@ -75,3 +75,6 @@
 .note-policy{width:100%;font-size:11px;color:var(--text-dim);margin-top:8px}.note-policy summary{cursor:pointer;padding:8px 0}.note-policy form{display:flex;flex-direction:column;gap:8px}.note-policy input{width:60px;padding:6px;margin:5px;border:1px solid var(--border-card);border-radius:9px;background:var(--bg-tab-hover);color:var(--text)}.note-export-filter{padding:8px;display:flex;gap:8px;align-items:center}
 .notes-workspace .popup-seg-btn{padding:0 12px;min-width:36px;flex:0 1 auto}.notes-workspace .note-editor-modes .popup-seg-btn{min-height:34px;height:auto;white-space:nowrap}.notes-workspace .notes-collection-tools .popup-seg-btn{padding:0 8px}
 .notes-navigation{min-height:0;overflow:auto;scrollbar-width:thin}
+.notes-browser-heading{gap:6px}.notes-browser-heading .notes-ai{white-space:nowrap;margin-left:auto}.notes-heading .notes-ai{white-space:nowrap;margin-left:auto;margin-right:6px}
+/* Éventail au coin des cartes : de la place au-dessus et à droite, sinon le défilement de la liste le coupe. */
+.notes-browser-list.note-cards{padding-top:30px;padding-right:34px}

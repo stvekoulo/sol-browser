@@ -1,3 +1,4 @@
+import { EyeTracker } from '@/components/bencho/EyeTracker';
 import { send } from './bridge';
 import { t } from './i18n';
 import SolSelect from './SolSelect';
@@ -9,10 +10,10 @@ export type SolAiState = { connected:boolean; ready:boolean; email:string; signi
 // Compte ChatGPT de Sol AI, suivant les règles d’interface d’OpenAI : bouton « Continuer avec ChatGPT », badge « Connecté »,
 // mention du forfait utilisé et lien « Gérer l’usage ».
 export default function SolAiAccount({ ai }: { ai: SolAiState }) {
-  return <div className="ai-settings">
+  return <div className="ai-settings" data-eyt-frame>
     <div className="setting-row static">
       <span className="setting-text">
-        <span className="row-title">Sol AI {ai.connected && <span className="ai-badge">{t('Connecté','Connected')}</span>}</span>
+        <span className="row-title ai-title"><EyeTracker className="eyt-inline" size={24} eyeScale={1.5} />Sol AI {ai.connected && <span className="ai-badge">{t('Connecté','Connected')}</span>}</span>
         <span className="row-sub">{ai.isPrivate ? t('Indisponible en navigation privée.','Unavailable in private browsing.')
           : ai.connected ? `${ai.email}${ai.ready ? ' · ' + t('Utilise votre forfait ChatGPT','Using ChatGPT plan') : ''}`
           : t('Résumer, expliquer, interroger, traduire ou rédiger avec votre abonnement ChatGPT, sans clé API.','Summarize, explain, ask, translate or write with your ChatGPT subscription, no API key.')}</span>

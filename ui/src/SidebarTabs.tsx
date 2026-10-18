@@ -6,6 +6,7 @@ import { focusTab, middleClose, sidebarMenu } from './sidebarActions';
 import { startSlotDrag } from './useSidebarDrag';
 import {SidebarSort,type SidebarBlock} from './SidebarSort';
 import './private-tabs.css';
+import { SidebarAiGroups } from './SidebarAiGroups';
 
 export function SidebarTabs({ state, icons }: { state: State; icons: Record<string, string | null | undefined> }) {
   const { tabs, split, activeId } = state;
@@ -59,6 +60,7 @@ export function SidebarTabs({ state, icons }: { state: State; icons: Record<stri
   }
   return <div className="sidebar-tabs" role="tablist" aria-label={t('Onglets', 'Tabs')} aria-orientation="vertical">
     <SidebarSort blocks={items}/>
+    <SidebarAiGroups ai={state.aiTabs} />
     <button className="sidebar-new-tab" title={t('Nouvel onglet · Ctrl+T', 'New tab · Ctrl+T')} onClick={() => send({ type: 'tab.open' })}>
       <Icon d="M8 3.5v9M3.5 8h9" size={14} /><span>{t('Nouvel onglet', 'New tab')}</span>
     </button>

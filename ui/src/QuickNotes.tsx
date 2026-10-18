@@ -1,3 +1,4 @@
+import { EyeTracker } from '@/components/bencho/EyeTracker';
 import {Button} from '@/components/motion/button/base';
 import NoteMarkdown from './NoteMarkdown';
 import { useState,useRef } from 'react';
@@ -16,7 +17,7 @@ export default function QuickNotes({ content }: { content: NotesContent }) {
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [preview, setPreview] = useState(false);
   return <>
-    <div className="notes-heading"><strong>{t('Notes rapides', 'Quick notes')}</strong>{content.aiEnabled&&<Button variant="ghost" size="sm" pressScale={0.98} whileHover={undefined} className="pill-action notes-ai" title={t('Demander à Sol AI de chercher, résumer ou créer des notes','Ask Sol AI to search, summarize or create notes')} onClick={()=>send({type:'chat.toggle',id:'notes'})}>Sol AI</Button>}<Button variant="ghost" size="sm" pressScale={0.98} whileHover={undefined} className="pill-action" onClick={()=>send({type:'popup.close'})} aria-label={t('Fermer', 'Close')}>×</Button></div>
+    <div className="notes-heading"><strong>{t('Notes rapides', 'Quick notes')}</strong>{content.aiEnabled&&<Button variant="ghost" size="sm" pressScale={0.98} whileHover={undefined} className="pill-action notes-ai" title={t('Demander à Sol AI de chercher, résumer ou créer des notes','Ask Sol AI to search, summarize or create notes')} onClick={()=>send({type:'chat.toggle',id:'notes'})}><EyeTracker className="eyt-inline" size={16} eyeScale={1.8} idle />Sol AI</Button>}<Button variant="ghost" size="sm" pressScale={0.98} whileHover={undefined} className="pill-action" onClick={()=>send({type:'popup.close'})} aria-label={t('Fermer', 'Close')}>×</Button></div>
     <p className="row-hint">{content.privateMode ? t('Privé : conservées en mémoire jusqu’à la fermeture.', 'Private: kept in memory until this window closes.') : t('Vos notes dans ce profil. Le brouillon reste disponible dans cette fenêtre.', 'Notes for this profile. Your draft stays available in this window.')}</p>
     <input className="library-search" aria-label={t('Titre de la note', 'Note title')} placeholder={t('Titre facultatif', 'Optional title')} maxLength={120} value={draft.title} onChange={e=>change('title',e.target.value)} />
     {!preview&&<NoteToolbar editor={editor} change={text=>change('text',text)} reference={()=>{send({type:'notes.manage'})}}/>}

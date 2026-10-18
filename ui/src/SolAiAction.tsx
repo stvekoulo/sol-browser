@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { BookOpen, Copy, FileText, Languages, Lightbulb, MessageCircleQuestion, NotebookPen, PenLine, RefreshCw, Replace, SpellCheck, TextCursorInput, Wand2, X } from 'lucide-react';
+import { EyeTracker } from '@/components/bencho/EyeTracker';
 import { send } from './bridge';
 import { t } from './i18n';
 import SolMarkdown from './SolMarkdown';
@@ -42,8 +43,9 @@ export default function SolAiAction({content:c}:{content:AiContent}) {
   const scope={page:t('Page entière','Whole page'),selection:t('Sélection','Selection'),field:t('Champ de saisie','Text field')}[c.scope];
   const ScopeIcon=c.scope==='page'?BookOpen:c.scope==='selection'?TextCursorInput:PenLine;
   const error=c.error && c.error!=='cancelled' ? c.error : null;
-  return <div className="ai-action">
+  return <div className="ai-action" data-eyt-frame>
     <header className="ai-head">
+      <EyeTracker className="eyt-inline" size={26} eyeScale={1.5} />
       <strong>Sol AI</strong>
       <span className="ai-badge">ChatGPT</span>
       <Button variant="ghost" size="sm" className="ai-icon-btn" aria-label={t('Fermer','Close')} title={t('Fermer','Close')} onClick={()=>send({type:'popup.close'})}><X {...icon}/></Button>

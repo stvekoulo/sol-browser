@@ -164,7 +164,7 @@ public sealed partial class BrowserController
             groups = _tabs.Groups.Select(g => new { id = g.Id, name = g.Name, color = g.Color, icon = g.Icon, collapsed = g.Collapsed }),
             activeId = _tabs.ActiveId,
             privateMode = PrivateActive,
-            aiAvailable = !PrivateActive, chatOpen = Chat?.IsOpen == true,
+            aiAvailable = !PrivateActive, chatOpen = Chat?.IsOpen == true, aiTabs = TabGroupAiState(),
             shield = false,
             shortcuts = _settings.Shortcuts.Select(s => new { url = s.Url, name = s.Name, icon = s.Icon, tabId = _shortcutTabs.GetValueOrDefault(s) }),
             extensions = _pinnedExtensions,
