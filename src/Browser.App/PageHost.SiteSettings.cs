@@ -54,7 +54,8 @@ public sealed partial class PageHost
     private async Task ApplySettingsAsync(string id, CoreWebView2 core)
     {
         StartSpelling();
-        if (!settings.MemorySaver && core.IsSuspended) core.Resume();
+        if (!settings.MemorySaver) Wake(id, core);
+        else if (_hiddenSince.ContainsKey(id) && !core.IsSuspended) core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low;
         if (!settings.MemorySaver && _hiddenSince.ContainsKey(id)) _hiddenSince[id] = DateTime.UtcNow;
         var iCloud = (await core.Profile.GetBrowserExtensionsAsync()).Any(e => e.IsEnabled && e.Id is "pejdijmoenmkgeppbflobdenhhabjlaj" or "mfbcdcnpokpoajjciilocoachedjkima");
         core.Settings.IsPasswordAutosaveEnabled = settings.SavePasswords && !IsPrivate(id) && !iCloud;
@@ -153,8 +154,8 @@ public sealed partial class PageHost
         _ = core.AddScriptToExecuteOnDocumentCreatedAsync(SidewaysScript);
         _ = core.AddScriptToExecuteOnDocumentCreatedAsync("document.addEventListener('pointerdown',e=>{if(e.isTrusted)window.chrome.webview.postMessage('sol.page.pointer')},true)");
         _ = core.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "video-cursor.js")));
-        if (settings.SolAiEnabled)
-            _ = core.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "ai.js")));
+        // Mémorise la sélection au clic droit pour Sol AI ; sans effet tant que l'utilisateur n'agit pas.
+        _ = core.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "ai.js")));
         s.IsReputationCheckingRequired = true; // SmartScreen
         // Aucun certificat invalide n'est accepté silencieusement, même sur localhost.
         core.ServerCertificateErrorDetected += (_, e) =>

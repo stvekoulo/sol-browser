@@ -34,6 +34,7 @@ export default function Capture() {
         else if(message.kind==='error'){setError(message.data??t('Capture impossible.','Capture failed.'));setPhase('ready');send({type:'capture.selection',index:0});send({type:'capture.visibility',index:1});}
       }
     });
+    send({type:'ui.ready'});
     const escape=(event:KeyboardEvent)=>{if(event.key==='Escape')close();};
     window.addEventListener('keydown',escape);return()=>{off();window.removeEventListener('keydown',escape);};
   },[]);

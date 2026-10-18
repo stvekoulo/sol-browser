@@ -100,8 +100,7 @@ public sealed partial class BrowserController
     private string SettingsJson() => JsonSerializer.Serialize(new
     {
         popup = "settings",
-        ai = _ai.State(_settings.SolAiEnabled, _settings.SolAiModel),
-        aiPreferences = new { tone = _settings.SolAiTone, length = _settings.SolAiLength, thinking = _settings.SolAiThinking, keepMinutes = _settings.SolAiKeepMinutes, adaptation = _settings.SolAiAdaptation, context = AiNavigation(), isPrivate = AppPaths.Private },
+        ai = AiState(),
         version = typeof(App).Assembly.GetName().Version?.ToString(3) ?? "",
         update = Program.Update is { } update ? new { version = update.Version, percent = update.Percent, ready = update.Ready } : null,
         check = Program.Check,

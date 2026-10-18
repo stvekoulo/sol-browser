@@ -15,11 +15,17 @@
     <local:DividerGrip x:Name="SidebarGrip" Canvas.ZIndex="10" Grid.RowSpan="2" Grid.Column="0" Width="8" HorizontalAlignment="Right" Background="Transparent" />
     <WebView2 x:Name="Ui" Grid.RowSpan="2" Grid.ColumnSpan="2" Opacity="0" />
     <!-- Navigation et pages partagent la colonne de droite ; la sidebar occupe toute la hauteur. -->
-    <Grid Grid.Row="1" Grid.Column="1">
+    <Grid x:Name="ContentArea" Grid.Row="1" Grid.Column="1">
       <Grid.RowDefinitions>
         <RowDefinition Height="*" />
         <RowDefinition x:Name="PanelRow" Height="0" />
       </Grid.RowDefinitions>
+      <!-- Panneau de discussion Sol AI à droite des pages, créé à la première ouverture. -->
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition x:Name="ChatColumn" Width="0" />
+      </Grid.ColumnDefinitions>
+      <WebView2 x:Name="Chat" Grid.Column="1" Grid.RowSpan="2" Canvas.ZIndex="2" Visibility="Collapsed" />
       <WebView2 x:Name="Panel" Grid.Row="1" />
       <local:RowGrip x:Name="PanelGrip" Grid.Row="1" Height="8" VerticalAlignment="Top" Background="Transparent" />
       <Grid x:Name="Pages" Grid.Row="0">

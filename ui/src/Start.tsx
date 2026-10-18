@@ -15,6 +15,7 @@ type StartData = {
   favorites: Site[];
   history: Site[];
   groups: { id: string; name: string; color: string; count: number }[];
+  categories?: { name: string; links: Site[] }[];
 };
 
 const empty: StartData = {
@@ -169,6 +170,25 @@ export default function Start() {
             </p>
           )}
         </section>
+
+        {!!data.categories?.length && (
+          <section className="start-section">
+            <h2>{t('Vos sujets', 'Your topics')}</h2>
+            <div className="start-categories">
+              {data.categories.map(category => (
+                <div key={category.name} className="start-category">
+                  <h3>{category.name}</h3>
+                  {category.links.map(site => (
+                    <button key={site.url} onClick={() => open(site.url)} title={site.url}>
+                      <HistoryIcon site={site} />
+                      <span>{site.title || formatDomain(site.url)}</span>
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         <section className="start-section">
           <h2>{t('Groupes d’onglets', 'Tab groups')}</h2>

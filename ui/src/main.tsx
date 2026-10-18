@@ -1,6 +1,8 @@
+import { lazy, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import Workspace from './Workspace';
 import Dock from './Dock';
+const SolChat = lazy(() => import('./SolChat'));
 import Panel from './Panel';
 import Popup from './Popup';
 import Sidebar from './Sidebar';
@@ -40,6 +42,7 @@ if (!hash && location.hostname === 'ui.navigateur') document.body.classList.add(
 if (hash === '#sidebar') document.body.classList.add('sidebar-body');
 if (hash === '#panel') document.body.classList.add('panel-body');
 if (hash === '#welcome') document.body.classList.add('welcome-body');
+if (hash === '#chat') document.body.classList.add('chat-body');
 
 const container = document.getElementById('root')!;
 // L'hôte ne dévoile la surface qu'une fois son contenu rendu, pour éviter le cadre vide du moteur.
@@ -57,7 +60,7 @@ const render = () => {
   const page = location.hash;
   document.body.classList.toggle('start-body', page === '#start');
   document.body.classList.toggle('notes-body', page === '#notes');
-  root.render(page === '#notes' ? <NotesPage /> : page === '#capture' ? <Capture /> : page === '#start' ? <Start /> : page === '#welcome' ? <Welcome /> : page === '#panel' ? <Panel /> : page === '#popup' ? <Popup /> : page === '#dock' ? <Dock /> : page === '#sidebar' ? <Sidebar /> : <Workspace />);
+  root.render(<Suspense fallback={null}>{page === '#notes' ? <NotesPage /> : page === '#capture' ? <Capture /> : page === '#start' ? <Start /> : page === '#welcome' ? <Welcome /> : page === '#panel' ? <Panel /> : page === '#chat' ? <SolChat /> : page === '#popup' ? <Popup /> : page === '#dock' ? <Dock /> : page === '#sidebar' ? <Sidebar /> : <Workspace />}</Suspense>);
 };
 render();
 if (location.hostname === 'start.sol') window.addEventListener('hashchange', render);

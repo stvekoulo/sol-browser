@@ -16,6 +16,8 @@ public sealed partial class PageHost
         _pdf.Remove(id);
         _ready.Remove(id);
         _hiddenSince.Remove(id);
+        _discardProtected.Remove(id);
+        _suspendRefused.Remove(id);
         if (_pip == id) ExitPip();
         if (_views.TryGetValue(id, out var closing)) ClearSims(id, closing);
         if (!_views.Remove(id, out var view)) return;

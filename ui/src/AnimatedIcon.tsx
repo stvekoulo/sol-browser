@@ -29,7 +29,6 @@ import {MoonIcon} from '@/components/ui/moon';
 import {ChevronsUpDownIcon} from '@/components/ui/chevrons-up-down';
 import {ChevronsDownUpIcon} from '@/components/ui/chevrons-down-up';
 import {TerminalIcon} from '@/components/ui/terminal';
-import {SparklesIcon} from '@/components/ui/sparkles';
 import {ChartNoAxesColumnIncreasingIcon} from '@/components/ui/chart-no-axes-column-increasing';
 import {PauseIcon} from '@/components/ui/pause';
 import {PlayIcon} from '@/components/ui/play';
@@ -40,7 +39,7 @@ import {UserPlusIcon} from '@/components/ui/user-plus';
 import {FingerprintIcon} from '@/components/ui/fingerprint';
 import {DeleteIcon} from '@/components/ui/delete';
 const icons={user:UserIcon,userAdd:UserPlusIcon,private:FingerprintIcon,delete:DeleteIcon,download:DownloadIcon,settings:SettingsIcon,notes:BookTextIcon,history:HistoryIcon,search:SearchIcon,reload:RefreshCWIcon,sidebar:PanelLeftOpenIcon,copy:CopyIcon,back:ArrowLeftIcon,forward:ArrowRightIcon,close:XIcon,archive:ArchiveIcon,plus:PlusIcon,check:CheckIcon,attach:AttachFileIcon,
-  save:HardDriveDownloadIcon,group:LayersIcon,groupAdd:FolderPlusIcon,ungroup:FolderMinusIcon,tab:LayoutPanelTopIcon,edit:SquarePenIcon,session:BriefcaseBusinessIcon,select:FrameIcon,undo:UndoIcon,redo:RedoIcon,sleep:MoonIcon,expand:ChevronsUpDownIcon,collapse:ChevronsDownUpIcon,tools:TerminalIcon,ai:SparklesIcon,network:ChartNoAxesColumnIncreasingIcon,pause:PauseIcon,play:PlayIcon,file:FileTextIcon,folder:FolderOpenIcon};
+  save:HardDriveDownloadIcon,group:LayersIcon,groupAdd:FolderPlusIcon,ungroup:FolderMinusIcon,tab:LayoutPanelTopIcon,edit:SquarePenIcon,session:BriefcaseBusinessIcon,select:FrameIcon,undo:UndoIcon,redo:RedoIcon,sleep:MoonIcon,expand:ChevronsUpDownIcon,collapse:ChevronsDownUpIcon,tools:TerminalIcon,ai:FileTextIcon,network:ChartNoAxesColumnIncreasingIcon,pause:PauseIcon,play:PlayIcon,file:FileTextIcon,folder:FolderOpenIcon};
 export type IconName=keyof typeof icons;
 type Handle={startAnimation:()=>void;stopAnimation:()=>void};
 export default function AnimatedIcon({name,size=16,className=''}:{name:IconName;size?:number;className?:string}){

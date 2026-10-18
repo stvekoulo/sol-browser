@@ -1,6 +1,6 @@
 import type {Download} from './Downloads';
 import type {NotesContent} from './QuickNotes';
-import type {SolAiState,AiPreferences} from './SolAiSettings';
+import type {SolAiState} from './SolAiAccount';
 import type {AiContent} from './SolAiAction';
 export type Item = { url: string; title: string; kind?: 'search' | 'go' | 'history' | 'site' };
 export type PaletteItem = { id: string; title: string; hint: string; shortcut: string; group: string; keywords: string };
@@ -16,7 +16,7 @@ export type Content =
   | { popup: 'menu'; items: string[] }
   | { popup: 'split-layout'; ratio: number }
   | { popup: 'downloads'; items: Download[] }
-  | { popup: 'settings'; section?: string; ai: SolAiState; aiPreferences: AiPreferences; version: string; update: { version: string; percent: number; ready: boolean } | null; check: 'idle' | 'checking' | 'current' | 'failed' | 'portable'; zoom: number; uiScale: number; shortcuts: {action:string; title:string; keys:string}[]; theme: number; language: number; spelling: number; spellingLanguages: string[]; home: string; wallpaperOn: boolean; wallpaper: number; wallpaperDaily: boolean; wallpapers: Wallpaper[]; font: number;  engine: number; engines: string[]; sites: { origin: string; host: string; summary: string }[]; permissions: number; siteData: 'idle' | 'clearing' | 'done' | 'failed'; tint: Setting[]; items: Setting[] }
+  | { popup: 'settings'; section?: string; ai: SolAiState; version: string; update: { version: string; percent: number; ready: boolean } | null; check: 'idle' | 'checking' | 'current' | 'failed' | 'portable'; zoom: number; uiScale: number; shortcuts: {action:string; title:string; keys:string}[]; theme: number; language: number; spelling: number; spellingLanguages: string[]; home: string; wallpaperOn: boolean; wallpaper: number; wallpaperDaily: boolean; wallpapers: Wallpaper[]; font: number;  engine: number; engines: string[]; sites: { origin: string; host: string; summary: string }[]; permissions: number; siteData: 'idle' | 'clearing' | 'done' | 'failed'; tint: Setting[]; items: Setting[] }
   | { popup: 'profiles'; items: Profile[] }
   | { popup: 'sessions'; id: string; current: string; deleting: string | null; items: {id:string;name:string;count:number}[] }
   | { popup: 'group-edit'; create: boolean; id: string; name: string; color: string; icon: string; presets: string[] }

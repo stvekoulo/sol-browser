@@ -76,7 +76,7 @@ public sealed partial class BrowserController
         }
         PublishNotes();return true;
     }
-    private string NotesJson() => JsonSerializer.Serialize(new { popup="notes",items=_notes.All.Select(n=>n with{History=[],Comments=[]}),draft=_noteDraft,error=_noteError,privateMode=AppPaths.Private,aiEnabled=false,archiveDays=_settings.NotesArchiveDays,
+    private string NotesJson() => JsonSerializer.Serialize(new { popup="notes",items=_notes.All.Select(n=>n with{History=[],Comments=[]}),draft=_noteDraft,error=_noteError,privateMode=AppPaths.Private,aiEnabled=AiReady,archiveDays=_settings.NotesArchiveDays,
         attachments=_noteDraft.Files.Select(id=>_noteFiles.Find(id)).OfType<NoteFile>().Select(f=>new { f.Id,f.Name,f.Mime,size=f.Data.Length,
             data=f.Mime.StartsWith("image/")||f.Mime.StartsWith("audio/")?"data:"+f.Mime+";base64,"+Convert.ToBase64String(f.Data):null }) },
         new JsonSerializerOptions {PropertyNamingPolicy=JsonNamingPolicy.CamelCase});

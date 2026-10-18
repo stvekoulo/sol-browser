@@ -57,6 +57,7 @@ public sealed partial class UiBridge
                     var offset = target.TransformToVisual((UIElement)target.Parent).TransformPoint(new Windows.Foundation.Point(0, 0));
                     command = command with { X = xLocal + offset.X, Y = command.Y is { } yLocal ? yLocal + offset.Y : null };
                 }
+                if (command.Type is "ui.ready" or "dock.ready" or "network.ready" or "welcome.ready") ReplayTheme();
                 onCommand(command);
                 if (command.Type=="ui.ready") SidebarHost?.Publish();
             }

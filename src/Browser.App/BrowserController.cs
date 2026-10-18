@@ -13,10 +13,10 @@ public sealed partial class BrowserController
     private readonly UiBridge _bridge;
     private readonly PopupHost _popup;
     private readonly Settings _settings;
-    private readonly SolAiService _ai = new();
     private readonly BrowserDb _db;
     private readonly CaptureService _capture;
     public PopupHost? CapturePanel { get; init; }
+    public ChatHost? Chat { get; init; }
     private readonly TabManager _tabs = new();
     public bool UseNativeZoom => _tabs.ActiveId is { } id && _pages.IsPdf(id);
     public event Action? NativeZoomChanged;
@@ -64,33 +64,24 @@ public sealed partial class BrowserController
     {
         _welcome = welcome;
         (_window, _pages, _bridge, _popup, _dock, _tools, _settings) = (window, pages, bridge, popup, dock, panel, settings);
-        _ai.SetKeepMinutes(settings.SolAiKeepMinutes);
         _pages.PagePressed += DismissAiPopup;
         _network = new NetworkInspector(panel.Post);
         _sessionSave.Tick += (_, _) => { _sessionSave.Stop(); SaveSession(); };
         StartNoteMaintenance();
         Directory.CreateDirectory(AppPaths.DataDir);
-        // Sol AI reste désactivé pendant cette phase, y compris après une mise à jour.
-        if (_settings.SolAiEnabled)
-        {
-            _settings.SolAiEnabled = false;
-            JsonFileStore.Save(AppPaths.Settings, _settings);
-        }
         _db = new BrowserDb(AppPaths.Database);
         _capture = new CaptureService(window, json => CapturePanel?.Post(json), pages.RestoreCaptureViewportAsync);
-        _ai.Changed += () => _window.DispatcherQueue.TryEnqueue(() =>
+        _chatGpt.Changed += () => _window.DispatcherQueue.TryEnqueue(() =>
         {
             if (_closingWindow) return;
-            if(_ai.Optimization is { } optimization && _ai.Models.Any(m=>m.Id==optimization.Id && m.Cached) && _settings.SolAiModel!=optimization.Id) {
-                _settings.SolAiModel=optimization.Id;JsonFileStore.Save(AppPaths.Settings,_settings);
-            }
-            if (!_ai.Models.Any(m => m.Id == _settings.SolAiModel && m.Cached))
+            if (AiReady && !_chatGpt.SigningIn && !_settings.SolAiWelcomeShown)
             {
-                var installed = _ai.Models.FirstOrDefault(m => m.Cached)?.Id ?? "";
-                if (_settings.SolAiModel != installed) { _settings.SolAiModel = installed; JsonFileStore.Save(AppPaths.Settings, _settings); }
+                _settings.SolAiWelcomeShown = true; JsonFileStore.Save(AppPaths.Settings, _settings);
+                Notice("Sol AI", T("Connecté avec votre forfait ChatGPT. Les questions et le texte choisi sont envoyés à OpenAI quand vous lancez une action. Vous pouvez gérer l’usage depuis Sol AI.",
+                    "Connected with your ChatGPT plan. Questions and selected text are sent to OpenAI when you start an action. Manage usage from Sol AI."));
             }
             if (_settingsOpen) _popup.Post(SettingsJson());
-            PublishAi();
+            PublishAi(); PublishChat(); PublishNotes(); Refresh();
         });
 
         _pages.PageChanged += (id, url, title) =>
@@ -132,7 +123,7 @@ public sealed partial class BrowserController
                 _ = PostStartWallpaperAsync(id);
                 foreach (var url in _db.Bookmarks().Select(b => b.Url).Take(48)) FetchStartIcon(url);
                 if (!_pages.IsPrivate(id))
-                    foreach (var visit in _db.RecentHistory(12)) FetchStartIcon(visit.Url);
+                    foreach (var url in _db.RecentHistory(12).Select(v => v.Url).Concat(_categories.Categories.SelectMany(c => c.Links.Take(8)).Select(l => l.Url))) FetchStartIcon(url);
             }
             else if (command.Type == "start.navigate") _pages.Navigate(id, Resolve(command.Input!));
             else if (command.Type == "start.favorites") _ = FetchFavoriteIconsAsync();
@@ -199,7 +190,9 @@ public sealed partial class BrowserController
         {
             _closingWindow = true;
             _noteMaintenance.Stop();
-            _ai.Dispose();
+            CancelAi();
+            CancelChat(); CancelCategories(); _chatGpt.CancelSignIn();
+            _categoriesTimer.Stop();
             _pages.StopSpelling();
             _capture.Cancel();
             _sessionSave.Stop();
@@ -215,7 +208,7 @@ public sealed partial class BrowserController
         };
         ApplyComparison();
         Profiles.DeleteClosedTemporary(AppPaths.BaseDir, IsProfileOpen); // sessions isolées dont la fenêtre est fermée
-        if(_settings.SolAiEnabled)_ai.Prepare(_settings.SolAiModel);
+        StartAiCategories();
     }
 
     private static string T(string fr, string en) => Language.T(fr, en);
@@ -224,9 +217,9 @@ public sealed partial class BrowserController
 
     public void Execute(Command c)
     {
-        if (c.Type.StartsWith("ai.", StringComparison.Ordinal)) return; // Sol AI temporairement masqué.
         if (c.Type is not ("popup.size" or "dock.size" or "split.resize")) DebugLog.Write($"commande {c.Type} {c.Id} {c.Index}");
         if (SidebarCommand(c)) return;
+        if (ChatCommand(c)) return;
         if (ExecuteCommands0(c)) return;
         if (ExecuteCommands1(c)) return;
         if (ExecuteCommands2(c)) return;

@@ -8,8 +8,10 @@ namespace Browser.App;
 /// Ses coins arrondis viennent de CornerClip (voir ce fichier pour ce qu'il ne faut surtout pas faire) ;
 /// son mouvement d'apparition est joué par son contenu web.
 /// </summary>
-public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge)
+public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge, Func<Task>? init = null)
 {
+    private bool _started, _ready = init is null;
+    private string? _content;
     private const double Edge = 10;
     private const float Radius = 16; // beUI Card rounded-2xl (1rem).
     private bool _pending;
@@ -42,8 +44,26 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge)
         (_x, _y) = (x, y);
         _pending = true;
         _focus = focus;
-        bridge.Post("""{"fresh":true}"""); // nouvelle ouverture : le contenu peut jouer son apparition
-        bridge.Post(contentJson);
+        _content = contentJson;
+        if (_ready) Ready();
+        else if (!_started) { _started = true; _ = InitAsync(); }
+    }
+
+    private async Task InitAsync()
+    {
+        try { await init!(); }
+        catch (Exception error)
+        { _started = false; Hide(); DebugLog.Write($"popup.start.failed {error.GetType().Name}"); }
+    }
+
+    public void Ready()
+    {
+        _ready = true;
+        if (!_pending || _content is null) return;
+        bridge.ReplayTheme();
+        bridge.Post("""{"fresh":true}""");
+        bridge.Post(_content);
+        _content = null;
     }
 
     /// <summary>Bord gauche de la zone des pages : un menu centré l'est sur cette zone, pas sur la carte latérale.</summary>
@@ -116,6 +136,7 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge)
 
     public void Hide()
     {
+        _content = null;
         _pending = false;
         _selecting = false;
         frame.Visibility = Visibility.Collapsed;

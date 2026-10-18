@@ -14,34 +14,17 @@ public sealed partial class BrowserController
         var id = c.Id ?? "";
         switch (c.Type)
         {
-            case "ai.enable":
-                if (!_ai.Available || c.Index is not (0 or 1)) return true;
-                _settings.SolAiEnabled = c.Index == 1;
-                if (!_settings.SolAiEnabled) { _ai.Cancel(); _ai.Release(); }
-                JsonFileStore.Save(AppPaths.Settings, _settings);
-                if (_settingsOpen) _popup.Post(SettingsJson());
-                if (_settings.SolAiEnabled) _ = PrepareAiAsync("catalog",null);
-                Refresh(); PublishNotes();
-                return true;
-            case "ai.select":
-                if (!_settings.SolAiEnabled || _ai.Busy) return true;
-                if (!_ai.CanUse(id)) { if (_settingsOpen) _popup.Post(SettingsJson()); return true; }
-                _settings.SolAiModel = id; JsonFileStore.Save(AppPaths.Settings, _settings);
-                if (_settingsOpen) _popup.Post(SettingsJson()); return true;
-            case "ai.catalog":
-                if (_settings.SolAiEnabled) _ = _ai.RunAsync("catalog"); return true;
-            case "ai.download" or "ai.remove" or "ai.check" or "ai.optimize":
-                if (!_settings.SolAiEnabled || _ai.Busy) return true;
-                if(c.Type is "ai.download" or "ai.optimize")_ = PrepareAiAsync(c.Type[3..],id);
-                else _ = _ai.RunAsync(c.Type[3..], id); return true;
-            case "ai.cancel": _ai.Cancel(); return true;
-            case "ai.open": _ = OpenPageAiAsync(id); return true;
-            case "ai.notes": OpenNoteAi(c); return true;
+            case "ai.connect": if (!PrivateActive) _ = _chatGpt.SignInAsync(); return true;
+            case "ai.connect.cancel": _chatGpt.CancelSignIn(); return true;
+            case "ai.disconnect": CancelAi(); CancelChat(); CancelCategories(); _chat.Clear(); PublishChat(); _ = _chatGpt.SignOutAsync(); return true;
+            case "ai.cancel": CancelAi(); return true;
+            case "ai.approve": AnswerApproval(c); return true;
+            case "ai.categorize": _ = CategorizeAsync(true); return true;
+            case "ai.open": _ = OpenPageAiAsync(id, null, "summary"); return true; // bouton Résumer : réponse immédiate
             case "ai.run": _ = RunTextAiAsync(c); return true;
             case "ai.apply": _ = ApplyTextAiAsync(); return true;
             case "ai.copy": CopyAi(); return true;
             case "ai.note": NoteAi(); return true;
-            case "ai.settings": OpenAiSettings(); return true;
             case "palette.open": OpenPalette(); return true;
             case "palette.pick":
                 if (_paletteCommands.TryGetValue(id, out var chosen))

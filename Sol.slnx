@@ -4,7 +4,6 @@
       <Platform Project="x64" />
     </Project>
     <Project Path="src/Browser.Core/Browser.Core.csproj" />
-    <Project Path="src/Sol.AI/Sol.AI.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Browser.Core.Tests/Browser.Core.Tests.csproj" />

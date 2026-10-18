@@ -81,7 +81,7 @@ Get-FileHash .\Sol-0.1.4-win-x64-Setup.exe -Algorithm SHA256
 
 ## Vie privée
 
-- Aucun compte ni télémétrie envoyée à l’auteur de Sol. Sol AI est temporairement masqué et désactivé dans cette version ; aucun modèle n’est téléchargé automatiquement.
+- Aucun compte ni télémétrie envoyée à l’auteur de Sol. Sol AI est facultatif : il utilise votre propre forfait ChatGPT via Sign in with ChatGPT. Vos questions, les textes choisis et le contexte consulté à votre demande sont envoyés à OpenAI. Le classement des favoris et de l’historique reste désactivé par défaut.
 - Favoris, historique, mots de passe et réglages restent sur votre ordinateur. Une sauvegarde n'en sort que sous la forme du fichier chiffré que vous exportez.
 - Les connexions que Sol établit de lui-même :
   - les suggestions de recherche, envoyées à votre moteur pendant la saisie dans la barre d'adresse (désactivable) ;

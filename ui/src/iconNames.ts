@@ -4,7 +4,7 @@ const paths:Record<string,IconName>={
   [menuPaths.save]:'save',[menuPaths.group]:'group',[menuPaths.groupAdd]:'groupAdd',[menuPaths.ungroup]:'ungroup',[menuPaths.tab]:'tab',[menuPaths.edit]:'edit',[menuPaths.session]:'session',[menuPaths.select]:'select',[menuPaths.undo]:'undo',[menuPaths.redo]:'redo',[menuPaths.sleep]:'sleep',[menuPaths.expand]:'expand',[menuPaths.collapse]:'collapse',[menuPaths.tools]:'tools',
   'M2.5 5.5v-3h3M10.5 2.5h3v3M13.5 10.5v3h-3M5.5 13.5h-3v-3':'select',
   'M2.5 12.5h2v-3h-2zM7 12.5h2v-6H7zM11.5 12.5h2v-9h-2z':'network',
-  'M8 1l2 5 5 2-5 2-2 5-2-5-5-2 5-2z':'ai',
+  'M4 2.5h5.5L12 5v8.5H4zM6 7.5h4M6 10h4':'ai',
   'M8 2.5v7.5M5 7l3 3 3-3M3.5 13h9':'download',
   'M8 2.5v8M4.5 7.5L8 11l3.5-3.5M3 13.5h10':'download',
   'M4.5 4.5l7 7M11.5 4.5l-7 7':'close','M4 4l8 8M12 4l-8 8':'close',

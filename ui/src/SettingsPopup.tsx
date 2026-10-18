@@ -10,6 +10,7 @@ import type {Content,Item,Profile,Setting,Wallpaper} from './PopupTypes';
 import {fontLabels} from './bridge';
 import {HomeField,SiteData,WallpaperSettings,TintSettings} from './SettingsFields';
 import {RangeSlider} from '@/components/motion/range-slider';
+import SolAiAccount from './SolAiAccount';
 import './settings-scale.css';
 export default function SettingsPopup({content,rootRef,settingsSection,setSettingsSection,opening}:{content:Extract<Content,{popup:'settings'}>;rootRef:RefObject<HTMLDivElement|null>;settingsSection:string;setSettingsSection:(section:string)=>void;opening:number}){
 const root=rootRef;
@@ -116,6 +117,7 @@ const root=rootRef;
             </span>
             <Button variant="ghost" size="sm" pressScale={0.97} className="pill-action" onClick={() => send({ type: 'extensions.open' })}>{t('Gérer', 'Manage')}</Button>
           </div>
+          <div hidden={settingsSection !== 'about'}><SolAiAccount ai={content.ai}/></div>
           <div className="setting-row static" hidden={settingsSection !== 'about'}>
             <span className="setting-text">
               <span className="row-title">Sol {content.version}</span>

@@ -120,13 +120,18 @@ public sealed partial class MainWindow : Window
         var popup = new PopupHost(PopupFrame, Popup, popupBridge);
         var captureBridge = new UiBridge(CaptureControls, "index.html#capture");
         bridge.AttachPopup(captureBridge);
-        var capture = new PopupHost(CaptureFrame, CaptureControls, captureBridge);
+        var uiFolder = Path.Combine(AppContext.BaseDirectory, "ui");
+        PopupHost? capture = null;
+        capture = new PopupHost(CaptureFrame, CaptureControls, captureBridge, () => captureBridge.InitAsync(uiFolder, c =>
+        {
+            if (c.Type == "ui.ready") capture!.Ready();
+            else _controller!.Execute(c);
+        }));
         Root.SizeChanged += (_, _) => { popup.Rescale(); capture.Rescale(); };
         popup.PageLeft = () => SidebarColumn.ActualWidth;
         popup.PageVertical = () => (Pages.TransformToVisual(Root).TransformPoint(new Windows.Foundation.Point(0, 0)).Y, Pages.ActualHeight);
         var dockBridge = new UiBridge(Dock, "index.html#dock");
         bridge.AttachPopup(dockBridge);
-        var uiFolder = Path.Combine(AppContext.BaseDirectory, "ui");
         var dock = new DockHost(DockFrame, Dock, dockBridge, () => dockBridge.InitAsync(uiFolder, c => _controller!.Execute(c)));
         var panelBridge = new UiBridge(Panel, "index.html#panel");
         bridge.AttachPopup(panelBridge);
@@ -135,13 +140,17 @@ public sealed partial class MainWindow : Window
         var welcomeBridge = new UiBridge(Welcome, "index.html#welcome");
         bridge.AttachPopup(welcomeBridge);
         var welcome = new WelcomeHost(Welcome, welcomeBridge, () => welcomeBridge.InitAsync(uiFolder, c => _controller!.Execute(c)));
-        _controller = new BrowserController(this, pages, bridge, popup, dock, panel, welcome, settings) { ExtensionPopup = new ExtensionPopupHost(this), CapturePanel = capture };
+        var chatBridge = new UiBridge(Chat, "index.html#chat");
+        bridge.AttachPopup(chatBridge);
+        var chat = new ChatHost(ContentArea, ChatColumn, Chat, chatBridge, () => chatBridge.InitAsync(uiFolder, c => _controller!.Execute(c)));
+        _controller = new BrowserController(this, pages, bridge, popup, dock, panel, welcome, settings) { ExtensionPopup = new ExtensionPopupHost(this), CapturePanel = capture, Chat = chat };
         _controller.NativeZoomChanged += () => SetShortcuts(_shortcutsActive);
         WireDivider();
         void ApplyInterfaceScale()
         {
             if (_beforeFullScreen is null) Root.RowDefinitions[0].Height = new GridLength(52 * settings.UiFactor);
             _sidebar.Resize(settings.SidebarWidth * settings.UiFactor);
+            chat.Rescale();
         }
         _controller.InterfaceScaleChanged += ApplyInterfaceScale;
         ApplyInterfaceScale();
@@ -150,7 +159,6 @@ public sealed partial class MainWindow : Window
 
         await bridge.InitAsync(uiFolder, _controller.Execute);
         await popupBridge.InitAsync(uiFolder, _controller.Execute);
-        await captureBridge.InitAsync(uiFolder, _controller.Execute);
         popup.Hide();
         dock.Hide();
     }

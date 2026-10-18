@@ -40,7 +40,7 @@
 - Sites ask once for the microphone, camera or location; the answer is remembered per site and can be forgotten.
 
 **Light on memory**
-- Inactive tabs are suspended after 5 minutes and unloaded after 30. Restored tabs load only when you show them.
+- Inactive tabs request sleep after 30 seconds on PCs with up to 4 GB RAM, 1 minute up to 8 GB, and 5 minutes above that. If the engine needs scripts to keep running, they use reduced-memory mode. Safe pages unload after 10, 15 or 30 minutes respectively; drafts, media and private tabs keep their live document. Restored tabs load only when you show them.
 - One renderer process per site.
 
 **For developers**
@@ -81,7 +81,7 @@ Get-FileHash .\Sol-0.1.4-win-x64-Setup.exe -Algorithm SHA256
 
 ## Privacy
 
-- No account or telemetry sent to Sol's author. Sol AI is temporarily hidden and disabled in this release; no model is downloaded automatically.
+- No account or telemetry sent to Sol's author. Sol AI is optional: it uses your own ChatGPT subscription through Sign in with ChatGPT. Your questions, selected text and context consulted at your request are sent to OpenAI. Bookmark and history sorting stays off by default.
 - Bookmarks, history, passwords and settings stay on your computer. A backup leaves it only as the encrypted file you export.
 - Connections Sol makes on its own:
   - search suggestions, sent to your search engine as you type in the address bar (can be turned off);

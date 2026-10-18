@@ -8,7 +8,8 @@ import {Icon} from './Icons';
 import type {Content,Item,Profile,Setting,Wallpaper} from './PopupTypes';
 import GroupEditor from './GroupEditor';
 import QuickNotes from './QuickNotes';
-import SolAiAction from './SolAiAction';
+import { lazy, Suspense } from 'react';
+const SolAiAction = lazy(() => import('./SolAiAction'));
 import {DownloadCard} from './Downloads';
 import CommandPalette from './CommandPalette';
 import Row from './PopupRow';
@@ -22,7 +23,7 @@ export default function PopupViews({content,rootRef,opening,selected,settingsSec
 const root=rootRef;
 
 
-  if (content.popup === 'ai-action') return <div key={opening} ref={root} className="popup arriving"><SolAiAction content={content}/></div>;
+  if (content.popup === 'ai-action') return <div key={opening} ref={root} className="popup arriving"><Suspense fallback={null}><SolAiAction content={content}/></Suspense></div>;
 
   if (content.popup === 'palette')
     return <div key={opening} ref={root} className="popup arriving palette-popup"><CommandPalette items={content.items} listHeight={content.listHeight} /></div>;

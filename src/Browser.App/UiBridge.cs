@@ -16,6 +16,7 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
     // parmi son en-tête, ses boutons et ses liens. Un site sans couleur vive n'a pas d'accent.
     private const string ThemeProbeScript = """
         (() => {
+          if (document.hidden) return null;
           // Onglet vide : fond du navigateur. Une page d'erreur du navigateur (même adresse) garde ses propres couleurs.
           if (location.href === 'about:blank' && !document.documentElement.hasAttribute('data-nav-error')) {
             document.documentElement.style.background = '#eef0e2';
@@ -119,7 +120,9 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
     static UiBridge() => s_system.ColorValuesChanged += (_, _) => SystemColorsChanged?.Invoke();
 
     /// <summary>Envoie les couleurs de la page active à toutes les vues d'interface, avec les réglages de teinte.</summary>
-    public void BroadcastTheme()
+    public void BroadcastTheme() => PublishTheme(force: true);
+
+    private void PublishTheme(bool force = false)
     {
         var on = Settings;
         if (pages is not null && _activeId is not null && pages.CoreOf(_activeId) is { } ownPage && ownPage.Source is Settings.DefaultHomePage or QuickNotes.PageUrl)
@@ -130,7 +133,7 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
         }
         if (s_lastProbe is not var (bg, dark, accent)) return;
         accent = AmbientAccent ?? accent; // ce que la page montre à l'instant, sinon la couleur annoncée par le site
-        s_lastThemeMsg = JsonSerializer.Serialize(new
+        var json = JsonSerializer.Serialize(new
         {
             @event = "theme", bg, dark, accent, mode = on?.Theme ?? "page", systemDark = IsSystemDark(), lang = Language.Current,
             privateMode = AppPaths.Private || _activePrivate,
@@ -138,6 +141,8 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
             uiScale = on?.UiFactor ?? 0.92,
             tint = new { topbar = on?.TintTopbar ?? true, sidebar = on?.TintSidebar ?? true, menus = on?.TintMenus ?? true, background = on?.TintBackground ?? true },
         });
+        if (!force && s_lastThemeMsg == json) return;
+        s_lastThemeMsg = json;
         view.CoreWebView2?.PostWebMessageAsJson(s_lastThemeMsg);
         foreach (var floating in _floating) floating.Post(s_lastThemeMsg);
         ThemePublished?.Invoke(s_lastThemeMsg);
@@ -155,13 +160,13 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
     {
         var initial = InitialBackground;
         s_lastProbe ??= ($"rgb({initial.R}, {initial.G}, {initial.B})", initial.R < 128, null);
-        BroadcastTheme();
+        if (pages is not null || s_lastThemeMsg is null) BroadcastTheme();
         await InitViewAsync(view, page, uiFolder, onCommand);
 
         if (pages is not null)
         {
-            pages.Loaded += _ => ProbeActiveThemeAsync(withDelays: true);
-            pages.PageChanged += (_, _, _) => ProbeActiveThemeAsync(withDelays: false);
+            pages.Loaded += id => { if (id == _activeId) ProbeActiveThemeAsync(withDelays: true); };
+            pages.PageChanged += (id, _, _) => { if (id == _activeId) ProbeActiveThemeAsync(withDelays: false); };
             StartAmbient();
         }
     }
@@ -220,8 +225,7 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
                 {
                     var changed = id != _activeId;
                     _activeId = id;
-                    if (changed) s_ambient = null;
-                    ProbeActiveThemeAsync(withDelays: changed);
+                    if (changed) { s_ambient = null; ProbeActiveThemeAsync(withDelays: true); }
                 }
             }
             catch (JsonException) { }
@@ -233,13 +237,17 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
     /// <summary>La couleur de la page affichée a changé sans navigation (nouveau fond d'accueil) : elle est relue.</summary>
     public void RefreshPageColor() => _ = SampleOnceAsync();
 
+    private int _themeGeneration;
     private async void ProbeActiveThemeAsync(bool withDelays)
     {
+        var generation = ++_themeGeneration;
         await SampleOnceAsync();
         if (!withDelays) return;
         await Task.Delay(350);
+        if (generation != _themeGeneration) return;
         await SampleOnceAsync();
         await Task.Delay(800);
+        if (generation != _themeGeneration) return;
         await SampleOnceAsync();
     }
 
@@ -251,9 +259,9 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
         var source = core.Source;
         if (source == Settings.DefaultHomePage)
         {
-            BroadcastTheme();
+            PublishTheme();
             if (s_lastProbe is var (startBg, _, _) && System.Text.RegularExpressions.Regex.Match(startBg, @"rgb\((\d+), (\d+), (\d+)\)") is { Success: true } sm)
-                PageColorChanged?.Invoke(byte.Parse(sm.Groups[1].Value), byte.Parse(sm.Groups[2].Value), byte.Parse(sm.Groups[3].Value));
+                PublishPageColor(byte.Parse(sm.Groups[1].Value), byte.Parse(sm.Groups[2].Value), byte.Parse(sm.Groups[3].Value));
             return;
         }
         var request = ++_themeRequest;
@@ -275,10 +283,10 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
             }
             // Le fond de la fenêtre suit aussi la page : pas d'éclair sombre derrière une vue en cours de chargement.
             if (System.Text.RegularExpressions.Regex.Match(bg, @"rgb\((\d+), (\d+), (\d+)\)") is { Success: true } m)
-                PageColorChanged?.Invoke(byte.Parse(m.Groups[1].Value), byte.Parse(m.Groups[2].Value), byte.Parse(m.Groups[3].Value));
+                PublishPageColor(byte.Parse(m.Groups[1].Value), byte.Parse(m.Groups[2].Value), byte.Parse(m.Groups[3].Value));
             var accent = doc.RootElement.TryGetProperty("accent", out var accentValue) && accentValue.ValueKind == JsonValueKind.String ? accentValue.GetString() : null;
             s_lastProbe = (bg, dark, accent);
-            BroadcastTheme();
+            PublishTheme();
         }
         catch (Exception) { }
     }

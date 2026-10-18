@@ -27,8 +27,8 @@ public sealed partial class BrowserController
         catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { /* moteur indisponible : mémoire du navigateur seul */ }
         var megabytes = bytes / 1024 / 1024;
         var asleep = _pages.AsleepCount;
-        return T($"Met en veille les onglets inactifs, puis les décharge après 30 minutes. Utilisé : {megabytes} Mo, {asleep} onglet{(asleep > 1 ? "s" : "")} déchargé{(asleep > 1 ? "s" : "")}.",
-            $"Suspends inactive tabs, then unloads them after 30 minutes. In use: {megabytes} MB, {asleep} tab{(asleep == 1 ? "" : "s")} unloaded.");
+        return T($"Veille adaptée à la mémoire de ce PC, déchargement après {_pages.DiscardMinutes} minutes sans activité. Utilisé : {megabytes} Mo, {asleep} onglet{(asleep > 1 ? "s" : "")} déchargé{(asleep > 1 ? "s" : "")}.",
+            $"Sleep adapts to this PC’s memory; unloads after {_pages.DiscardMinutes} inactive minutes. In use: {megabytes} MB, {asleep} tab{(asleep == 1 ? "" : "s")} unloaded.");
     }
 
     // Accueil : ce qu'il affiche au départ (réglages en cours, navigateurs trouvés sur l'ordinateur).
@@ -176,7 +176,7 @@ public sealed partial class BrowserController
     public void DismissAiPopup() { if (_aiPopup) HidePopup(); }
     private void HidePopup(bool cancelPermissions = true)
     {
-        if (_aiPopup) { _aiPopup = false; _ai.Cancel(); _aiContext = null; }
+        if (_aiPopup) { _aiPopup = false; CancelAi(); _aiContext = null; _aiBusy = false; }
         _siteReset = null;
         _paletteCommands.Clear();
         _paletteItems = null;

@@ -1,0 +1,4 @@
+/* Trace de l'agent Sol AI et carte d'accord, communes à la vue Sol AI et au panneau de discussion. */
+.ai-trace { display: flex; flex-direction: column; gap: 8px; font-size: 12px; min-width: 0; }
+.ai-trace .sol-approve { padding: 6px 16px; border-radius: 999px; background: var(--accent); color: #fff; font-weight: 600; }
+.ai-trace .sol-reject { padding: 6px 14px; border-radius: 999px; background: var(--bg-tab-hover); }

@@ -91,6 +91,9 @@ export default function App({sidebarOpen=true}:{sidebarOpen?:boolean}) {
           onClick={e => { const box = e.currentTarget.getBoundingClientRect(); send({type:'extension.show', id:extension.id, x:box.right, y:box.bottom+6}); }}>
           {extension.icon ? <img src={extension.icon} alt="" /> : <span>{extension.name.slice(0,1)}</span>}
         </button>)}
+        {state.aiAvailable && <button className="pill-icon-btn" aria-label={t('Discuter avec Sol AI', 'Chat with Sol AI')} title={t('Discuter avec Sol AI', 'Chat with Sol AI')} aria-pressed={!!state.chatOpen} onClick={() => send({ type: 'chat.toggle' })}>
+          <Icon d="M3 3.5h10v7H7l-3 2.5v-2.5H3zM6 7h.01M8 7h.01M10 7h.01" />
+        </button>}
         <button
           className="pill-icon-btn"
           aria-label={t("Capture d'écran", 'Screenshot')}

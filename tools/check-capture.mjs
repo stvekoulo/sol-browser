@@ -23,7 +23,7 @@ const unchanged=async(before,render)=>{
  const ticks=await page.evaluate('window.__ticks');await delay(100);assert(await page.evaluate(`window.__ticks>${ticks}`),'page keeps running');
 };
 const open=async(mode,browser=false)=>{
- await cmd({type:'capture.menu'});await wait('!!document.querySelector(".capture-modes")');
+ await cmd({type:'capture.menu'});capture??=await host.connect('#capture');await wait('!!document.querySelector(".capture-modes")');
  if(await capture.evaluate('document.querySelector(".capture-browser").checked')!==browser)await capture.evaluate('document.querySelector(".capture-browser").click()');
  await wait(`document.querySelector('.capture-browser').checked===${browser}`);
  const index={region:0,visible:1,full:2}[mode];
@@ -42,7 +42,10 @@ const escape=async(target)=>{
 };
 const closed=()=>wait('document.hidden&&!document.querySelector(".capture-review")&&!document.querySelector(".capture-selection")');
 try{
- ui=await host.launch(760);const tab=await ui.evaluate('window.__sidebarState.activeId');page=await host.connect(`${host.origin}/2`);capture=await host.connect('#capture');
+ ui=await host.launch(760);const tab=await ui.evaluate('window.__sidebarState.activeId');page=await host.connect(`${host.origin}/2`);
+ assert(!(await host.targets()).some(t=>t.url.endsWith('#capture')),'capture renderer is lazy');
+ await cmd({type:'capture.menu'});capture=await host.connect('#capture');await wait('!!document.querySelector(".capture-modes")');
+ await cmd({type:'capture.close'});
  await host.wait(()=>page.evaluate('!!document.querySelector("#draft")').catch(()=>false),'fixture loaded');
  await capture.evaluate('window.__events=[];chrome.webview.addEventListener("message",e=>{if(e.data.event?.startsWith("capture-"))window.__events.push({event:e.data.event,kind:e.data.kind})})');
  for(const zoom of [false,true]){
@@ -82,7 +85,7 @@ try{
  const mobile=await stats(),mobileRender=size(await png());await open('full');await review();await escape(capture);await closed();await unchanged(mobile,mobileRender);
  await cmd({type:'device.set',id:tab,query:''});await host.wait(()=>page.evaluate('navigator.maxTouchPoints===0'),'desktop restored');
  await host.close(ui);ui=undefined;capture=undefined;
- ui=await host.launch(380,420);page=await host.connect(`${host.origin}/2`);capture=await host.connect('#capture');
+ ui=await host.launch(380,420);page=await host.connect(`${host.origin}/2`);
  await open('visible');await review();const small=await capture.call('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await writeFile(resolve(host.base,'capture-small-review.png'),Buffer.from(small.data,'base64'));await escape(capture);await closed();
  console.log(JSON.stringify({passed:'full/visible/region/window screenshots; save PNG/PDF; viewport, scroll and form restoration; zoom; cancellation before/during review; mobile touch/DPR; narrow-window controls',evidence:host.base}));
 }catch(error){console.error('CAPTURE',await capture?.evaluate('({events:window.__events,text:document.body.innerText})').catch(()=>null));throw error;}

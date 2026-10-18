@@ -14,28 +14,12 @@ public sealed partial class BrowserController
         switch (c.Type)
         {
             case "settings.set":
-                if (id == "aiThinking")
-                {
-                    if (c.Index is not (0 or 1)) return true;
-                    _settings.SolAiThinking = c.Index == 1; JsonFileStore.Save(AppPaths.Settings, _settings);
-                    if (_settingsOpen) _popup.Post(SettingsJson());
-                    PublishAi(); return true;
-                }
-                if (id == "aiKeepMinutes")
-                {
-                    if (c.Index is not (>= 0 and <= 10080)) return true;
-                    _settings.SolAiKeepMinutes = c.Index.Value; _ai.SetKeepMinutes(c.Index.Value);
-                    JsonFileStore.Save(AppPaths.Settings, _settings);
-                    if (_settingsOpen) _popup.Post(SettingsJson());
-                    return true;
-                }
-                if (id is "aiTone" or "aiLength" or "aiAdaptation" or "aiReset")
+                if (id == "aiCategories") { if (c.Index is 0 or 1) SetAiCategories(c.Index == 1); return true; }
+                if (id is "aiTone" or "aiLength")
                 {
                     if (c.Index is not (0 or 1 or 2)) return true;
                     if (id == "aiTone") _settings.SolAiTone = c.Index.Value;
-                    else if (id == "aiLength") _settings.SolAiLength = c.Index.Value;
-                    else if (id == "aiAdaptation") _settings.SolAiAdaptation = c.Index == 1;
-                    else { _settings.SolAiTone = 0; _settings.SolAiLength = 0; _settings.SolAiAdaptation = false; }
+                    else _settings.SolAiLength = c.Index.Value;
                     JsonFileStore.Save(AppPaths.Settings, _settings);
                     if (_settingsOpen) _popup.Post(SettingsJson());
                     return true;

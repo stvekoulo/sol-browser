@@ -1,0 +1,68 @@
+.start-history button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 12px;
+  color: inherit;
+  text-align: left;
+  border-radius: 14px;
+}
+.start-history button:hover {
+  background: var(--bg-glass-pill-hover);
+  color: var(--text);
+  box-shadow: var(--shadow-glass-pill);
+}
+.start-history button > span:nth-child(2) {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.start-history strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 500; font-size: 12.5px; }
+.start-history small, .start-history time { font-size: 11px; opacity: 0.72; }
+.start-history time { flex: none; }
+.start-history-letter {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  border-radius: 8px;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 13px;
+}
+.start-history-letter img { width: 24px; height: 24px; object-fit: contain; }
+[data-theme='dark'] .start-history-letter img.tone-dark,
+[data-theme='light'] .start-history-letter img.tone-light { filter: invert(1) hue-rotate(180deg); }
+
+.start-empty {
+  margin: 0;
+  color: var(--text-dim);
+  line-height: 1.5;
+  font-size: 12.5px;
+}
+:root[data-wallpaper="true"] .start-empty {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.start-content button:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+
+@media (max-width: 680px) {
+  .start-page { padding: 36px 24px 48px; }
+  .start-favorites { gap: 18px 14px; }
+}
+
+@media (max-width: 420px) {
+  .start-page { padding: 26px 16px 36px; }
+}
+
+/* Catégories établies par Sol AI à partir des favoris et de l'historique. */
+.start-categories { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.start-category { display: flex; flex-direction: column; gap: 2px; padding: 10px; border-radius: 18px; background: var(--bg-glass-pill); min-width: 0; }
+.start-category h3 { margin: 0 0 4px 6px; font-size: 13px; font-weight: 600; }
+.start-category button { display: flex; align-items: center; gap: 9px; padding: 6px; border: 0; border-radius: 11px; background: transparent; color: inherit; font: inherit; font-size: 13px; text-align: left; cursor: pointer; min-width: 0; }
+.start-category button:hover { background: var(--bg-glass-pill-hover); }
+.start-category button span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

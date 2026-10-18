@@ -74,8 +74,8 @@ public sealed partial class BrowserController
         try
         {
             var items = new List<(string Label, Action? Run)>();
-            var aiText = _settings.SolAiEnabled && _ai.Available ? await _pages.CaptureAiAsync(tabId) : null;
-            if (_settings.SolAiEnabled && _ai.Available && !e.ContextMenuTarget.IsEditable && e.ContextMenuTarget.HasSelection && e.ContextMenuTarget.SelectionText is { Length: > 0 and <= 50_000 } aiSelection)
+            var aiText = AiReady ? await _pages.CaptureAiAsync(tabId) : null;
+            if (AiReady && !e.ContextMenuTarget.IsEditable && e.ContextMenuTarget.HasSelection && e.ContextMenuTarget.SelectionText is { Length: > 0 and <= 50_000 } aiSelection)
                 aiText = new(aiSelection, false, "", "", _tabs.Tabs.FirstOrDefault(t => t.Id == tabId)?.Title ?? "");
             var correction = e.ContextMenuTarget.IsEditable && e.ContextMenuTarget.FrameUri == _pages.CoreOf(tabId)?.Source
                 ? await _pages.SpellingSuggestions(tabId) : (Word: "", Suggestions: Array.Empty<string>());
@@ -119,8 +119,21 @@ public sealed partial class BrowserController
             }
             if (items.Count > 0 && items[^1].Label != "") items.Add(("", null));
             items.AddRange(NativeExtensionEntries(e.MenuItems, e));
-            if (_settings.SolAiEnabled && _ai.Available && (aiText is { Text.Length: > 0 } || aiText?.Editable == true || !e.ContextMenuTarget.IsEditable))
+            if (AiReady && (aiText is { Text.Length: > 0 } || aiText?.Editable == true || !e.ContextMenuTarget.IsEditable))
+            {
+                // Actions directes : la vue s'ouvre avec la réponse déjà en cours ; « Sol AI… » garde le choix complet.
+                (string Label, string Action)[] direct = aiText is { Editable: true, Text.Length: > 0 }
+                        ? [(T("Corriger avec Sol AI", "Fix with Sol AI"), "improve"), (T("Reformuler avec Sol AI", "Rephrase with Sol AI"), "rephrase"), (T("Traduire avec Sol AI", "Translate with Sol AI"), "translate")]
+                    : aiText is { Editable: true } ? [(T("Rédiger avec Sol AI…", "Write with Sol AI…"), "")]
+                    : aiText is { Text.Length: > 0 } ? [(T("Expliquer avec Sol AI", "Explain with Sol AI"), "explain"), (T("Traduire avec Sol AI", "Translate with Sol AI"), "translate"), (T("Résumer avec Sol AI", "Summarize with Sol AI"), "summary")]
+                    : [(T("Résumer la page avec Sol AI", "Summarize the page with Sol AI"), "summary"), (T("Poser une question sur la page…", "Ask about the page…"), "")];
+                foreach (var (label, action) in direct)
+                {
+                    var run = action;
+                    items.Add((label, () => _afterMenu = () => _ = OpenPageAiAsync(tabId, aiText, run.Length > 0 ? run : null, run.Length == 0 && aiText?.Editable != true ? "ask" : null)));
+                }
                 items.Add(("Sol AI…", () => _afterMenu = () => _ = OpenPageAiAsync(tabId, aiText)));
+            }
             items.Add((T("Capturer une zone", "Capture an area"), () => Capture("region")));
             items.AddRange(DeviceEntries(tabId, x, y));
             if (PermissionStore.OriginOf(_pages.CoreOf(tabId)?.Source ?? "") is not null && !_pages.CoreOf(tabId)!.Source.StartsWith("https://start.sol/"))

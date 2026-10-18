@@ -105,12 +105,14 @@ public sealed partial class BrowserController
             favorites = _db.Bookmarks().Take(MaxStartFavorites).Select(b => new { url = b.Url, title = b.Title, icon = StartIcon(b.Url) }),
             history = history.Select(v => new { url = v.Url, title = v.Title, last = v.Last.ToUnixTimeMilliseconds(), icon = StartIcon(v.Url) }),
             groups = _tabs.Groups.Select(g => new { id = g.Id, name = g.Name, color = g.Color, count = _tabs.Tabs.Count(t => t.GroupId == g.Id) }),
+            categories = StartCategories(isPrivate),
         });
     }
 
     private void Refresh()
     {
         if (_closingWindow || _restoringSession) return;
+        ProtectPrivateAi();
         var activeProfile = EngineProfile?.ProfileName;
         if (_pinProfileName != activeProfile)
         {
@@ -157,11 +159,12 @@ public sealed partial class BrowserController
                 storeInstalled = _pages.CoreOf(t.Id) is { } storeShown && StoreExtension(storeShown.Source) is { } storeId && _installedExtensions.Contains(storeId),
                 translated = _translationOriginals.ContainsKey(t.Id) && PageTranslation.IsGooglePage(t.Url),
                 reader = _reading.Contains(t.Id),
-                ai = _settings.SolAiEnabled && _ai.Available,
+                ai = AiReady,
             }),
             groups = _tabs.Groups.Select(g => new { id = g.Id, name = g.Name, color = g.Color, icon = g.Icon, collapsed = g.Collapsed }),
             activeId = _tabs.ActiveId,
             privateMode = PrivateActive,
+            aiAvailable = !PrivateActive, chatOpen = Chat?.IsOpen == true,
             shield = false,
             shortcuts = _settings.Shortcuts.Select(s => new { url = s.Url, name = s.Name, icon = s.Icon, tabId = _shortcutTabs.GetValueOrDefault(s) }),
             extensions = _pinnedExtensions,

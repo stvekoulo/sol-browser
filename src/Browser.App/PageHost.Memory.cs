@@ -7,15 +7,19 @@ namespace Browser.App;
 
 public sealed partial class PageHost
 {
-    // Économie de mémoire. Un onglet masqué demande d'abord au moteur d'occuper moins de mémoire ; après quelques
-    // minutes il est mis en veille (scripts à l'arrêt, page gardée telle quelle) ; s'il reste masqué longtemps, sa vue
+    // Économie de mémoire. Un onglet masqué est mis en veille (scripts à l'arrêt, page gardée telle quelle) ;
+    // s'il reste masqué longtemps, sa vue
     // est fermée et il redevient un onglet endormi, rechargé quand on y revient. Un onglet qui joue du son, ou que le
     // navigateur garde affiché ailleurs (vue scindée, appareil simulé), n'est jamais touché.
     // Diagnostic : NAVIGATEUR_SAVER_TEST=1 ramène les délais à quelques secondes pour pouvoir observer le mécanisme.
     private static readonly bool SaverTest = Environment.GetEnvironmentVariable("NAVIGATEUR_SAVER_TEST") == "1";
-    private static readonly TimeSpan SuspendAfter = SaverTest ? TimeSpan.FromSeconds(4) : TimeSpan.FromMinutes(5);
-    private static readonly TimeSpan DiscardAfter = SaverTest ? TimeSpan.FromSeconds(18) : TimeSpan.FromMinutes(30);
+    private static readonly (TimeSpan SuspendAfter, TimeSpan DiscardAfter) Policy = TabMemoryPolicy.ForMemory(SystemMemory.Read().Total);
+    private static readonly TimeSpan SuspendAfter = SaverTest ? TimeSpan.FromSeconds(4) : Policy.SuspendAfter;
+    private static readonly TimeSpan DiscardAfter = SaverTest ? TimeSpan.FromSeconds(18) : Policy.DiscardAfter;
+    public int DiscardMinutes => (int)Policy.DiscardAfter.TotalMinutes;
     private readonly Dictionary<string, DateTime> _hiddenSince = new();
+    private readonly HashSet<string> _discardProtected = new();
+    private readonly HashSet<string> _suspendRefused = new();
     private DispatcherTimer? _saver;
 
     /// <summary>Onglets à ne jamais décharger (donné par le navigateur : vue scindée…).</summary>
@@ -28,17 +32,18 @@ public sealed partial class PageHost
         if (view.CoreWebView2 is not { } core) return;
         try
         {
-            if (hidden && _hiddenSince.TryAdd(id, DateTime.UtcNow)) core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low;
+            if (hidden && _hiddenSince.TryAdd(id, DateTime.UtcNow) && settings.MemorySaver)
+                core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low;
             else if (!hidden && _hiddenSince.Remove(id))
             {
-                core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Normal;
-                if (core.IsSuspended) core.Resume();
+                _discardProtected.Remove(id);
+                Wake(id, core);
             }
         }
         catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { /* vue fermée entre-temps */ }
         if (_saver is null)
         {
-            _saver = new DispatcherTimer { Interval = SaverTest ? TimeSpan.FromSeconds(2) : TimeSpan.FromMinutes(1) };
+            _saver = new DispatcherTimer { Interval = SaverTest ? TimeSpan.FromSeconds(2) : TimeSpan.FromSeconds(15) };
             _saver.Tick += (_, _) => SaveMemory(DateTime.UtcNow);
             _saver.Start();
         }
@@ -55,9 +60,9 @@ public sealed partial class PageHost
             {
                 if (core.IsDocumentPlayingAudio) { _hiddenSince[id] = now; continue; } // musique, appel : il reste éveillé
                 var busy = KeepAwake(id) || _pip == id || _sims.ContainsKey(id) || _loading.Contains(id);
-                if (busy) continue;
-                if (!IsPrivate(id) && now - since >= DiscardAfter && core.Source.StartsWith("http", StringComparison.Ordinal) && !_errorUrl.ContainsKey(id)) _ = DiscardIfSafeAsync(id, core);
-                else if (now - since >= SuspendAfter && !core.IsSuspended) _ = SuspendAsync(id, core);
+                if (busy) { _hiddenSince[id] = now; continue; }
+                if (!IsPrivate(id) && !_discardProtected.Contains(id) && now - since >= DiscardAfter && core.Source.StartsWith("http", StringComparison.Ordinal) && !_errorUrl.ContainsKey(id)) _ = DiscardIfSafeAsync(id, core);
+                else if (now - since >= SuspendAfter && !core.IsSuspended && !_suspendRefused.Contains(id)) _ = SuspendAsync(id, core);
             }
             catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { /* vue fermée entre-temps */ }
         }
@@ -69,11 +74,34 @@ public sealed partial class PageHost
         if (!_saving.Add(id)) return;
         try
         {
-            await core.TrySuspendAsync();
-            if (!settings.MemorySaver || !_hiddenSince.ContainsKey(id)) core.Resume();
+            await RestCoreAsync(id, core);
+            if (!settings.MemorySaver || !_hiddenSince.ContainsKey(id) || KeepAwake(id)
+                || _pip == id || _sims.ContainsKey(id) || _loading.Contains(id) || core.IsDocumentPlayingAudio) Wake(id, core);
         }
-        catch (Exception error) when (error is InvalidOperationException or System.Runtime.InteropServices.COMException) { }
+        catch (Exception error) when (error is InvalidOperationException or System.Runtime.InteropServices.COMException)
+        { DebugLog.Write($"memory.suspend.failed {id} {error.HResult}"); }
         finally { _saving.Remove(id); }
+    }
+
+    private async Task RestCoreAsync(string id, CoreWebView2 core)
+    {
+        core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Normal;
+        if (await core.TrySuspendAsync()) DebugLog.Write($"memory.suspend {id} True");
+        else
+        {
+            // Le moteur peut garder une activité vivante : réduire la mémoire sans bloquer ses scripts.
+            core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low;
+            _suspendRefused.Add(id);
+            DebugLog.Write($"memory.low {id}");
+        }
+    }
+
+    private void Wake(string id, CoreWebView2 core)
+    {
+        _suspendRefused.Remove(id);
+        if (core.IsSuspended) core.Resume();
+        else if (core.MemoryUsageTargetLevel != CoreWebView2MemoryUsageTargetLevel.Normal)
+            core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Normal;
     }
 
     private async Task DiscardIfSafeAsync(string id, CoreWebView2 core)
@@ -83,18 +111,24 @@ public sealed partial class PageHost
         {
             // Keep live state and embedded sign-in/media frames; suspension retains their browser context.
             if (TabSessions.IsSignIn(core.Source)) return;
-            if (core.IsSuspended) core.Resume();
+            var source = core.Source;
+            Wake(id, core);
             var safe = await core.ExecuteScriptAsync(@"(() => { try {
-                return sessionStorage.length === 0 && !document.querySelector('iframe')
-                    && ![...document.querySelectorAll('input,textarea')].some(e => e.value !== e.defaultValue)
-                    && ![...document.querySelectorAll('video')].some(e => !e.paused);
+                return sessionStorage.length === 0 && !document.querySelector('iframe,[contenteditable]:not([contenteditable=false]),[role=textbox]')
+                    && ![...document.querySelectorAll('input,textarea')].some(e => e.value !== e.defaultValue || ('checked' in e && e.checked !== e.defaultChecked))
+                    && ![...document.querySelectorAll('select option')].some(e => e.selected !== e.defaultSelected)
+                    && ![...document.querySelectorAll('video,audio')].some(e => !e.paused && !e.ended);
                 } catch { return false; } })()");
             if (safe == "true" && settings.MemorySaver && _hiddenSince.ContainsKey(id)
-                && CoreOf(id) == core && !_loading.Contains(id) && !KeepAwake(id)) Discard(id, core);
+                && CoreOf(id) == core && core.Source == source && !_loading.Contains(id) && !KeepAwake(id)
+                && _pip != id && !_sims.ContainsKey(id) && !core.IsDocumentPlayingAudio) Discard(id, core);
             else if (settings.MemorySaver && _hiddenSince.ContainsKey(id) && CoreOf(id) == core)
             {
-                await core.TrySuspendAsync();
-                if (!settings.MemorySaver || !_hiddenSince.ContainsKey(id)) core.Resume();
+                if (KeepAwake(id) || _pip == id || _sims.ContainsKey(id) || _loading.Contains(id) || core.IsDocumentPlayingAudio) return;
+                _discardProtected.Add(id); // Un brouillon reste endormi sans être réveillé à chaque passage.
+                await RestCoreAsync(id, core);
+                if (!settings.MemorySaver || !_hiddenSince.ContainsKey(id) || KeepAwake(id)
+                    || _pip == id || _sims.ContainsKey(id) || _loading.Contains(id) || core.IsDocumentPlayingAudio) Wake(id, core);
             }
         }
         catch (Exception error) when (error is InvalidOperationException or System.Runtime.InteropServices.COMException) { }
@@ -103,6 +137,7 @@ public sealed partial class PageHost
 
     private void Discard(string id, CoreWebView2 core)
     {
+        DebugLog.Write($"memory.discard {id}");
         var name = core.Profile.ProfileName;
         var tab = new Tab(id, core.Source, core.DocumentTitle, SessionId: name.StartsWith("sol-") ? name[4..] : "");
         Remove(id);

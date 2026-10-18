@@ -2,11 +2,11 @@ import { createServer } from 'node:http';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, rm, writeFile } from 'node:fs/promises';
 import { relative, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
-export async function sidebarHost(executable,{serve=null,downloads=false,captures=false,privateMode=false,media=false}={}) {
+export async function sidebarHost(executable,{serve=null,downloads=false,captures=false,privateMode=false,media=false,performance=false,saverTest=false}={}) {
   const profileName=`sidebar-check-${Date.now()}`,base = resolve(`bin/${profileName}`), profile = resolve(base, 'profiles',profileName);
   await mkdir(profile, {recursive: true});
   if(privateMode)await writeFile(resolve(profile,'temporary'),'');
@@ -26,7 +26,8 @@ export async function sidebarHost(executable,{serve=null,downloads=false,capture
     Titles: ['Épinglé A', 'Épinglé B', 'Projet Alpha', 'Documentation', 'Groupe Beta', 'Recherche', ...Array.from({length:6}, (_,i)=>`Onglet ${i+1}`)],
     Icons: Array(12).fill(icon), PinnedCount:2, ActiveIndex:2,
     Groups:[{Name:'Travail',Color:'#8fa8e8',Icon:'',Collapsed:false},{Name:'Lecture',Color:'#e3cf7a',Icon:'📖',Collapsed:false}], GroupOf:[null,null,0,0,1,1]}));
-  const env = {...process.env, NAVIGATEUR_DATA_DIR:base, NAVIGATEUR_DEBUG:'1', WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS:`--remote-debugging-port=${port} --disable-background-timer-throttling --disable-backgrounding-occluded-windows`};
+  const env = {...process.env, NAVIGATEUR_DATA_DIR:base, NAVIGATEUR_DEBUG:'1', WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS:`--remote-debugging-port=${port}${performance?'':' --disable-background-timer-throttling --disable-backgrounding-occluded-windows'}`};
+  if(saverTest)env.NAVIGATEUR_SAVER_TEST='1';
   if(media)env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS+=' --use-fake-device-for-media-stream';
   if(downloads){env.NAVIGATEUR_TEST_DOWNLOAD_DIR=resolve(base,'downloads');await mkdir(env.NAVIGATEUR_TEST_DOWNLOAD_DIR,{recursive:true});}
   if(captures){env.NAVIGATEUR_CAPTURE_DIR=resolve(base,'captures');await mkdir(env.NAVIGATEUR_CAPTURE_DIR,{recursive:true});}
@@ -69,11 +70,12 @@ export async function sidebarHost(executable,{serve=null,downloads=false,capture
     connections.splice(0).forEach(ws=>ws.close());
     await new Promise(r=>server.close(r));
     assert.match(relative(resolve('bin'),base),/^sidebar-check-\d+$/);
+    await copyFile(resolve(profile,'debug.log'),resolve(base,'native-debug.log')).catch(error=>{if(error.code!=='ENOENT')throw error;});
     await rm(resolve(base,'profiles'),{recursive:true,force:true,maxRetries:30,retryDelay:200});
   };
   const crash=async()=>{
     if(app&&app.exitCode===null){const exited=once(app,'exit');app.kill();await exited;}
     connections.splice(0).forEach(ws=>ws.close());
   };
-  return {base,profile,origin,launch,close,connect,wait,targets,dispose,crash};
+  return {base,profile,origin,launch,close,connect,wait,targets,dispose,crash,get pid(){return app?.pid;}};
 }

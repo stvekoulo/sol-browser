@@ -49,7 +49,7 @@ export function menuIconPath(label: string): string {
   if(has('tout selectionner','select all'))return menuPaths.select;
   if(has('annuler','undo'))return menuPaths.undo;
   if(has('retablir','redo'))return menuPaths.redo;
-  if(has('sol ai'))return 'M8 1l2 5 5 2-5 2-2 5-2-5-5-2 5-2z';
+  if(has('sol ai'))return 'M4 2.5h5.5L12 5v8.5H4zM6 7.5h4M6 10h4';
   if(has('orthographe','spelling'))return menuPaths.spell;
   if(has('devtools'))return menuPaths.tools;
   if(has('design'))return menuPaths.edit;

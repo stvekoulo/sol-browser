@@ -16,8 +16,6 @@ const sessionRequests = [];
 const siteRequests = [];
 let markdownImageRequests=0;
 await mkdir(profile, { recursive: true });
-const aiCache = process.argv.find(arg => arg.startsWith('--ai-cache='))?.slice(11);
-if (aiCache) await cp(resolve(aiCache), resolve(base, 'ai'), {recursive:true});
 await mkdir(resolve(base, 'downloads'), { recursive: true });
 await mkdir(resolve(base, 'captures'), { recursive: true });
 const server = createServer((req, res) => {
@@ -47,6 +45,8 @@ const server = createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'image/svg+xml' });
     return res.end('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="green"/></svg>');
   }
+  if (req.url === '/agent-doc') { res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'}); return res.end('<title>Guide</title><main><h1>Installation</h1><p>Lancez la commande setup.</p><a href="/agent-api">Référence API</a> <a href="https://example.com/ext">Externe</a><button>Envoyer</button><input name="q"><input type="password" name="password"></main>'); }
+  if (req.url === '/agent-api') { res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'}); return res.end('<title>API</title><main><h1>API</h1><p>La méthode connect ouvre une session.</p></main>'); }
   if (req.url === '/reset') return req.socket.resetAndDestroy();
   if (req.url === '/redirect') { res.writeHead(302, { Location: '/redirect' }); return res.end(); }
   if (req.url === '/download') {
@@ -65,7 +65,8 @@ debugPort.listen(0, '127.0.0.1');
 await once(debugPort, 'listening');
 const port = debugPort.address().port;
 await new Promise(r => debugPort.close(r));
-await writeFile(resolve(profile, 'settings.json'), JSON.stringify({ Onboarded: true, Theme: 'dark', HomePage: `${origin}/a`, OnlineSuggestions: false, LiveColor: false, ...(process.argv.includes('--start-refresh') ? {Shortcuts:[],StartWallpaper:false} : {}), ...(process.argv.includes('--ai-hidden') ? {SolAiEnabled:true,Shortcuts:[]} : {}) }));
+await writeFile(resolve(profile, 'settings.json'), JSON.stringify({ Onboarded: true, Theme: 'dark', HomePage: `${origin}/a`, OnlineSuggestions: false, LiveColor: false, ...(process.argv.includes('--start-refresh') ? {Shortcuts:[],StartWallpaper:false} : {}), ...(process.argv.includes('--sol-ai') ? {SolAiCategories:true,StartWallpaper:false} : {}) }));
+if(process.argv.includes('--sol-ai'))await writeFile(resolve(profile,'ai-categories.json'),JSON.stringify({UpdatedAt:new Date().toISOString(),Categories:[{Name:'Développement',Links:[{Url:`${origin}/a`,Title:'Page A',Bookmark:true}]},{Name:'Actualités',Links:[{Url:`${origin}/b`,Title:'Page B',Bookmark:false}]}]}));
 if(process.argv.includes('--site-reset'))await writeFile(resolve(profile,'permissions.json'),JSON.stringify({[origin+' Camera']:true,[`http://localhost:${server.address().port} Camera`]:true}));
 let app, ui;
 if (process.argv.includes('--history')) {
@@ -129,7 +130,7 @@ async function hotkey(action, withoutAlt = false) {
   assert.equal((await once(proc,'exit'))[0],0,'native shortcut dispatch');
 }
 async function launch(extra = []) {
-  app = spawn(exe, ['--profile=robustness', process.argv.includes('--small') ? '--bounds=-9000,-9000,400,400' : '--bounds=-9000,-9000,1100,800', ...extra], { windowsHide: true, env: { ...process.env, NAVIGATEUR_DATA_DIR: base, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port} --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows`, NAVIGATEUR_DEBUG: '1', NAVIGATEUR_TEST_DOWNLOAD_DIR: resolve(base, 'downloads'), NAVIGATEUR_CAPTURE_DIR: resolve(base,'captures'), NAVIGATEUR_SAVER_TEST: '1', ...(process.argv.includes('--ai-offline') ? {SOL_AI_OFFLINE_TEST:'1'} : {}) } });
+  app = spawn(exe, ['--profile=robustness', process.argv.includes('--small') ? '--bounds=-9000,-9000,400,400' : '--bounds=-9000,-9000,1100,800', ...extra], { windowsHide: true, env: { ...process.env, NAVIGATEUR_DATA_DIR: base, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port} --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows`, NAVIGATEUR_DEBUG: '1', NAVIGATEUR_TEST_DOWNLOAD_DIR: resolve(base, 'downloads'), NAVIGATEUR_CAPTURE_DIR: resolve(base,'captures'), NAVIGATEUR_SAVER_TEST: '1' } });
   const target = await waitFor(async () => (await targets()).find(t => t.url === 'https://ui.navigateur/index.html'), 'toolbar');
   ui = await connect(target);
   await waitFor(async () => {
@@ -156,19 +157,7 @@ async function stop() {
 }
 try {
   await launch(process.argv.includes('--private-check') ? ['--private'] : []);
-  if(process.argv.includes('--ai-hidden')) {
-    await pageAt('/a');
-    assert.equal(JSON.parse(await readFile(resolve(profile,'settings.json'),'utf8')).SolAiEnabled,false,'upgrade disables old AI preference');
-    assert.ok((await state()).tabs.every(t=>!t.ai),'AI page actions hidden');
-    await command({type:'ai.enable',index:1});await delay(200);
-    assert.equal(JSON.parse(await readFile(resolve(profile,'settings.json'),'utf8')).SolAiEnabled,false,'hidden AI cannot reactivate through an old command');
-    await command({type:'settings.open',x:900,y:58});
-    const popup=await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#popup')),'settings popup'));
-    await waitFor(()=>popup.evaluate('!!document.querySelector(".settings-nav")'),'settings ready');
-    await popup.evaluate("[...document.querySelectorAll('.settings-nav button')].find(b=>b.textContent.trim()==='Sol').click()");
-    assert.equal(await popup.evaluate('document.body.innerText.includes("Sol AI")'),false,'Sol AI absent from Sol settings');
-    await stop();console.log('PASS Sol AI hidden, disabled on upgrade and unable to reactivate');process.exit(0);
-  } else if(process.argv.includes('--start-refresh')) {
+  if(process.argv.includes('--start-refresh')) {
     await pageAt('/a');
     await command({type:'tab.open',url:'https://start.sol/index.html#start'});
     const start=await connect(await waitFor(async()=>(await targets()).find(t=>t.url==='https://start.sol/index.html#start'),'start page'));
@@ -194,57 +183,6 @@ try {
     const shot=await start.call('Page.captureScreenshot',{format:'png'});
     await writeFile(resolve(base,'start-refresh.png'),Buffer.from(shot.data,'base64'));
     db.close();await stop();console.log('PASS live start history/frequent ranking, single visit counting and high resolution site favicons');process.exit(0);
-  } else if(process.argv.includes('--ai-warm')) {
-    const page=await pageAt('/a'), id=(await state()).activeId;
-    const popup=await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#popup')),'AI popup'));
-    await popup.call('Emulation.setFocusEmulationEnabled',{enabled:true});
-    await popup.evaluate(`chrome.webview.addEventListener('message',e=>{if(e.data.popup){window.__aiMessage=e.data;window.__phases??=[];window.__partials??=[];if(e.data.popup==='ai-action'&&e.data.busy){window.__phases.push(e.data.phase);if(e.data.result)window.__partials.push({phase:e.data.phase,text:e.data.result})}}})`);
-    const content=()=>popup.evaluate('window.__aiMessage');
-    await command({type:'settings.open',x:900,y:60});await command({type:'ai.enable',index:1});
-    await waitFor(async()=>{const c=await content();return c?.popup==='settings'&&!c.ai.busy&&c.ai.warm&&c.ai.models.some(m=>m.cached)},'cached AI catalog and prepared model',60000);
-    assert.equal((await content()).aiPreferences.keepMinutes,45);
-    assert.equal((await content()).aiPreferences.thinking,true);
-    await page.evaluate(`chrome.webview.postMessage(JSON.stringify({type:'ai.enable',index:0}))`);await delay(150);
-    assert.equal((await content()).ai.enabled,true,'site cannot invoke browser commands');
-    for(const minutes of [90,0,45]){await command({type:'settings.set',id:'aiKeepMinutes',index:minutes});await waitFor(async()=>(await content()).aiPreferences.keepMinutes===minutes,'keep duration setting');}
-    await page.evaluate(`document.body.innerHTML='<main><h1>Garden</h1><p>The garden opens Saturday. Volunteers plant ten apple trees.</p></main>'`);
-    await command({type:'ai.open',id});await waitFor(async()=>(await content())?.popup==='ai-action','AI action');
-    await popup.evaluate(`Object.defineProperty(document,'hasFocus',{configurable:true,value:()=>false});window.dispatchEvent(new Event('blur'))`);await delay(350);
-    assert.equal((await content()).popup,'ai-action','blur does not dismiss AI');await popup.evaluate('delete document.hasFocus');
-    await command({type:'ai.run',query:'summary',title:'fr',input:''});
-    await waitFor(async()=>{const c=await content();if(c?.error)throw Error(c.error);return c?.popup==='ai-action'&&!c.busy&&c.result},'Think summary',600000);
-    assert.equal((await content()).error,null);assert.match((await content()).result,/samedi/i);assert.equal((await content()).warm,true);
-    assert.match((await content()).result,/pommier|pomme/i);assert.doesNotMatch((await content()).result,/terre|okay|let me|the user|<think>/i);
-    const partials=await popup.evaluate('window.__partials');assert.ok(partials.length>0,'answer streamed while busy');
-    assert.ok(partials.every(p=>p.phase==='generating'&&!/okay|let me|the user|<think>/i.test(p.text)),'thinking stays hidden');
-    console.log('PASS native Think final answer; model retained');
-    await popup.evaluate(`document.querySelector('.ai-think-toggle').click()`);
-    await waitFor(async()=>(await content()).thinking===false,'Think disabled in panel');
-    await popup.evaluate('window.__phases=[]');
-    await command({type:'ai.run',query:'translate',title:'fr',input:''});
-    await waitFor(async()=>{const c=await content();return c?.popup==='ai-action'&&c.busy},'warm generation');
-    await writeFile(resolve(base,'ai-thinking.png'),Buffer.from((await popup.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
-    await waitFor(async()=>{const c=await content();if(c?.error)throw Error(c.error);return c?.popup==='ai-action'&&!c.busy&&c.result},'warm translation',600000);
-    assert.ok(!(await popup.evaluate('window.__phases')).includes('loading'),'no second model load');
-    assert.ok(!(await popup.evaluate('window.__phases')).includes('thinking'),'Think disabled');
-    assert.match((await content()).result,/samedi/i);
-    console.log('PASS native Think off; second answer without reloading');
-    await command({type:'settings.open',x:900,y:60});await waitFor(async()=>(await content()).popup==='settings','settings');
-    assert.equal((await content()).ai.warm,true);await popup.evaluate(`[...document.querySelectorAll('.settings-nav button')].find(b=>b.textContent==='Sol').click()`);
-    assert.equal((await content()).aiPreferences.thinking,false);
-    for(const scale of [0,1,2]){await command({type:'settings.set',id:'uiScale',index:scale});await delay(150);assert.ok(await popup.evaluate('document.documentElement.scrollWidth<=innerWidth+1'));}
-    await writeFile(resolve(base,'ai-availability.png'),Buffer.from((await popup.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
-    await command({type:'settings.set',id:'aiKeepMinutes',index:1});
-    await waitFor(async()=>!(await content()).ai.warm,'idle model expires after custom minute',75000);
-    await command({type:'settings.set',id:'aiKeepMinutes',index:45});
-    console.log('PASS custom idle expiry');
-    await command({type:'ai.open',id});await waitFor(async()=>(await content()).popup==='ai-action','AI reopened');
-    await popup.call('Emulation.setFocusEmulationEnabled',{enabled:false});
-    await page.call('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,x:40,y:180});
-    await page.call('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,x:40,y:180});
-    await delay(350);await command({type:'ai.run',query:'summary',title:'fr',input:''});await delay(200);
-    assert.equal((await content()).busy,false,'outside click dismissed the AI action');
-    await command({type:'ai.enable',index:0});await stop();console.log('PASS native Think, warm model reuse, 45/custom/session duration, blur retention, outside click and 100/90/80; '+base);process.exit(0);
   } else if(process.argv.includes('--player-window')) {
     const page=await pageAt('/a'),id=(await state()).activeId;
     console.log('WebView2 PiP APIs',await page.evaluate('JSON.stringify({video:document.pictureInPictureEnabled,document:typeof window.documentPictureInPicture})'));
@@ -330,18 +268,6 @@ try {
     await move(500,300);await delay(3300);assert.equal(await cursor(),'crosshair','outside player stays visible');
     await page.evaluate('clearInterval(__draw)');
     await stop();console.log('PASS native video cursor idle, movement, pause, controls and site custom cursor; '+base);process.exit(0);
-  } else if(process.argv.includes('--ai-private')) {
-    assert.equal((await state()).privateMode,true);
-    const popup=await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#popup')),'private settings'));
-    await popup.call('Emulation.setFocusEmulationEnabled',{enabled:true});
-    await popup.evaluate(`chrome.webview.addEventListener('message',e=>{if(e.data.popup==='settings')window.__privateAi=e.data;})`);
-    await command({type:'bookmark.add',url:origin+'/a?secret=1',title:'Private favorite'});
-    await command({type:'settings.open',x:900,y:60});
-    await command({type:'settings.set',id:'aiAdaptation',index:1});
-    const settings=await waitFor(()=>popup.evaluate('window.__privateAi?.aiPreferences?.adaptation?window.__privateAi:null'),'private adaptation state');
-    assert.equal(settings.aiPreferences.isPrivate,true);assert.equal(settings.aiPreferences.context,'','private browsing never supplies adaptation context');
-    await command({type:'settings.set',id:'aiReset',index:0});
-    await stop();console.log('PASS private browsing excluded from Sol AI adaptation');process.exit(0);
   } else if(process.argv.includes('--markdown')) {
     await pageAt('/a');
     const text=`# Titre\n\n## Section\n\n### Sous-section\n\n#### Niveau 4\n\n##### Niveau 5\n\n###### Niveau 6\n\n**Gras**, *italique*, ~~barré~~ et \`code\`.\n\n> Citation\n\n- Élément\n  - Sous-élément\n\n1. Première étape\n2. Seconde étape\n\n- [x] Fait\n- [ ] À faire\n\n| Colonne | Valeur |\n| --- | --- |\n| Sol | Clair |\n\n\`\`\`js\nconst greeting = "Bonjour";\n\`\`\`\n\nFormule $x^2$\n\n$$\n\\frac{1}{2}\n$$\n\n[Page locale](${origin}/a)\n\n![Aperçu](${origin}/markdown-image.svg)\n\nRéférence[^1]\n\n[^1]: Note de bas de page.\n\n---\n\n<b>HTML nettoyé</b><script>window.__markdownInjected=true</script><img src="javascript:alert(1)" onerror="window.__markdownInjected=true">\n\n[Interdit](javascript:alert(1))`;
@@ -369,164 +295,6 @@ try {
     await waitFor(async()=>(await state()).tabs.length===before+1,'safe markdown link opens a tab');
     assert.ok(!(await readFile(resolve(profile,'notes.json'),'utf8').catch(()=>'' )).includes('Markdown'),'preview does not save draft');
     await stop();console.log('PASS native Markdown, headings, nested lists, tasks, tables, code, math, footnotes, safe HTML/links/images, notes and 100/90/80; '+base);process.exit(0);
-  } else if(process.argv.includes('--ai-actions')) {
-    const id=(await state()).activeId, page=await pageAt('/a');
-    const popup=await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#popup')),'AI popup'));
-    await popup.call('Emulation.setFocusEmulationEnabled',{enabled:true});
-    await popup.evaluate(`chrome.webview.addEventListener('message',e=>{if(e.data.popup)window.__aiMessage=e.data;})`);
-    const content=()=>popup.evaluate('window.__aiMessage');
-    await command({type:'settings.open',x:900,y:60});
-    await command({type:'ai.enable',index:1});
-    await waitFor(async()=>{const d=await content();return d?.popup==='settings'&&!d.ai.busy&&d.ai.models.some(m=>m.cached)},'cached AI catalog',60000);
-    const model=(await content()).ai.models.find(m=>m.cached&&m.name==='Sol AI');assert.ok(model);
-    assert.ok((await content()).ai.models.every(m=>m.name==='Sol AI'),'one public AI module');
-    await command({type:'bookmark.add',url:origin+'/a?token=private-query',title:'Local gardening fixture'});
-    await command({type:'settings.open',x:900,y:60});
-    await command({type:'settings.set',id:'aiTone',index:2});
-    await command({type:'settings.set',id:'aiLength',index:1});
-    await command({type:'settings.set',id:'aiAdaptation',index:1});
-    await waitFor(async()=>(await content())?.aiPreferences?.adaptation,'local adaptation enabled');
-    assert.match((await content()).aiPreferences.context,/Local gardening fixture/);
-    assert.ok(!(await content()).aiPreferences.context.includes('private-query'),'navigation query excluded');
-    assert.equal(JSON.parse(await readFile(resolve(profile,'settings.json'),'utf8')).SolAiTone,2,'preferences persisted');
-    await command({type:'settings.set',id:'aiReset',index:0});
-    await waitFor(async()=>(await content())?.aiPreferences?.context==='','adaptation reset');
-    const usable=model.usable;
-    await command({type:'ai.select',id:model.id});
-    await command({type:'popup.close'});
-    await page.evaluate(`document.body.innerHTML='<article><h1>A community garden</h1><p>The community garden opens on Saturday. Volunteers will plant ten apple trees. Everyone is welcome.</p></article><textarea id="draft">hello world</textarea><input id="secret" type="password" value="never-process">';document.documentElement.lang='en';`);
-    assert.equal(await page.evaluate(`document.querySelector('#secret').focus();window.__solAI.capture()`),null,'sensitive field excluded');
-    const snapshot=await page.evaluate(`(()=>{const f=document.querySelector('#draft');f.focus();f.setSelectionRange(0,5);return window.__solAI.capture()})()`);
-    assert.equal(snapshot.text,'hello');assert.equal(snapshot.editable,true);
-    assert.equal(await page.evaluate(`document.querySelector('#draft').value='changed';window.__solAI.apply(${JSON.stringify(snapshot.token)},'Bonjour')`),false,'stale text rejected');
-    const valid=await page.evaluate(`(()=>{const f=document.querySelector('#draft');f.value='hello world';f.focus();f.setSelectionRange(0,5);return window.__solAI.capture()})()`);
-    assert.equal(await page.evaluate(`window.__solAI.apply(${JSON.stringify(valid.token)},'Bonjour')`),true,'native editable replacement');
-    assert.equal(await page.evaluate(`document.querySelector('#draft').value`),'Bonjour world','selected range only');
-    await command({type:'ai.open',id});
-    await waitFor(async()=>(await content())?.popup==='ai-action','summary popup');
-    assert.equal((await content()).editable,false);assert.match((await content()).text,/apple trees/);
-    for(const scale of [0,1,2]) {await command({type:'settings.set',id:'uiScale',index:scale});await delay(250);assert.ok(await popup.evaluate(`document.documentElement.scrollWidth<=innerWidth+1`),'AI actions fit all scales');}
-    await command({type:'ai.run',query:'summary',title:'fr'});
-    const response=await waitFor(async()=>{const d=await content();return d?.popup==='ai-action'&&!d.busy&&(d.result||d.error)?d:null},'real local summary',180000);
-    if(response.error==='machine-capacity'||!usable&&response.error==='choose-model')console.log('PASS capacity gate (no generation claimed)');
-    else {assert.equal(response.error,null);assert.match(response.result,/pommier|pommes/i);assert.match(response.result,/samedi/i);console.log('SUMMARY '+response.result);}
-    await writeFile(resolve(base,'ai-actions.png'),Buffer.from((await popup.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
-    await command({type:'popup.close'});
-    await command({type:'notes.open',x:500,y:70});
-    await command({type:'notes.draft',id:'',title:'Test',input:'A short draft'});
-    await command({type:'ai.notes',index:0,width:0,height:7});
-    await waitFor(async()=>(await content())?.popup==='ai-action'&&(await content()).note,'note action');
-    assert.equal((await content()).text,'A short');assert.equal((await content()).editable,true);
-    await command({type:'popup.close'});
-    const point=await page.evaluate(`(()=>{const f=document.querySelector('#draft');f.focus();f.setSelectionRange(0,7);const r=f.getBoundingClientRect();return {x:r.x+10,y:r.y+10}})()`);
-    for(const type of ['mousePressed','mouseReleased'])await page.call('Input.dispatchMouseEvent',{type,button:'right',clickCount:1,...point});
-    await waitFor(async()=>(await content())?.popup==='menu','native AI context menu');
-    const menu=(await content()).items;assert.ok(menu.includes('Sol AI…'));
-    await command({type:'menu.pick',index:menu.indexOf('Sol AI…')});
-    await waitFor(async()=>(await content())?.popup==='ai-action','context text tool');
-    assert.equal((await content()).editable,true);assert.equal((await content()).text,'Bonjour');
-    if(usable) {
-      await command({type:'popup.close'});
-      await page.evaluate(`const f=document.querySelector('#draft');f.value='bonjour je voudrai savoir si vous ete disponible demain';f.focus();f.setSelectionRange(0,f.value.length);`);
-      for(const type of ['mousePressed','mouseReleased'])await page.call('Input.dispatchMouseEvent',{type,button:'right',clickCount:1,...point});
-      await waitFor(async()=>(await content())?.popup==='menu','field context menu');
-      await command({type:'menu.pick',index:(await content()).items.indexOf('Sol AI…')});
-      await waitFor(async()=>(await content())?.popup==='ai-action','field AI');
-      await command({type:'ai.run',query:'improve',title:'fr'});
-      const correction=await waitFor(async()=>{const d=await content();return d?.popup==='ai-action'&&!d.busy&&(d.result||d.error)?d:null},'native field correction',180000);
-      assert.equal(correction.error,null);assert.match(correction.result,/voudrais[\s\S]*êtes/i);
-      assert.equal(await page.evaluate(`document.querySelector('#draft').value`),'bonjour je voudrai savoir si vous ete disponible demain','preview does not apply automatically');
-      await command({type:'ai.apply'});
-      await waitFor(()=>page.evaluate(`document.querySelector('#draft').value.includes('voudrais')`),'explicit field replacement');
-      await command({type:'notes.open',x:500,y:70});
-      await command({type:'notes.draft',id:'',title:'Draft',input:'nous avon recu votre demande'});
-      await command({type:'ai.notes',index:0,width:0,height:0});
-      await waitFor(async()=>(await content())?.popup==='ai-action'&&(await content()).note,'whole note AI');
-      await command({type:'ai.run',query:'improve',title:'fr'});
-      const note=await waitFor(async()=>{const d=await content();return d?.popup==='ai-action'&&!d.busy&&(d.result||d.error)?d:null},'native note correction',180000);
-      assert.equal(note.error,null);assert.match(note.result,/avons reçu/i);
-      await command({type:'ai.apply'});
-      await waitFor(()=>popup.evaluate(`document.querySelector('.notes-text')?.value.includes('avons reçu')`),'note proposal applied to draft');
-      assert.ok(!(await readFile(resolve(profile,'notes.json'),'utf8').catch(()=>'' )).includes('avons reçu'),'AI never saves notes automatically');
-    }
-    await stop();console.log('PASS native AI action extraction, sensitive exclusion, stale selection, range replacement, note selection, responsive popup; '+base);process.exit(0);
-  } else if(process.argv.includes('--ai')) {
-    await command({type:'settings.open',x:1000,y:60});
-    const popup=await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#popup')),'AI settings'));
-    await popup.call('Emulation.setFocusEmulationEnabled',{enabled:true});
-    await popup.evaluate(`chrome.webview.addEventListener('message',e=>{if(e.data.popup==='settings')window.__checkAi=e.data.ai;})`);
-    await command({type:'settings.set',id:'theme',index:2});
-    const ai=()=>popup.evaluate('window.__checkAi');
-    await waitFor(async()=>(await ai())?.available,'compatible AI helper');
-    assert.equal((await ai()).enabled,false,'AI off by default');
-    assert.equal(await popup.evaluate(`document.querySelectorAll('.settings-nav button').length`),5,'AI belongs to the existing Sol section');
-    await popup.evaluate(`Array.from(document.querySelectorAll('.settings-nav button')).find(b=>b.textContent==='Sol').click()`);
-    await waitFor(()=>popup.evaluate(`!!document.querySelector('.ai-settings button[role=switch]')`),'AI section');
-    await popup.evaluate(`document.querySelector('.ai-settings button[role=switch]').click()`);
-    await waitFor(async()=>(await ai())?.busy,'catalog starts');
-    await waitFor(async()=>!(await ai())?.busy,'real model catalog',60000);
-    assert.equal((await ai()).error,null,'catalog loaded');
-    assert.ok((await ai()).models.every(m=>m.device==='CPU' && m.license),'real compatible metadata');
-    const model=(await ai()).models.find(m=>m.name==='Sol AI');
-    if(!model) assert.ok((await ai()).machine.availableMb<1536,'insufficient available RAM hides install choices');
-    if(model && !model.cached) {
-      await popup.evaluate(`Array.from(document.querySelectorAll('.ai-model')).find(e=>e.textContent.includes('Sol AI')).querySelector('button').click()`);
-      assert.equal(await popup.evaluate(`Array.from(document.querySelectorAll('.ai-confirm button')).find(b=>b.textContent==='Installer sur cet ordinateur').disabled`),true,'download requires explicit license choice');
-      await popup.evaluate(`document.querySelector('.ai-confirm input').click()`);
-      assert.equal(await popup.evaluate(`Array.from(document.querySelectorAll('.ai-confirm button')).find(b=>b.textContent==='Installer sur cet ordinateur').disabled`),false,'accepted license enables installation');
-    }
-    for(const index of [0,1,2]) {
-      await command({type:'settings.set',id:'uiScale',index});await delay(350);
-      assert.ok(await popup.evaluate(`document.documentElement.scrollWidth<=innerWidth+1`),'AI settings fit every scale');
-      await writeFile(resolve(base,`ai-scale-${index}.png`),Buffer.from((await popup.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
-    }
-    await popup.evaluate(`document.querySelector('.ai-settings button[role=switch]').click()`);
-    await waitFor(async()=>!(await ai()).enabled,'AI disabled');
-    await stop();await launch();
-    await command({type:'settings.open',x:1000,y:60});
-    const reopened=await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#popup')),'reopened AI settings'));
-    await reopened.call('Emulation.setFocusEmulationEnabled',{enabled:true});
-    await waitFor(()=>reopened.evaluate(`Array.from(document.querySelectorAll('.settings-nav button')).some(b=>b.textContent==='Sol')`),'Sol section after restart');
-    await reopened.evaluate(`Array.from(document.querySelectorAll('.settings-nav button')).find(b=>b.textContent==='Sol').click()`);
-    assert.equal(await reopened.evaluate(`document.querySelector('.ai-settings button[role=switch]').getAttribute('aria-checked')`),'false','disabled state persists');
-    if(aiCache && model) {
-      await reopened.evaluate(`chrome.webview.addEventListener('message',e=>{if(e.data.popup==='settings')window.__checkAi=e.data.ai;})`);
-      const current=()=>reopened.evaluate('window.__checkAi');
-      await reopened.evaluate(`document.querySelector('.ai-settings button[role=switch]').click()`);
-      await waitFor(async()=>(await current())?.busy,'catalog refresh starts');
-      await waitFor(async()=>!(await current())?.busy && (await current())?.models.some(m=>m.id===model.id&&m.cached),'installed model recognised',60000);
-      await command({type:'ai.select',id:model.id});
-      if(!(await current()).models.find(m=>m.id===model.id).usable) {
-        assert.equal((await current()).selected,'','memory reserve blocks selection');
-        console.log('PASS memory reserve prevents loading on a busy machine; inference already measured separately');
-        await stop();process.exit(0);
-      }
-      await waitFor(async()=>(await current()).selected===model.id,'model selected');
-      await command({type:'ai.check',id:model.id});
-      await waitFor(async()=>(await current()).busy,'inference starts');
-      await command({type:'ai.cancel'});
-      await waitFor(async()=>!(await current()).busy,'inference cancelled',10000);
-      assert.equal((await current()).phase,'cancelled','cancellation releases process');
-      await command({type:'ai.check',id:model.id});
-      await waitFor(async()=>(await current()).busy,'failure isolation starts');
-      const terminate=spawn('powershell.exe',['-NoProfile','-NonInteractive','-Command',`$child=Get-CimInstance Win32_Process -Filter "ParentProcessId=${app.pid} AND Name='Sol.AI.exe'";if(!$child){exit 2};$child|ForEach-Object{Stop-Process -Id $_.ProcessId -Force}`],{windowsHide:true,stdio:'ignore'});
-      assert.equal((await once(terminate,'exit'))[0],0,'terminate only this test browser helper');
-      await waitFor(async()=>!(await current()).busy && (await current()).error==='module-stopped','helper failure reported',15000);
-      assert.ok((await state()).tabs.length>0,'Sol survives helper failure');
-      await command({type:'ai.check',id:model.id});
-      await waitFor(async()=>!(await current()).busy && (await current()).check,'real CPU inference',120000);
-      assert.equal((await current()).error,null,'inference completed');
-      assert.match((await current()).check.text,/4|four/i,'fixed check produces a result');
-      console.log('Local check: '+JSON.stringify((await current()).check));
-      await writeFile(resolve(base,'ai-checked.png'),Buffer.from((await reopened.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
-      await command({type:'ai.remove',id:model.id});
-      await waitFor(async()=>!(await current()).busy && !(await current()).models.find(m=>m.id===model.id).cached,'model removed',30000);
-      assert.equal((await current()).selected,'','removed model cannot stay selected');
-    }
-    console.log('PASS Sol AI opt-in, real catalog, consent, settings persistence and 100/90/80 UI'+(aiCache?', CPU inference, cancellation and model removal':''));
-    console.log('Evidence: '+base);
-    await stop();
-    process.exit(0);
   } else if(process.argv.includes('--site-reset')) {
     const first=(await state()).activeId;
     const page=await pageAt('/a');
@@ -1407,6 +1175,69 @@ try {
     console.log('PASS older imported history pagination, search, active tab and bookmarks');
     await stop();
   } else {
+  if (process.argv.includes('--sol-ai')) {
+    // Sans compte connecté : invitation « Continuer avec ChatGPT », aucune entrée Sol AI, aucun réglage de modèle local.
+    // La connexion réelle n'est pas déclenchée : elle ouvre la page d'OpenAI dans le navigateur du système.
+    await pageAt('/a');
+    assert.equal((await state()).tabs.find(t=>t.url===`${origin}/a`)?.ai,false,'no AI button without ChatGPT');
+    await command({type:'settings.open',x:900,y:58});
+    const popup=await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#popup')),'settings popup'));
+    await waitFor(()=>popup.evaluate('!!document.querySelector(".settings-nav")'),'settings sections');
+    await popup.evaluate('Array.from(document.querySelectorAll(".settings-nav [role=tab]")).at(-1).click()');
+    await waitFor(()=>popup.evaluate('Array.from(document.querySelectorAll("button")).some(b=>b.textContent==="Continuer avec ChatGPT" && b.getBoundingClientRect().height>0)'),'ChatGPT sign-in button');
+    assert.doesNotMatch(await popup.evaluate('document.body.innerText'),/Installer Sol AI|Télécharger|Think/,'no local model controls');
+    await writeFile(resolve(base,'sol-ai-settings.png'),Buffer.from((await popup.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    await command({type:'ai.open',id:(await state()).activeId});
+    await delay(400);
+    assert.equal(await popup.evaluate('!!document.querySelector(".ai-action")'),false,'Sol AI view stays closed without ChatGPT');
+    // Rendu de la vue avec une réponse en cours, sans appel réseau.
+    await popup.evaluate(`chrome.webview.dispatchEvent(new MessageEvent('message',{data:{popup:'ai-action',action:'summary',text:'Texte de la page',source:'Page A',editable:false,truncated:false,language:'fr',target:'en',ready:true,account:'test@example.com',request:{action:'summary',language:'fr',input:''},agent:null,busy:false,error:null,result:null,scope:'page'}}))`);
+    await waitFor(()=>popup.evaluate('!!document.querySelector(".ai-action")'),'Sol AI view');
+    await popup.evaluate('document.querySelector(".ai-run-btn").click()');
+    await popup.evaluate(`chrome.webview.dispatchEvent(new MessageEvent('message',{data:{popup:'ai-action',action:'summary',text:'Texte de la page',source:'Page A',editable:false,truncated:false,language:'fr',target:'en',ready:true,account:'test@example.com',scope:'page',request:{action:'summary',language:'fr',input:''},agent:null,busy:true,error:null,result:'- Premier point\\n- Second'}}))`);
+    await waitFor(()=>popup.evaluate('document.querySelector(".ai-result li") && !!document.querySelector(".ai-progress")'),'streamed answer');
+    await writeFile(resolve(base,'sol-ai-streaming.png'),Buffer.from((await popup.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    await popup.evaluate(`chrome.webview.dispatchEvent(new MessageEvent('message',{data:{popup:'ai-action',action:'summary',text:'Texte de la page',source:'Page A',scope:'page',editable:false,truncated:false,language:'fr',target:'en',ready:true,account:'test@example.com',request:{action:'summary',language:'fr',input:''},agent:null,busy:false,error:null,result:'- Premier point\\n- Second'}}))`);
+    await waitFor(()=>popup.evaluate('!!document.querySelector(".ai-actions")'),'answer actions');
+    await writeFile(resolve(base,'sol-ai-done.png'),Buffer.from((await popup.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    await popup.evaluate('document.querySelector("[role=tab][aria-label=Question]").click()');
+    await popup.evaluate(`chrome.webview.dispatchEvent(new MessageEvent('message',{data:{popup:'ai-action',action:'ask',text:'',source:'Guide',scope:'page',editable:false,truncated:false,language:'fr',target:'en',ready:true,account:'test@example.com',request:{action:'ask',language:'fr',input:''},busy:true,error:null,result:'',agent:{steps:[{id:'1',kind:'read',label:'Lecture de la page',detail:'',status:'complete'},{id:'2',kind:'search',label:'Recherche dans la page',detail:'connect',status:'complete'},{id:'3',kind:'run',label:'Cliquer sur la page',detail:'Ouvrir la référence API',status:'active'}],approval:{id:'3',label:'Cliquer sur la page',detail:'Ouvrir la référence API'}}}}))`);
+    await waitFor(()=>popup.evaluate('document.body.innerText.includes("Autoriser")'),'approval card');
+    await writeFile(resolve(base,'sol-ai-agent.png'),Buffer.from((await popup.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    await command({type:'popup.close'});
+    // Panneau de discussion à droite : invitation à se connecter, puis rendu d'une conversation.
+    await command({type:'chat.toggle'});
+    await waitFor(async()=>(await state()).chatOpen===true,'chat panel open');
+    const chat=await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#chat')),'chat view'));
+    await waitFor(()=>chat.evaluate('document.body.innerText.includes("Continuer avec ChatGPT")'),'chat sign-in prompt');
+    await chat.evaluate(`chrome.webview.dispatchEvent(new MessageEvent('message',{data:{chat:true,ready:true,account:'test@example.com',request:{action:'summary',language:'fr',input:''},agent:null,busy:true,error:null,messages:[{from:'user',text:'Capitale du Bénin ?'},{from:'assistant',text:'**Porto-Novo** est la capitale officielle.'}]}}))`);
+    await waitFor(()=>chat.evaluate('!!document.querySelector(".sol-chat-log strong") && !!document.querySelector(".sol-chat-input textarea")'),'chat conversation');
+    await writeFile(resolve(base,'sol-ai-chat.png'),Buffer.from((await chat.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    await command({type:'chat.toggle'});
+    await waitFor(async()=>(await state()).chatOpen===false,'chat panel closed');
+    // Outils de l'agent sur une vraie page : instantané avec références, recherche, lien du même site, champs sensibles exclus.
+    await command({type:'tab.open',url:`${origin}/agent-doc`});
+    const doc=await pageAt('/agent-doc');
+    const agent=(await readFile(resolve('src/Browser.App/inject/agent.js'),'utf8'));
+    const run=async expression=>JSON.parse(await doc.evaluate(`(async()=>{const A=${agent};return JSON.stringify(await ${expression});})()`));
+    const snap=await run('A.snapshot()');
+    assert.deepEqual(snap.headings,['Installation']);
+    assert.ok(snap.text.includes('setup'),'main text read');
+    assert.equal(snap.links.length,2,'links listed with refs');
+    assert.ok(snap.controls.some(c=>c.label==='Envoyer') && !snap.controls.some(c=>c.kind.includes('password')),'password field hidden from the agent');
+    assert.equal((await run('A.find("commande")')).matches.length,1,'find in page');
+    const api=snap.links.find(l=>l.text==='Référence API');
+    assert.ok((await run(`A.readLink(${JSON.stringify(api.ref)})`)).text.includes('connect'),'same-site link read');
+    assert.equal((await run(`A.readLink(${JSON.stringify(snap.links.find(l=>l.text==='Externe').ref)})`)).external,'https://example.com/ext','other sites go through Sol');
+    assert.equal((await run('A.show("e99")')).ok,false,'unknown ref rejected');
+    // Catégories du classement quotidien sur la page d'accueil.
+    await command({type:'tab.open',url:'https://start.sol/index.html#start'});
+    const start=await connect(await waitFor(async()=>(await targets()).find(t=>t.url==='https://start.sol/index.html#start'),'start page'));
+    await waitFor(()=>start.evaluate('document.querySelectorAll(".start-category").length===2'),'AI categories on start page');
+    await writeFile(resolve(base,'sol-ai-start.png'),Buffer.from((await start.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    console.log('PASS Sol AI offers ChatGPT sign-in, stays closed until connected, renders a streamed answer and the chat panel');
+    await stop(); console.log(`Evidence: ${base}`); process.exit(0);
+  }
   if (process.argv.includes('--scale')) {
     const sidebar = await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#sidebar')),'sidebar'));
     const page = await pageAt('/a');
@@ -1874,7 +1705,6 @@ try {
 } catch (error) {
   if(process.argv.includes('--site-sessions')&&ui){console.error('SITE STATE',JSON.stringify((await state()).tabs.map(({id,url,sessionId,loading,asleep})=>({id,url,sessionId,loading,asleep}))));console.error('SITE REQUESTS',JSON.stringify(siteRequests.filter(r=>r.url==='/clicked')))}
   const manager = (await targets()).find(t=>t.url.endsWith('#popup'));
-  if(manager && process.argv.includes('--ai')) console.error('AI STATE',await (await connect(manager)).evaluate('window.__checkAi'));
   if (manager) console.error('MANAGER',await (await connect(manager)).evaluate('JSON.stringify(window.__extensions,(key,value)=>key === "icon" ? undefined : value)'));
   if (ui) console.error(await ui.evaluate('JSON.stringify({ready:document.readyState,listening:window.__checkListening,lastEvent:window.__checkLastMessage?.event,text:document.body?.innerText.slice(0,300)})').catch(() => 'UI unavailable'));
   console.error(await readFile(resolve(profile, 'debug.log'), 'utf8').catch(() => 'No diagnostic log'));

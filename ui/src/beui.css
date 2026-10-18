@@ -3,6 +3,7 @@
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities);
 @source "./components";
+@source "./lib/text-shimmer.ts";
 @theme inline {
   --color-background: var(--bg-popup);
   --color-foreground: var(--text);

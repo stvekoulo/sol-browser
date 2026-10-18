@@ -1,29 +1,95 @@
-import { useState, type RefObject } from 'react';
+import { useState } from 'react';
+import { BookOpen, Copy, FileText, Languages, Lightbulb, MessageCircleQuestion, NotebookPen, PenLine, RefreshCw, Replace, SpellCheck, TextCursorInput, Wand2, X } from 'lucide-react';
 import { send } from './bridge';
 import { t } from './i18n';
 import SolMarkdown from './SolMarkdown';
+import SolSelect from './SolSelect';
+import SolTabs from './SolTabs';
+import { Button } from '@/components/motion/button/base';
+import { Alert, AlertAction, AlertContent, AlertDescription, AlertIcon } from '@/components/motion/alert';
+import { StreamingResponse } from '@/components/agents/streaming-response';
+import { AgentProgress } from '@/components/agents/loading-states/agent-progress';
+import { PromptInput } from '@/components/agents/prompt-input';
+import SolAiTrace, { type AgentState } from './SolAiTrace';
 
-export type AiContent = { popup:'ai-action'; action:string; text:string; source:string; editable:boolean; note:boolean; truncated:boolean; language:string; target:string; configured:boolean; busy:boolean; warm:boolean; thinking:boolean; phase:string; percent:number; error:string|null; result:string|null; incomplete:boolean };
-export function NoteAiButton({editor}:{editor:RefObject<HTMLTextAreaElement|null>}) {
-  return <button className="pill-action" onMouseDown={e=>e.preventDefault()} onClick={()=>send({type:'ai.notes',width:editor.current?.selectionStart??0,height:editor.current?.selectionEnd??0,index:0})}>Sol AI</button>;
-}
+export type AiContent = { popup:'ai-action'; action:string; text:string; source:string; scope:'page'|'selection'|'field'; editable:boolean; truncated:boolean; language:string; target:string; ready:boolean; account:string; busy:boolean; error:string|null; result:string|null; agent:AgentState; request:{action:string;language:string;input:string}|null };
+import { aiError, usagePage } from './solAiMessages';
+export { aiError, usagePage } from './solAiMessages';
+
+const languages = ['fr','en','es','de','it','pt'], languageNames = ['Français','English','Español','Deutsch','Italiano','Português'];
+
+const icon = { className:'size-3.5', 'aria-hidden':true } as const;
+
 export default function SolAiAction({content:c}:{content:AiContent}) {
-  const [action,setAction]=useState(c.action), [instruction,setInstruction]=useState(''), [language,setLanguage]=useState(c.target);
-  const [lastInput,setLastInput]=useState({language:c.target,instruction:""});
-  const labels:Record<string,string>={summary:t('Résumer','Summarize'),explain:t('Expliquer','Explain'),write:t('Rédiger','Write'),rephrase:t('Reformuler','Rephrase'),improve:t('Améliorer','Improve'),translate:t('Traduire','Translate')};
-  const errors:Record<string,string>={ 'reasoning-incomplete':t('Sol AI n’a pas terminé sa réflexion. Réessayez avec un passage plus précis.','Sol AI did not finish thinking. Retry with a more focused passage.'), 'choose-model':t('Choisissez un module utilisable dans Paramètres → Sol. La mémoire libre peut être insuffisante.','Choose an available module in Settings → Sol. Free memory may be insufficient.'),'memory-limit':t('Mémoire insuffisante pour terminer. Libérez de la mémoire puis réessayez.','Not enough memory to finish. Free memory and retry.'), 'changed-text':t('Le texte a changé. Fermez puis relancez Sol AI.','The text changed. Close and reopen Sol AI.'),'note-draft':t('Enregistrez ou abandonnez votre brouillon avant de créer une note.','Save or discard your draft before creating a note.'),'not-installed':t('Installez un module dans Paramètres → Sol.','Install a module in Settings → Sol.'),'machine-capacity':t('Mémoire disponible insuffisante. Fermez quelques applications.','Insufficient available memory. Close some applications.'),'module-busy':t('Le module est déjà utilisé. Réessayez ensuite.','The module is already in use. Try again later.'),'invalid-request':t('Ajoutez une consigne ou sélectionnez du texte.','Add instructions or select text.')};
-  const result=c.result && !c.error && action===c.action && (action!=="translate"||language===lastInput.language) && (action!=="write"||instruction===lastInput.instruction);
+  const [action,setAction]=useState(c.action), [instruction,setInstruction]=useState(''), [language,setLanguage]=useState(Math.max(0,languages.indexOf(c.target)));
+  const actions:Record<string,{label:string;run:string;busy:string;icon:typeof FileText}>={
+    summary:{label:t('Résumer','Summarize'),run:t(c.scope==='page'?'Résumer la page':'Résumer le passage',c.scope==='page'?'Summarize the page':'Summarize the passage'),busy:t('Résumé','Summarizing'),icon:FileText},
+    explain:{label:t('Expliquer','Explain'),run:t('Expliquer simplement','Explain simply'),busy:t('Explication','Explaining'),icon:Lightbulb},
+    ask:{label:t('Question','Ask'),run:'',busy:t('Lecture du site','Reading the site'),icon:MessageCircleQuestion},
+    translate:{label:t('Traduire','Translate'),run:t('Traduire','Translate'),busy:t('Traduction','Translating'),icon:Languages},
+    write:{label:t('Rédiger','Write'),run:'',busy:t('Rédaction','Writing'),icon:PenLine},
+    rephrase:{label:t('Reformuler','Rephrase'),run:t('Reformuler le texte','Rephrase the text'),busy:t('Reformulation','Rephrasing'),icon:Wand2},
+    improve:{label:t('Corriger','Fix'),run:t('Corriger et clarifier','Fix and clarify'),busy:t('Correction','Fixing'),icon:SpellCheck},
+  };
+  const available=Object.keys(actions).filter(key=>c.editable||!['write','rephrase','improve'].includes(key));
+  const composer=action==='write'||action==='ask';
+  const run=(value=instruction)=>{send({type:'ai.run',query:action,title:action==='translate'?languages[language]:c.language,input:composer?value:''});};
+  // La réponse affichée correspond toujours à la demande envoyée (depuis la vue ou le menu contextuel), pas à une option changée depuis.
+  const sent=c.request;
+  const shown=c.result!==null && !!sent && sent.action===action && (action!=='translate'||languages[language]===sent.language) && (!composer||instruction.trim()===sent.input.trim());
+  const done=shown && !c.busy && !c.error && !!c.result;
+  const words=c.text.trim()?c.text.trim().split(/\s+/).length:0;
+  const scope={page:t('Page entière','Whole page'),selection:t('Sélection','Selection'),field:t('Champ de saisie','Text field')}[c.scope];
+  const ScopeIcon=c.scope==='page'?BookOpen:c.scope==='selection'?TextCursorInput:PenLine;
+  const error=c.error && c.error!=='cancelled' ? c.error : null;
   return <div className="ai-action">
-    <div className="notes-heading"><strong>Sol AI</strong><button className="pill-action ai-think-toggle" aria-label={t('Mode Think','Think mode')} aria-pressed={c.thinking} disabled={c.busy} title={t('Réfléchir avant de répondre','Think before answering')} onClick={()=>send({type:'settings.set',id:'aiThinking',index:c.thinking?0:1})}>Think {c.thinking?'✓':''}</button><button className="pill-action" aria-label={t('Fermer','Close')} onClick={()=>send({type:'popup.close'})}>×</button></div>
-    <p className="ai-source-title" title={c.source}>{c.source || t('Votre texte','Your text')}</p>
-    <div className="notes-actions ai-action-tabs" role="group" aria-label={t('Action','Action')}>{Object.entries(labels).filter(([key])=>c.editable||!['write','rephrase','improve'].includes(key)).map(([key,label])=><button className="pill-action" key={key} aria-pressed={action===key} disabled={c.busy} onClick={()=>setAction(key)}>{label}</button>)}</div>
-    {c.text && <details><summary>{t('Texte utilisé','Source text')}</summary><div className="ai-source">{c.text}</div></details>}
-    {c.truncated && <p className="row-hint">{t('Un extrait est utilisé. Sélectionnez un passage plus court pour remplacer du texte.','An excerpt is used. Select a shorter passage to replace text.')}</p>}
-    {action==='write' && <textarea className="notes-text" aria-label={t('Consigne de rédaction','Writing instructions')} placeholder={t('Que souhaitez-vous écrire ?','What would you like to write?')} maxLength={50000} value={instruction} onChange={e=>setInstruction(e.target.value)}/>}
-    {action==='translate' && <label>{t('Vers','Into')} <select value={language} disabled={c.busy} onChange={e=>setLanguage(e.target.value)}><option value="fr">Français</option><option value="en">English</option></select></label>}
-    {!c.configured ? <button className="pill-action" onClick={()=>send({type:'ai.settings'})}>{t('Configurer Sol AI','Set up Sol AI')}</button> : !c.busy && <div className="notes-actions"><button className="pill-action primary" disabled={action==='write'?!instruction.trim():!c.text.trim()} onClick={()=>{setLastInput({language,instruction});send({type:'ai.run',query:action,title:action==='translate'?language:c.language,input:instruction});}}>{labels[action]}</button>{c.warm && <span className="ai-local-label">{t('Prêt en mémoire','Ready in memory')}</span>}</div>}
-    {c.busy && <div className="ai-work"><div className="ai-toolbar"><span role="status" aria-live="polite"><span className="ai-spinner" aria-hidden="true"/>{({starting:t('Démarrage de Sol AI…','Starting Sol AI…'),loading:t('Chargement en mémoire…','Loading into memory…'),thinking:t('Sol AI réfléchit…','Sol AI is thinking…'),generating:t('Rédaction de la réponse…','Writing the answer…'),cancelling:t('Annulation…','Cancelling…')} as Record<string,string>)[c.phase]||t('Préparation du texte…','Preparing text…')}</span><button className="pill-action" disabled={c.phase==='cancelling'} onClick={()=>send({type:'ai.cancel'})}>{t('Annuler','Cancel')}</button></div>{c.percent>0 && <span className="row-hint">{c.percent} %</span>}{c.percent>0&&<progress max={100} value={c.percent}/>}</div>}
-    {c.error && <p role="alert" className="row-hint">{errors[c.error]||t('Sol AI n’a pas pu terminer. Réessayez.','Sol AI could not finish. Try again.')}</p>}
-    {result && <><div className="ai-result" tabIndex={0}><SolMarkdown text={c.result!}/></div>{!c.busy && <><p className="row-hint">{c.incomplete?t('Réponse incomplète. Essayez un texte plus court.','Incomplete response. Try shorter text.'):t('Vérifiez la proposition avant de l’utiliser.','Review the suggestion before using it.')}</p><div className="notes-actions"><button className="pill-action" onClick={()=>send({type:'ai.copy'})}>{t('Copier','Copy')}</button><button className="pill-action" disabled={c.incomplete} onClick={()=>send({type:'ai.note'})}>{t('Nouvelle note','New note')}</button>{c.editable&&['write','rephrase','improve','translate'].includes(action)&&<button className="pill-action" disabled={c.incomplete||c.truncated} onClick={()=>send({type:'ai.apply'})}>{t('Remplacer le texte','Replace text')}</button>}</div></>}</>}
+    <header className="ai-head">
+      <strong>Sol AI</strong>
+      <span className="ai-badge">ChatGPT</span>
+      <Button variant="ghost" size="sm" className="ai-icon-btn" aria-label={t('Fermer','Close')} title={t('Fermer','Close')} onClick={()=>send({type:'popup.close'})}><X {...icon}/></Button>
+    </header>
+
+    {/* Ce qui sera envoyé, en une ligne : la source et sa taille, le texte complet au survol. */}
+    <div className="ai-context" title={c.text.slice(0,600)}>
+      <span className="ai-context-icon"><ScopeIcon {...icon}/></span>
+      <span className="ai-context-text"><strong>{c.source||t('Votre texte','Your text')}</strong>
+        <small>{scope}{words?` · ${words.toLocaleString()} ${t(words>1?'mots':'mot',words>1?'words':'word')}`:''}{c.truncated?` · ${t('extrait','excerpt')}`:''}</small></span>
+    </div>
+
+    <SolTabs className="ai-tabs" value={action} change={value=>!c.busy&&setAction(value)} label={t('Action Sol AI','Sol AI action')}
+      items={available.map(key=>{const A=actions[key].icon;return {value:key,ariaLabel:actions[key].label,label:<span className="ai-tab" title={actions[key].label}><A {...icon}/>{key===action&&actions[key].label}</span>};})}/>
+
+    {!c.ready ? <Alert variant="info" open><AlertIcon/><AlertContent><AlertDescription>{t('Connectez votre compte ChatGPT pour utiliser Sol AI.','Connect your ChatGPT account to use Sol AI.')}</AlertDescription>
+        <AlertAction><Button size="sm" className="pill-action primary" onClick={()=>send({type:'ai.connect'})}>{t('Continuer avec ChatGPT','Continue with ChatGPT')}</Button></AlertAction></AlertContent></Alert>
+      : composer ? <PromptInput className="ai-composer" value={instruction} onValueChange={setInstruction} minRows={1} maxRows={5} maxLength={50000} loading={c.busy} onStop={()=>send({type:'ai.cancel'})}
+          aria-label={action==='ask'?t('Question sur ce site','Question about this site'):t('Consigne de rédaction','Writing instructions')}
+          placeholder={action==='ask'?t('Que voulez-vous savoir sur ce site ?','What do you want to know about this site?'):t('Que souhaitez-vous écrire ?','What would you like to write?')}
+          onSubmit={value=>{if(value.trim()&&!c.busy)run(value);}}/>
+      : !c.busy && !done && <div className="ai-run">
+          {action==='translate' && <SolSelect id="ai-language" label={t('Langue','Language')} value={language} options={languageNames} onChange={setLanguage}/>}
+          <Button size="sm" className="pill-action primary ai-run-btn" disabled={!c.text.trim()} onClick={()=>run()}>{(()=>{const A=actions[action].icon;return <A {...icon}/>;})()}{actions[action].run}</Button>
+        </div>}
+
+    {c.busy && !composer && <div className="ai-progress" role="status" aria-live="polite"><AgentProgress label={actions[action].busy}/><Button variant="ghost" size="sm" className="pill-action" onClick={()=>send({type:'ai.cancel'})}>{t('Arrêter','Stop')}</Button></div>}
+    {c.busy && action==='ask' && !c.agent?.steps.length && <div className="ai-progress" role="status" aria-live="polite"><AgentProgress label={actions.ask.busy}/></div>}
+    {c.busy && action==='write' && <div className="ai-progress" role="status" aria-live="polite"><AgentProgress label={actions[action].busy}/></div>}
+
+    {action==='ask' && sent?.action==='ask' && <SolAiTrace agent={c.agent} busy={c.busy}/>}
+
+    {shown && !!c.result && <div className="ai-result" tabIndex={0}>
+      <StreamingResponse status={c.busy?'streaming':c.error?'error':'complete'} showActions={false}><SolMarkdown text={c.result}/></StreamingResponse>
+    </div>}
+
+    {done && <div className="ai-actions">
+      <Button variant="ghost" size="sm" className="ai-action-btn" onClick={()=>send({type:'ai.copy'})}><Copy {...icon}/>{t('Copier','Copy')}</Button>
+      <Button variant="ghost" size="sm" className="ai-action-btn" onClick={()=>send({type:'ai.note'})}><NotebookPen {...icon}/>{t('Note','Note')}</Button>
+      {c.editable && ['write','rephrase','improve','translate'].includes(action) && <Button variant="ghost" size="sm" className="ai-action-btn" disabled={c.truncated} onClick={()=>send({type:'ai.apply'})}><Replace {...icon}/>{t('Remplacer','Replace')}</Button>}
+      <Button variant="ghost" size="sm" className="ai-action-btn ai-action-end" aria-label={t('Régénérer','Regenerate')} title={t('Régénérer','Regenerate')} onClick={()=>run(sent?.input??instruction)}><RefreshCw {...icon}/></Button>
+    </div>}
+
+    {error && <Alert variant={error==='subscription_sharing_usage_limit_exceeded'?'warning':'destructive'} open><AlertIcon/><AlertContent><AlertDescription>{aiError(error)}</AlertDescription>
+      {error==='subscription_sharing_usage_limit_exceeded' && <AlertAction><Button size="sm" className="pill-action primary" onClick={()=>send({type:'tab.open',url:usagePage})}>{t('Gérer l’usage','Manage usage')}</Button></AlertAction>}</AlertContent></Alert>}
+
+    {c.ready && <p className="ai-foot">{done?t('Vérifiez la réponse avant de l’utiliser. ','Review the response before using it. '):''}{t('Envoyé à OpenAI avec votre forfait ChatGPT','Sent to OpenAI with your ChatGPT plan')}{c.account?` · ${c.account}`:''}</p>}
   </div>;
 }
