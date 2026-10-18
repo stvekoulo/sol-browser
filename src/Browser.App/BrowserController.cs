@@ -65,6 +65,7 @@ public sealed partial class BrowserController
         _welcome = welcome;
         (_window, _pages, _bridge, _popup, _dock, _tools, _settings) = (window, pages, bridge, popup, dock, panel, settings);
         _pages.PagePressed += DismissAiPopup;
+        WireSelection();
         _network = new NetworkInspector(panel.Post);
         _sessionSave.Tick += (_, _) => { _sessionSave.Stop(); SaveSession(); };
         StartNoteMaintenance();
@@ -223,6 +224,7 @@ public sealed partial class BrowserController
         if (SidebarCommand(c)) return;
         if (ChatCommand(c)) return;
         if (TabGroupAiCommand(c)) return;
+        if (SelectionCommand(c)) return;
         if (ExecuteCommands0(c)) return;
         if (ExecuteCommands1(c)) return;
         if (ExecuteCommands2(c)) return;

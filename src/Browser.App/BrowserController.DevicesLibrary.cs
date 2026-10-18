@@ -88,16 +88,7 @@ public sealed partial class BrowserController
             var link = e.ContextMenuTarget.HasLinkUri ? e.ContextMenuTarget.LinkUri : null;
             if (e.ContextMenuTarget.HasSelection && e.ContextMenuTarget.SelectionText is { Length: > 0 and <= 50_000 } selection)
             {
-                var source = _tabs.Tabs.FirstOrDefault(t => t.Id == tabId);
-                items.Add((T("Ajouter à une note…", "Add to a note…"), () => _afterMenu = () =>
-                {
-                    var url = source?.Url ?? "";
-                    if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") || uri.UserInfo.Length > 0 || url.Length > 4096) url = "";
-                    _noteSelection = new("", (source?.Title ?? "")[..Math.Min(source?.Title.Length ?? 0, 120)], selection, url, DateTimeOffset.UtcNow);
-                    HidePopup();
-                    _popup.Show(x, y, 360, JsonSerializer.Serialize(new { popup = "notes-select",
-                        items = _notes.Items.Select(n => new { id = n.Id, title = n.Title.Length > 0 ? n.Title : n.Text[..Math.Min(80, n.Text.Length)] }) }), focus: true);
-                }));
+                items.Add((T("Ajouter à une note…", "Add to a note…"), () => _afterMenu = () => AskNoteForSelection(tabId, selection, x, y)));
             }
             if (link is not null && IsWeb(link))
             {

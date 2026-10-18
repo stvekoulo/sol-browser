@@ -246,7 +246,13 @@ export default function Start() {
               const domain = formatDomain(site.url);
               const title = site.title || domain;
               return (
-                <button key={site.url} onClick={() => open(site.url)} title={site.url}>
+                // Mêmes actions qu'un favori, au coin de la ligne d'historique.
+                <CornerActions key={site.url} corner={14} actions={[
+                  { id: 'tab', label: t('Ouvrir dans un nouvel onglet', 'Open in a new tab'), Icon: AppWindow, run: () => send({ type: 'start.open', input: site.url }) },
+                  { id: 'split', label: t('Ouvrir en vue scindée', 'Open in split view'), Icon: Columns2, run: () => send({ type: 'start.split', input: site.url }) },
+                  { id: 'copy', label: t('Copier le lien', 'Copy link'), Icon: Copy, run: () => send({ type: 'start.copy', input: site.url }) },
+                ]}>
+                <button onClick={() => open(site.url)} title={site.url}>
                   <HistoryIcon site={site} />
                   <span>
                     <strong>{title}</strong>
@@ -256,6 +262,7 @@ export default function Start() {
                     {new Date(site.last!).toLocaleDateString(document.documentElement.lang, { day: 'numeric', month: 'short' })}
                   </time>
                 </button>
+                </CornerActions>
               );
             })}
           </div>

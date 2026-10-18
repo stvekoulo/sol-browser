@@ -34,6 +34,22 @@ public sealed partial class BrowserController
                 if (Chat is null || PrivateActive) return true;
                 if (c.Id == "notes") _chatFocus = "notes";
                 _ = Chat.ShowAsync(); Refresh(); _ = SendChatAsync(c.Input ?? ""); return true;
+            // Éventail d'une réponse : la copier, ou en faire une note.
+            case "chat.copy" or "chat.note":
+                if (!int.TryParse(c.Id, out var at) || at < 0 || at >= _chat.Count || _chat[at].Role != "assistant" || _chat[at].Text.Length == 0) return true;
+                var answer = _chat[at].Text.ToString();
+                if (c.Type == "chat.copy")
+                {
+                    var data = new Windows.ApplicationModel.DataTransfer.DataPackage(); data.SetText(answer);
+                    Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(data);
+                }
+                else if (!NoteDraftChanged)
+                {
+                    var question = at > 0 ? _chat[at - 1].Text.ToString() : "Sol AI";
+                    _noteDraft = new("", question[..Math.Min(question.Length, 120)].ReplaceLineEndings(" "), answer[..Math.Min(answer.Length, 50_000)], "", DateTimeOffset.UtcNow);
+                    OpenNotes(450, 60); PublishNotes();
+                }
+                return true;
             case "chat.cancel": try { _chatCancel?.Cancel(); } catch (ObjectDisposedException) { } return true;
             case "chat.clear":
                 if (_chatBusy) return true;

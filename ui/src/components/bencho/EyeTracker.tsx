@@ -194,6 +194,10 @@ export function EyeTracker({
   const [typed, setTyped] = useState("");
   const [talking, setTalking] = useState(false);
   const [tint, setTint] = useState(TINTS[0]);
+  /* Sol : la bulle reste dans son cadre. Elle s'ouvre du côté qui a
+     le plus de place et passe à la ligne au lieu de dépasser. */
+  const [side, setSide] = useState<"right" | "left">("right");
+  const [room, setRoom] = useState(240);
   const turn = useRef(0);
   const lastLine = useRef(-1);
   useEffect(() => () => { turn.current++; }, []);
@@ -392,6 +396,18 @@ export function EyeTracker({
   }, [still, idle]);
 
   const s = clamp(size, 16, 180);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!talking || !el) return;
+    const frame = (el.closest<HTMLElement>("[data-eyt-frame]") ?? document.documentElement).getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    const cx = r.left + r.width / 2;
+    const right = frame.right - (cx + s * 0.36) - 8;
+    const left = cx - s * 0.36 - frame.left - 8;
+    const pick = right >= 200 || right >= left ? "right" : "left";
+    setSide(pick);
+    setRoom(Math.max(110, Math.min(260, pick === "right" ? right : left)));
+  }, [talking, s]);
   const body = SHAPES[shape] ?? SHAPES.Ball;
   const clip = `eyt-clip-${useId().replace(/:/g, "")}`;
 
@@ -473,8 +489,9 @@ export function EyeTracker({
         <span
           className="eyt-say"
           data-on={talking || undefined}
+          data-side={side}
           aria-live="polite"
-          style={{ "--tint": tint } as React.CSSProperties}
+          style={{ "--tint": tint, "--eyt-room": `${room}px` } as React.CSSProperties}
         >
           <span>{typed}</span>
           <span className="eyt-caret" />

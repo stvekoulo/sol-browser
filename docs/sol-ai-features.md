@@ -26,7 +26,8 @@ Points d’entrée : bouton Résumer de la barre d’adresse, « Sol AI… » du
 
 - **Groupes d’onglets** : à partir de six onglets hors groupe, une carte de la barre latérale propose « Ranger avec Sol AI » ; les groupes proposés (nom, couleur, icône) s’appliquent seulement après « Appliquer ». L’éditeur de groupe propose un nom, une couleur et une icône d’après ses onglets, et la couleur se choisit avec le sélecteur beUI. Un sujet de « Vos sujets » s’ouvre en groupe d’onglets depuis l’éventail de sa carte.
 - **Mascotte** : la balle aux yeux (bloc « Eye tracker » de Bencho, MIT) représente Sol AI dans la vue, la discussion, les paramètres, les notes et la barre d’outils.
-- **Éventail d’actions** : au coin des favoris (nouvel onglet, vue scindée, copier), des sujets (ouvrir en groupe, voir tout), des groupes (afficher, modifier) et des notes (épingler, dupliquer, archiver, résumer avec Sol AI), d’après le bloc « Action node » de Bencho. Jamais d’action irréversible dans un éventail.
+- **Barre d’actions sur la sélection** : au-dessus d’un texte choisi dans une page, Copier, Sol AI, Expliquer, Traduire, puis « Plus » (Résumer, Question, Rechercher, Note). Elle ne prend pas le focus et disparaît au défilement ou quand la sélection s’efface.
+- **Éventail d’actions** : au coin des favoris (nouvel onglet, vue scindée, copier), des sujets (ouvrir en groupe, voir tout), des groupes (afficher, modifier) des lignes d’historique de l’accueil, des réponses de la discussion (copier, en faire une note) et des notes (épingler, dupliquer, archiver, résumer avec Sol AI), d’après le bloc « Action node » de Bencho. Jamais d’action irréversible dans un éventail.
 
 ## Deuxième lot : notes, plusieurs pages et outils de développement
 

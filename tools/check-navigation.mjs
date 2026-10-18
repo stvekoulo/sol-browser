@@ -1230,6 +1230,18 @@ try {
     assert.ok((await run(`A.readLink(${JSON.stringify(api.ref)})`)).text.includes('connect'),'same-site link read');
     assert.equal((await run(`A.readLink(${JSON.stringify(snap.links.find(l=>l.text==='Externe').ref)})`)).external,'https://example.com/ext','other sites go through Sol');
     assert.equal((await run('A.show("e99")')).ok,false,'unknown ref rejected');
+    // Barre d'actions sur la sélection : un vrai glisser de souris sur le paragraphe.
+    const para=await doc.evaluate('(()=>{const r=document.querySelector("main p").getBoundingClientRect();return {x:r.left+2,y:r.top+r.height/2,w:r.width}})()');
+    await doc.call('Input.dispatchMouseEvent',{type:'mousePressed',x:para.x,y:para.y,button:'left',clickCount:1});
+    await doc.call('Input.dispatchMouseEvent',{type:'mouseMoved',x:para.x+Math.min(para.w,160),y:para.y,button:'left'});
+    await doc.call('Input.dispatchMouseEvent',{type:'mouseReleased',x:para.x+Math.min(para.w,160),y:para.y,button:'left',clickCount:1});
+    const bar=await connect(await waitFor(async()=>(await targets()).find(t=>t.url.endsWith('#popup')),'popup view'));
+    await waitFor(()=>bar.evaluate('!!document.querySelector(".selection-bar")'),'selection bar shown');
+    await bar.evaluate('document.querySelector(".selection-more").click()');
+    await waitFor(()=>bar.evaluate('!!document.querySelector(".selection-row-more")'),'more selection actions');
+    await delay(300);
+    await writeFile(resolve(base,'sol-ai-selection.png'),Buffer.from((await bar.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    await command({type:'popup.close'});
     // Un favori pour l'éventail d'actions de la page d'accueil.
     await command({type:'bookmark.toggle',id:(await state()).tabs.find(t=>t.url===`${origin}/a`).id});
     // Catégories du classement quotidien sur la page d'accueil.

@@ -153,6 +153,7 @@ public sealed partial class PageHost
         s.HiddenPdfToolbarItems = CoreWebView2PdfToolbarItems.None; // recherche, pages, rotation, impression et enregistrement natifs
         _ = core.AddScriptToExecuteOnDocumentCreatedAsync(SidewaysScript);
         _ = core.AddScriptToExecuteOnDocumentCreatedAsync("document.addEventListener('pointerdown',e=>{if(e.isTrusted)window.chrome.webview.postMessage('sol.page.pointer')},true)");
+        _ = core.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "selection.js")));
         _ = core.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "video-cursor.js")));
         // Mémorise la sélection au clic droit pour Sol AI ; sans effet tant que l'utilisateur n'agit pas.
         _ = core.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "ai.js")));

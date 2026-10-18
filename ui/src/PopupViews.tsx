@@ -10,6 +10,7 @@ import GroupEditor from './GroupEditor';
 import QuickNotes from './QuickNotes';
 import { lazy, Suspense } from 'react';
 const SolAiAction = lazy(() => import('./SolAiAction'));
+import SelectionBar from './SelectionBar';
 import {DownloadCard} from './Downloads';
 import CommandPalette from './CommandPalette';
 import Row from './PopupRow';
@@ -23,6 +24,7 @@ export default function PopupViews({content,rootRef,opening,selected,settingsSec
 const root=rootRef;
 
 
+  if (content.popup === 'selection') return <SelectionBar key={opening} rootRef={root} content={content} />;
   if (content.popup === 'ai-action') return <div key={opening} ref={root} className="popup arriving"><Suspense fallback={null}><SolAiAction content={content}/></Suspense></div>;
 
   if (content.popup === 'palette')

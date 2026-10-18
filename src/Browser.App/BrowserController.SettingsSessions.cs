@@ -173,11 +173,12 @@ public sealed partial class BrowserController
         return false;
     }
 
-    public void DismissAiPopup() { if (_aiPopup) HidePopup(); }
+    public void DismissAiPopup() { if (_aiPopup || _selectionBar) HidePopup(); }
     private void HidePopup(bool cancelPermissions = true)
     {
         if (_aiPopup) { _aiPopup = false; CancelAi(); _aiContext = null; _aiBusy = false; }
         _groupEditing = null;
+        _selectionBar = false; _selectionMore = false;
         _siteReset = null;
         _paletteCommands.Clear();
         _paletteItems = null;
