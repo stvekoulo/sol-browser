@@ -63,7 +63,13 @@
   font-family: var(--font-ui);
   font-size: 13px;
   font-weight: 400;
-  white-space: nowrap;
+  /* Sol : jamais plus large que la place mesurée dans le cadre ; le texte passe à la ligne. */
+  width: max-content;
+  max-width: var(--eyt-room, 240px);
+  padding-block: 7px;
+  line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: anywhere;
   transform-origin: top left;
   opacity: 0;
   scale: 0.85;
@@ -72,6 +78,13 @@
   letter-spacing: 0em;}
 
 .eyt-say[data-on] { opacity: 1; scale: 1; }
+
+/* Sol : sans place à droite, la bulle s'ouvre à gauche, son coin carré toujours tourné vers le visage. */
+.eyt-say[data-side="left"] {
+  left: auto;
+  right: calc(50% + var(--eyt-size, 100px) * 0.36);
+  border-radius: 14px 6px 14px 14px;
+  transform-origin: top right;}
 
 .eyt-caret {
   width: 1.5px;

@@ -65,6 +65,7 @@ public sealed partial class BrowserController
         _welcome = welcome;
         (_window, _pages, _bridge, _popup, _dock, _tools, _settings) = (window, pages, bridge, popup, dock, panel, settings);
         _pages.PagePressed += DismissAiPopup;
+        WireSelection();
         _network = new NetworkInspector(panel.Post);
         _sessionSave.Tick += (_, _) => { _sessionSave.Stop(); SaveSession(); };
         StartNoteMaintenance();

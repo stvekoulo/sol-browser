@@ -1,4 +1,4 @@
-.start-history button {
+.start-history .nod-card > button {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -8,12 +8,12 @@
   text-align: left;
   border-radius: 14px;
 }
-.start-history button:hover {
+.start-history .nod-card > button:hover {
   background: var(--bg-glass-pill-hover);
   color: var(--text);
   box-shadow: var(--shadow-glass-pill);
 }
-.start-history button > span:nth-child(2) {
+.start-history .nod-card > button > span:nth-child(2) {
   display: flex;
   flex: 1;
   min-width: 0;

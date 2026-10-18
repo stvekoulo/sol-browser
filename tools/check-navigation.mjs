@@ -45,7 +45,7 @@ const server = createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'image/svg+xml' });
     return res.end('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="green"/></svg>');
   }
-  if (req.url === '/agent-doc') { res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'}); return res.end('<title>Guide</title><main><h1>Installation</h1><p>Lancez la commande setup.</p><a href="/agent-api">Référence API</a> <a href="https://example.com/ext">Externe</a><button>Envoyer</button><input name="q"><input type="password" name="password"></main>'); }
+  if (req.url === '/agent-doc') { res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'}); return res.end('<title>Guide</title><main><h1>Installation</h1><p>Lancez la commande setup.</p><a href="/agent-api">Référence API</a> <a href="https://example.com/ext">Externe</a><button>Envoyer</button><input name="q"><input type="password" name="password"><pre style="height:70px;margin:40px 120px 0 0;padding:12px;background:#eee">npm install sol</pre></main>'); }
   if (req.url === '/agent-api') { res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'}); return res.end('<title>API</title><main><h1>API</h1><p>La méthode connect ouvre une session.</p></main>'); }
   if (req.url === '/reset') return req.socket.resetAndDestroy();
   if (req.url === '/redirect') { res.writeHead(302, { Location: '/redirect' }); return res.end(); }
@@ -1230,6 +1230,23 @@ try {
     assert.ok((await run(`A.readLink(${JSON.stringify(api.ref)})`)).text.includes('connect'),'same-site link read');
     assert.equal((await run(`A.readLink(${JSON.stringify(snap.links.find(l=>l.text==='Externe').ref)})`)).external,'https://example.com/ext','other sites go through Sol');
     assert.equal((await run('A.show("e99")')).ok,false,'unknown ref rejected');
+    // Barre d'actions sur la sélection : un vrai glisser de souris sur le paragraphe.
+    const para=await doc.evaluate('(()=>{const r=document.querySelector("main p").getBoundingClientRect();return {x:r.left+2,y:r.top+r.height/2,w:r.width}})()');
+    await doc.call('Input.dispatchMouseEvent',{type:'mousePressed',x:para.x,y:para.y,button:'left',clickCount:1});
+    await doc.call('Input.dispatchMouseEvent',{type:'mouseMoved',x:para.x+Math.min(para.w,160),y:para.y,button:'left'});
+    await doc.call('Input.dispatchMouseEvent',{type:'mouseReleased',x:para.x+Math.min(para.w,160),y:para.y,button:'left',clickCount:1});
+    // L'éventail s'ouvre au coin du texte choisi (Copier, Sol AI, Plus).
+    await waitFor(()=>doc.evaluate('!!document.querySelector("sol-fan")'),'selection fan attached');
+    await delay(700);
+    await writeFile(resolve(base,'sol-ai-selection.png'),Buffer.from((await doc.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    await doc.evaluate('getSelection().removeAllRanges()');
+    await delay(500);
+    // Éventail dans la page, au coin d'un bloc de code survolé.
+    const pre=await doc.evaluate('(()=>{const r=document.querySelector("pre").getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2}})()');
+    await doc.call('Input.dispatchMouseEvent',{type:'mouseMoved',x:pre.x-5,y:pre.y});
+    await doc.call('Input.dispatchMouseEvent',{type:'mouseMoved',x:pre.x,y:pre.y});
+    await delay(900);
+    await writeFile(resolve(base,'sol-ai-page-fan.png'),Buffer.from((await doc.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
     // Un favori pour l'éventail d'actions de la page d'accueil.
     await command({type:'bookmark.toggle',id:(await state()).tabs.find(t=>t.url===`${origin}/a`).id});
     // Catégories du classement quotidien sur la page d'accueil.

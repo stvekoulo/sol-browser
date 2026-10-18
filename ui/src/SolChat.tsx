@@ -6,6 +6,8 @@ import SolMarkdown from './SolMarkdown';
 import { aiError, usagePage } from './solAiMessages';
 import { Message, MessageBubble, MessageBubbleContent, MessageContent, MessageScroller, MessageTyping } from '@/components/agents/message';
 import { PromptInput } from '@/components/agents/prompt-input';
+import { CornerActions } from '@/components/bencho/CornerActions';
+import { Copy, NotebookPen } from 'lucide-react';
 import SolAiTrace, { type AgentState } from './SolAiTrace';
 import './chat.css';
 
@@ -44,7 +46,13 @@ export default function SolChat() {
         <MessageContent>
           {m.from === 'assistant' && !m.text && state.busy && i === state.messages.length - 1
             ? <MessageTyping label={t('Sol AI répond', 'Sol AI is answering')} />
-            : <MessageBubble variant={m.from === 'user' ? 'solid' : 'ghost'}><MessageBubbleContent>{m.from === 'user' ? m.text : <SolMarkdown text={m.text} />}</MessageBubbleContent></MessageBubble>}
+            : m.from === 'assistant' && m.text && !(state.busy && i === state.messages.length - 1)
+              // Éventail au coin d'une réponse terminée : la copier ou en faire une note.
+              ? <CornerActions corner={16} actions={[
+                  { id: 'copy', label: t('Copier la réponse', 'Copy the answer'), Icon: Copy, run: () => send({ type: 'chat.copy', id: String(i) }) },
+                  { id: 'note', label: t('En faire une note', 'Make it a note'), Icon: NotebookPen, run: () => send({ type: 'chat.note', id: String(i) }) },
+                ]}><MessageBubble variant="ghost"><MessageBubbleContent><SolMarkdown text={m.text} /></MessageBubbleContent></MessageBubble></CornerActions>
+              : <MessageBubble variant={m.from === 'user' ? 'solid' : 'ghost'}><MessageBubbleContent>{m.from === 'user' ? m.text : <SolMarkdown text={m.text} />}</MessageBubbleContent></MessageBubble>}
         </MessageContent>
       </Message>)}
       <SolAiTrace agent={state.agent ?? null} busy={state.busy} />
