@@ -13,8 +13,11 @@ foreach ($file in $Files) {
         Write-Host "Uploading $($file.Name) ($($file.Length) bytes), attempt $attempt/5"
         try {
             # Reopen the file on every attempt, including after a broken transport connection.
+            # 300 s per attempt: a stalled upload is retried quickly instead of eating the one-hour job limit
+            # (v1.0.14: three 900 s attempts stalled on the first file). At ~1.2 MB/s the largest file takes
+            # about 95 s. ponytail: a fixed limit, raise it if uploads get slower than ~400 KB/s.
             Invoke-RestMethod -Method Put -InFile $file.FullName -ContentType 'application/octet-stream' `
-                -Headers $Headers -Uri $uri -MaximumRetryCount 0 -TimeoutSec 900 | Out-Null
+                -Headers $Headers -Uri $uri -MaximumRetryCount 0 -TimeoutSec 300 | Out-Null
             break
         } catch {
             $exception = $_.Exception
