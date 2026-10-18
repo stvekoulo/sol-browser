@@ -88,6 +88,9 @@ public sealed class Settings
     public bool AutoPip { get; set; } = true;
     /// <summary>Largeur de la carte latérale, réglée en tirant son bord droit.</summary>
     public double SidebarWidth { get; set; } = 296;
+    /// <summary>Largeur préférée du chat Sol AI, conservée même quand une petite fenêtre le réduit.</summary>
+    private double _chatWidth = 380;
+    public double ChatWidth { get => _chatWidth; set => _chatWidth = double.IsFinite(value) ? Math.Clamp(value, 280, 760) : 380; }
     /// <summary>Hauteur du panneau des outils de développement, réglée en tirant son bord haut.</summary>
     public double PanelHeight { get; set; } = 300;
     /// <summary>Écrans affichés côte à côte par la comparaison d'écrans ; vide : le choix par défaut.</summary>

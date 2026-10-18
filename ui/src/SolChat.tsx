@@ -3,7 +3,7 @@ import { EyeTracker } from '@/components/bencho/EyeTracker';
 import { onMessage, send } from './bridge';
 import { t, useLang } from './i18n';
 import SolMarkdown from './SolMarkdown';
-import { aiError, usagePage } from './solAiMessages';
+import { aiError } from './solAiMessages';
 import { Message, MessageBubble, MessageBubbleContent, MessageContent, MessageScroller, MessageTyping } from '@/components/agents/message';
 import { PromptInput } from '@/components/agents/prompt-input';
 import { CornerActions } from '@/components/bencho/CornerActions';
@@ -47,8 +47,8 @@ export default function SolChat() {
           {m.from === 'assistant' && !m.text && state.busy && i === state.messages.length - 1
             ? <MessageTyping label={t('Sol AI répond', 'Sol AI is answering')} />
             : m.from === 'assistant' && m.text && !(state.busy && i === state.messages.length - 1)
-              // Éventail au coin d'une réponse terminée : la copier ou en faire une note.
-              ? <CornerActions corner={16} actions={[
+              // Commandes dans le flux : aucune sortie du panneau, même en largeur réduite.
+              ? <CornerActions layout="inline" actions={[
                   { id: 'copy', label: t('Copier la réponse', 'Copy the answer'), Icon: Copy, run: () => send({ type: 'chat.copy', id: String(i) }) },
                   { id: 'note', label: t('En faire une note', 'Make it a note'), Icon: NotebookPen, run: () => send({ type: 'chat.note', id: String(i) }) },
                 ]}><MessageBubble variant="ghost"><MessageBubbleContent><SolMarkdown text={m.text} /></MessageBubbleContent></MessageBubble></CornerActions>
@@ -67,6 +67,5 @@ export default function SolChat() {
           {state.signingIn
             ? <><p role="status">{t('Terminez la connexion dans le navigateur…', 'Finish signing in through the browser…')}</p><button className="pill-action" onClick={() => send({ type: 'ai.connect.cancel' })}>{t('Annuler', 'Cancel')}</button></>
             : <button className="pill-action primary" onClick={() => send({ type: 'ai.connect' })}>{t('Continuer avec ChatGPT', 'Continue with ChatGPT')}</button>}</div>}
-    {state.ready && <footer className="sol-chat-hint"><span>{t('Les questions sont envoyées à OpenAI.', 'Questions are sent to OpenAI.')}{state.account ? ` · ${state.account}` : ''}</span><button className="pill-action" onClick={() => send({ type: 'tab.open', url: usagePage })}>{t('Gérer l’usage', 'Manage usage')}</button></footer>}
   </div>;
 }

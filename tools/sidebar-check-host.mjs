@@ -6,7 +6,7 @@ import { copyFile, mkdir, rm, writeFile } from 'node:fs/promises';
 import { relative, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
-export async function sidebarHost(executable,{serve=null,downloads=false,captures=false,privateMode=false,media=false,performance=false,saverTest=false}={}) {
+export async function sidebarHost(executable,{serve=null,downloads=false,captures=false,privateMode=false,media=false,performance=false,saverTest=false,visible=false}={}) {
   const profileName=`sidebar-check-${Date.now()}`,base = resolve(`bin/${profileName}`), profile = resolve(base, 'profiles',profileName);
   await mkdir(profile, {recursive: true});
   if(privateMode)await writeFile(resolve(profile,'temporary'),'');
@@ -53,7 +53,7 @@ export async function sidebarHost(executable,{serve=null,downloads=false,capture
   };
   const launch = async(height=950,width=1000)=> {
     failure='';
-    app = spawn(resolve(executable),[`--profile=${profileName}`,`--bounds=-9000,-9000,${width},${height}`,...(privateMode?['--private']:[])],{windowsHide:true,env,stdio:['ignore','pipe','pipe']});
+    app = spawn(resolve(executable),[`--profile=${profileName}`,`--bounds=${visible?'100,80':'-9000,-9000'},${width},${height}`,...(privateMode?['--private']:[])],{windowsHide:true,env,stdio:['ignore','pipe','pipe']});
     app.stderr.on('data',data=>failure+=data);app.stdout.on('data',data=>failure+=data);
     const sidebar=await connect('#sidebar');
     await wait(()=>sidebar.evaluate('!!document.querySelector(".sidebar-card")').catch(()=>false),'sidebar ready');

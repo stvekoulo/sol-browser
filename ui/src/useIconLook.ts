@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 export function useIconLook(src: string | null) {
   const [look, setLook] = useState<{ tone: string; color: string | null }>({ tone: '', color: null });
   useEffect(() => {
-    setLook({ tone: '', color: null });
+    setLook(previous => previous.tone || previous.color ? { tone: '', color: null } : previous);
     if (!src) return;
     const img = new Image();
     img.onload = () => {

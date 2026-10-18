@@ -3,6 +3,18 @@ using Browser.Core;
 public class JsonFileStoreTests : IDisposable
 {
     [Fact]
+    public void Chat_width_defaults_for_existing_profiles_and_survives_restart()
+    {
+        var path = File_("chat-width.json");
+        File.WriteAllText(path, "{}");
+        var settings = JsonFileStore.Load<Settings>(path);
+        Assert.Equal(380, settings.ChatWidth);
+        settings.ChatWidth = 640;
+        Assert.True(JsonFileStore.Save(path, settings));
+        Assert.Equal(640, JsonFileStore.Load<Settings>(path).ChatWidth);
+    }
+
+    [Fact]
     public void Full_screen_is_enabled_for_existing_profiles_and_can_be_disabled()
     {
         var path = File_("fullscreen.json");
