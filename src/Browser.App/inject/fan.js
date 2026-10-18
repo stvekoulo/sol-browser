@@ -3,12 +3,28 @@
 // ui/licenses/bencho-MIT.txt). Icônes : tracés de Lucide (ISC). Isolé dans un Shadow DOM fermé : la page ne peut ni
 // le styler ni le lire. Chaque message porte une clé que Sol a écrite dans ce script : une page ne peut pas l'imiter.
 (() => {
-  if (window.top !== window || window.__solFan) return;
+  if (window.top !== window || window.__solFan || location.hostname === 'start.sol') return;
   const KEY = '__SOL_FAN_KEY__';
   const webview = window.chrome?.webview;
   if (!webview) return;
   window.__solFan = true;
   const post = webview.postMessage.bind(webview);
+  let config = /*__SOL_FAN_SETTINGS__*/null || { enabled: true, trigger: 0 };
+  let pending = null, openTimer = 0;
+  const cancelOpen = () => { clearTimeout(openTimer); openTimer = 0; pending = null; };
+  webview.addEventListener('message', e => {
+    if (e.data?.event !== 'fan-settings') return;
+    const next = e.data.fan;
+    if (!next || next.enabled === config.enabled && next.trigger === config.trigger) return;
+    config = next; cancelOpen(); clearDismissal(); hide();
+  });
+  const request = target => {
+    if (!config.enabled || config.trigger === 2) return;
+    if (config.trigger !== 1) { show(target); return; }
+    if (pending?.el === target.el && pending?.text === target.text) return;
+    cancelOpen(); pending = target;
+    openTimer = setTimeout(() => { cancelOpen(); if (!document.hidden && (target.range || target.el.isConnected)) show(target); }, 5000);
+  };
   const fr = /^fr\b/i.test(navigator.language || '');
   const T = (a, b) => (fr ? a : b);
 
@@ -135,7 +151,7 @@
   const clearDismissal = () => { dismissed = false; removeEventListener('pointermove', resumePointer, true); };
   const resumePointer = e => {
     if (!e.isTrusted || e.pointerType === 'touch' || (!e.movementX && !e.movementY)) return;
-    clearDismissal(); const target = kindOf(e.target); if (target) show(target);
+    clearDismissal(); const target = kindOf(e.target); if (target) request(target);
   };
   const dismiss = () => {
     dismissed = true; hide();
@@ -157,7 +173,8 @@
   };
   const schedulePlace = () => { if (current && !frame) frame = requestAnimationFrame(() => { frame = 0; place(); }); };
   const show = target => {
-    clearDismissal();
+    if (!config.enabled) return;
+    cancelOpen(); clearDismissal();
     clearTimeout(hideTimer); cancelAnimationFrame(frame); hideTimer = frame = 0;
     attach();
     const actions = actionsFor(target), corner = target.el ? Math.min(16, parseFloat(getComputedStyle(target.el).borderTopRightRadius) || 0) : 0;
@@ -174,7 +191,7 @@
     pad.classList.add('on'); place(); if (current) animateFan(true, current);
   };
   const hide = () => {
-    clearTimeout(hideTimer); cancelAnimationFrame(frame); cancelAnimationFrame(selectionFrame);
+    cancelOpen(); clearTimeout(hideTimer); cancelAnimationFrame(frame); cancelAnimationFrame(selectionFrame);
     frame = selectionFrame = hideTimer = 0;
     pad?.classList.remove('on');
     if (current) animateFan(false, current);
@@ -185,17 +202,17 @@
   /* Ouverture immédiate ; une courte grâce permet de traverser l'espace vers les commandes. */
   const inside = e => { const p = e.composedPath(); return p.includes(host) || (!!current?.el && p.includes(current.el)); };
   addEventListener('pointerover', e => {
-    if (!e.isTrusted || e.pointerType === 'touch' || dismissed) return;
+    if (!e.isTrusted || e.pointerType === 'touch' || dismissed || !config.enabled || config.trigger === 2) return;
     if (inside(e)) { clearTimeout(hideTimer); hideTimer = 0; return; }
     /* l'éventail d'une sélection reste tant que la sélection existe */
     if (current?.kind === 'selection') return;
     const target = kindOf(e.target);
-    if (!target) { leave(); return; }
-    show(target);
+    if (!target) { cancelOpen(); leave(); return; }
+    request(target);
   }, true);
-  addEventListener('pointerout', e => { if (e.isTrusted && current?.kind !== 'selection' && !e.relatedTarget) leave(); }, true);
+  addEventListener('pointerout', e => { if (!e.isTrusted) return; if (pending?.el && (!(e.relatedTarget instanceof Node) || !pending.el.contains(e.relatedTarget))) cancelOpen(); if (current?.kind !== 'selection' && !e.relatedTarget && config.trigger !== 2) leave(); }, true);
   addEventListener('focusin', e => {
-    if (inside(e) || current?.kind === 'selection') return;
+    if (!config.enabled || inside(e) || current?.kind === 'selection' || !e.target.matches?.(':focus-visible')) return;
     const target = kindOf(e.target); if (target) show(target); else leave();
   }, true);
 
@@ -212,24 +229,32 @@
   const onSelect = () => {
     const target = selected();
     cancelAnimationFrame(selectionFrame); selectionFrame = 0;
-    if (target) show(target); else if (current?.kind === 'selection') hide();
+    if (target) request(target); else if (current?.kind === 'selection') hide();
   };
+  addEventListener('contextmenu', e => {
+    if (!e.isTrusted || !config.enabled || config.trigger !== 2 || e.composedPath().includes(host)) return;
+    if (e.target.closest?.('input,textarea,[contenteditable]:not([contenteditable="false"])')) return;
+    const target = selected() || kindOf(e.target); if (!target) return;
+    e.preventDefault(); e.stopImmediatePropagation(); show(target);
+  }, true);
+  addEventListener('pointerdown', e => { if (!e.composedPath().includes(host) && config.trigger === 2) hide(); }, true);
   addEventListener('mouseup', e => { if (e.isTrusted && e.button === 0 && !e.composedPath().includes(host)) onSelect(); }, true);
   addEventListener('keyup', e => { if (e.isTrusted && e.shiftKey && e.key !== 'Escape') onSelect(); }, true);
   document.addEventListener('selectionchange', () => {
+    if (pending?.kind === 'selection' && (getSelection()?.isCollapsed || getSelection()?.toString().trim() !== pending.text)) cancelOpen();
     if (current?.kind !== 'selection') return;
     if (getSelection()?.isCollapsed) hide(); else if (!selectionFrame) selectionFrame = requestAnimationFrame(onSelect);
   });
   addEventListener('scroll', schedulePlace, { passive: true, capture: true });
   addEventListener('resize', schedulePlace, { passive: true });
-  addEventListener('keydown', e => { if (e.key === 'Escape' && current) dismiss(); }, true);
+  addEventListener('keydown', e => { if (e.key === 'Escape') { cancelOpen(); if (current) dismiss(); } }, true);
   addEventListener('pagehide', hide);
   document.addEventListener('visibilitychange', () => { if (document.hidden) hide(); });
 
   /* ── un clic part vers Sol, avec la clé ── */
   function onAction(e) {
     const b = e.target.closest?.('button');
-    if (!b || !current || !e.isTrusted) return;
+    if (!b || !current || !e.isTrusted || !config.enabled) return;
     const [action, , value] = current.actions[Number(b.dataset.i)];
     const r = rectOf(current);
     post(JSON.stringify({ sol: 'fan', key: KEY, kind: current.kind, action, value: String(value).slice(0, 50000),

@@ -19,11 +19,13 @@ public sealed partial class BrowserController
     private (int Id, string Data)? _wallpaperLoaded; // photo en mémoire, prête à être envoyée aux pages d'accueil
     private int _wallpaperRequest;
 
-    private StartWallpaper? CurrentWallpaper => StartWallpapers.Selected(_settings, DateOnly.FromDateTime(DateTime.Now));
+    private StartWallpaper? CurrentWallpaper => _settings.StartWallpaper && !_settings.StartWallpaperDaily && _settings.StartWallpaperCustom
+        ? new(-1, "", "", 40, 68, 105) : StartWallpapers.Selected(_settings, DateOnly.FromDateTime(DateTime.Now));
 
     private void SetWallpaper(int photo)
     {
         if (photo != 0 && StartWallpapers.Find(photo) is null) return;
+        _settings.StartWallpaperCustom = false;
         (_settings.StartWallpaperPhoto, _settings.StartWallpaperDaily) = (photo, false);
         WallpaperChanged();
     }
@@ -66,7 +68,7 @@ public sealed partial class BrowserController
         var json = JsonSerializer.Serialize(new
         {
             @event = "start-wallpaper", url = data ?? "", tint = data is null ? null : tint,
-            author = data is null ? null : wanted!.Author, page = data is null ? null : wanted!.Page,
+            author = data is null || wanted?.Id == -1 ? null : wanted!.Author, page = data is null || wanted?.Id == -1 ? null : wanted!.Page,
         });
         foreach (var tab in _tabs.Tabs.Where(t => t.Url == Settings.DefaultHomePage && (tabId is null || t.Id == tabId) && !_pages.IsAsleep(t.Id)))
             _pages.PostStart(tab.Id, json);
@@ -78,6 +80,7 @@ public sealed partial class BrowserController
         var file = Path.Combine(WallpaperFolder, wallpaper.Id + ".jpg");
         try
         {
+            if (wallpaper.Id == -1) return File.Exists(CustomWallpaperFile) ? "data:image/jpeg;base64," + Convert.ToBase64String(await File.ReadAllBytesAsync(CustomWallpaperFile)) : null;
             if (!File.Exists(file))
             {
                 var bytes = await WallpaperHttp.GetByteArrayAsync(wallpaper.ImageUrl);

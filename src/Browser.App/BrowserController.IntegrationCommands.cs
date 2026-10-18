@@ -14,6 +14,16 @@ public sealed partial class BrowserController
         switch (c.Type)
         {
             case "settings.set":
+                if (id == "fanTrigger")
+                {
+                    if (c.Index is not (0 or 1 or 2)) return true;
+                    _settings.FanTrigger = c.Index.Value;
+                    JsonFileStore.Save(AppPaths.Settings, _settings);
+                    _pages.ApplySettings(); _bridge.BroadcastTheme();
+                    if (_settingsOpen) _popup.Post(SettingsJson());
+                    return true;
+                }
+                if (id == "wallpaperCustom") { _window.DispatcherQueue.TryEnqueue(() => _ = PickWallpaperAsync()); return true; }
                 if (id == "aiModel")
                 {
                     // 0 : automatique ; n : n-ième modèle de la liste proposée au compte.

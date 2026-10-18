@@ -15,7 +15,7 @@ export function useFanMotion(on: boolean, inline: boolean, spots: { x: number; y
   useLayoutEffect(() => {
     const buttons = [...(element.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])];
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      if (!on && !inline) queueMicrotask(closed);
+      if (!on) queueMicrotask(closed);
       return;
     }
     const animations = buttons.map((button, index) => {

@@ -1,4 +1,5 @@
 import type {HostEvent} from './bridge';
+import {setFanSettings} from './components/bencho/fanSettings';
 
 // Fonds neutres des thèmes imposés. En thème par défaut, le fond de l'interface est celui de la page.
 // Le sombre est proche du noir des sites sombres : « Sombre » et « Système » rendent comme « Par défaut » sur un tel site.
@@ -29,6 +30,7 @@ export function sidebarTheme(element:HTMLElement|null){
 
 export function applyTheme(ev: HostEvent) {
   latest=ev;
+  if (ev.fan) setFanSettings(ev.fan);
   const root = document.documentElement.style;
   if (location.hostname === 'ui.navigateur' || (location.hostname === 'start.sol' && location.hash === '#notes')) {
     // Même facteur que les dimensions natives, fourni par l'hôte.

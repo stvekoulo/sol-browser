@@ -4,6 +4,11 @@ namespace Browser.Core;
 
 public sealed class Settings
 {
+    public bool FanEnabled { get; set; } = true;
+    private int _fanTrigger;
+    // 0 : survol immédiat, 1 : survol de cinq secondes, 2 : clic droit.
+    public int FanTrigger { get => _fanTrigger; set => _fanTrigger = value is >= 0 and <= 2 ? value : 0; }
+    public bool StartWallpaperCustom { get; set; }
     public int NotesArchiveDays { get; set; }
     // Classement quotidien des favoris et de l'historique par Sol AI : envoi à OpenAI, donc désactivé par défaut.
     public bool SolAiCategories { get; set; }

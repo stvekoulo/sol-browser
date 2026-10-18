@@ -12,6 +12,7 @@ import {HomeField,SiteData,WallpaperSettings,TintSettings} from './SettingsField
 import {RangeSlider} from '@/components/motion/range-slider';
 import SolAiAccount from './SolAiAccount';
 import './settings-scale.css';
+import FanSettings from './FanSettings';
 export default function SettingsPopup({content,rootRef,settingsSection,setSettingsSection,opening}:{content:Extract<Content,{popup:'settings'}>;rootRef:RefObject<HTMLDivElement|null>;settingsSection:string;setSettingsSection:(section:string)=>void;opening:number}){
 const root=rootRef;
     return (
@@ -93,9 +94,10 @@ const root=rootRef;
         </div>
 <div className="theme-row" hidden={settingsSection!=='appearance'}><span className="row-title">{t('Police','Font')}</span><SolSelect id="font" label={t('Police','Font')} value={content.font} options={fontLabels(t('Défaut','Default'),t('Système','System'))} onChange={index=>send({type:'settings.set',id:'font',index})}/></div>
 <div className="theme-row" hidden={settingsSection!=='general'}><span className="row-title">{t('Moteur de recherche','Search engine')}</span><SolSelect id="engine" label={t('Moteur de recherche','Search engine')} value={content.engine} options={content.engines} onChange={index=>send({type:'settings.set',id:'engine',index})}/></div>
+        {settingsSection === 'general' && <FanSettings enabled={content.fanEnabled} trigger={content.fanTrigger} />}
         {settingsSection === 'general' && <HomeField key={content.home} home={content.home} />}
         {settingsSection === 'appearance' && <TintSettings items={content.tint} />}
-        {settingsSection === 'appearance' && content.wallpaperOn && <WallpaperSettings photo={content.wallpaper} daily={content.wallpaperDaily} photos={content.wallpapers} />}
+        {settingsSection === 'appearance' && content.wallpaperOn && <WallpaperSettings custom={content.wallpaperCustom} photo={content.wallpaper} daily={content.wallpaperDaily} photos={content.wallpapers} />}
         <div className="popup-list">
           {content.items.filter(s => (['startWallpaper','scrollbars','blur'].includes(s.key) ? 'appearance' : ['onlineSuggestions','passwords'].includes(s.key) ? 'privacy' : 'general') === settingsSection).map(s => (
 <SettingToggle key={s.key} setting={s}/>

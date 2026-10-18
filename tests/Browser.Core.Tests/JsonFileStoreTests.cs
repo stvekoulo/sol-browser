@@ -134,4 +134,23 @@ public class JsonFileStoreTests : IDisposable
         Assert.False(File.Exists(path));
         Assert.Equal("{ not json", File.ReadAllText(path + ".corrupt"));
     }
+    [Fact]
+    public void Fan_preferences_survive_restart_and_older_profiles_keep_immediate_hover()
+    {
+        var path = File_("fan.json");
+        File.WriteAllText(path, "{}");
+        Assert.True(JsonFileStore.Load<Settings>(path).FanEnabled);
+        Assert.Equal(0, JsonFileStore.Load<Settings>(path).FanTrigger);
+        foreach (var trigger in new[] { 0, 1, 2 })
+        {
+            Assert.True(JsonFileStore.Save(path, new Settings { FanEnabled = false, FanTrigger = trigger, StartWallpaperCustom = true }));
+            var saved = JsonFileStore.Load<Settings>(path);
+            Assert.False(saved.FanEnabled);
+            Assert.Equal(trigger, saved.FanTrigger);
+            Assert.True(saved.StartWallpaperCustom);
+        }
+        Assert.Equal(0, new Settings { FanTrigger = -1 }.FanTrigger);
+        Assert.Equal(0, new Settings { FanTrigger = 3 }.FanTrigger);
+    }
+
 }

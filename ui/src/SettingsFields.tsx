@@ -50,33 +50,34 @@ export function SiteData({ status }: { status: 'idle' | 'clearing' | 'done' | 'f
 
 // Fond du nouvel onglet : l'image de Sol, une photo choisie, ou une nouvelle chaque jour. Les vignettes viennent du
 // service de photos : elles ne sont demandées que lorsque la grille est ouverte.
-export function WallpaperSettings({ photo, daily, photos }: { photo: number; daily: boolean; photos: Wallpaper[] }) {
+export function WallpaperSettings({ photo, daily, photos, custom }: { photo: number; daily: boolean; photos: Wallpaper[]; custom: boolean }) {
   const [choosing, setChoosing] = useState(false);
   const pick = (id: number) => send({ type: 'settings.set', id: 'wallpaper', index: id });
-  const current = photos.find(p => p.id === photo);
+  const current = custom ? undefined : photos.find(p => p.id === photo);
   return (
     <div className="theme-row wallpaper-settings">
       <span className="row-title">{t('Image du nouvel onglet', 'New tab image')}</span>
       <SolTabs value={daily?'daily':'chosen'} label={t('Image du nouvel onglet','New tab image')} change={value=>send({type:'settings.set',id:'wallpaperDaily',index:value==='daily'?1:0})} items={[
         {value:'chosen',label:t('Image choisie','Chosen image')},{value:'daily',label:t('Nouvelle chaque jour','New every day')}
       ]}/>
+      <Button variant="ghost" size="sm" className="pill-action" onClick={()=>send({type:'settings.set',id:'wallpaperCustom',index:1})}>{t('Choisir ma photo…','Choose my photo…')}</Button>
       {daily ? (
         <p className="row-hint">{t('Une photo différente chaque jour, parmi la sélection.', 'A different photo every day, from the selection.')}</p>
       ) : (
         <>
           <p className="row-hint">
-            {current ? t(`Photo de ${current.author}.`, `Photo by ${current.author}.`) : t('Image de Sol.', 'Sol’s image.')}
+            {custom ? t('Votre photo personnelle.', 'Your personal photo.') : current ? t(`Photo de ${current.author}.`, `Photo by ${current.author}.`) : t('Image de Sol.', 'Sol’s image.')}
           </p>
           <Button variant="ghost" size="sm" whileHover={undefined} className="pill-action" aria-expanded={choosing} onClick={() => setChoosing(!choosing)}>
             {choosing ? t('Masquer les images', 'Hide images') : t('Choisir une image', 'Choose an image')}
           </Button>
           {choosing && (
             <div className="wallpaper-grid" role="radiogroup" aria-label={t('Images proposées', 'Available images')}>
-              <Button variant="ghost" size="sm" whileHover={undefined} role="radio" aria-checked={photo === 0} className={`wallpaper-tile${photo === 0 ? ' active' : ''}`} title={t('Image de Sol', 'Sol’s image')} onClick={() => pick(0)}>
+              <Button variant="ghost" size="sm" whileHover={undefined} role="radio" aria-checked={!custom && photo === 0} className={`wallpaper-tile${!custom && photo === 0 ? ' active' : ''}`} title={t('Image de Sol', 'Sol’s image')} onClick={() => pick(0)}>
                 <img src={solWallpaper} alt={t('Image de Sol', 'Sol’s image')} draggable={false} />
               </Button>
               {photos.map(p => (
-                <Button variant="ghost" size="sm" whileHover={undefined} key={p.id} role="radio" aria-checked={photo === p.id} className={`wallpaper-tile${photo === p.id ? ' active' : ''}`} title={t(`Photo de ${p.author}`, `Photo by ${p.author}`)} onClick={() => pick(p.id)}>
+                <Button variant="ghost" size="sm" whileHover={undefined} key={p.id} role="radio" aria-checked={!custom && photo === p.id} className={`wallpaper-tile${!custom && photo === p.id ? ' active' : ''}`} title={t(`Photo de ${p.author}`, `Photo by ${p.author}`)} onClick={() => pick(p.id)}>
                   <img src={p.thumb} alt={t(`Photo de ${p.author}`, `Photo by ${p.author}`)} loading="lazy" draggable={false} />
                 </Button>
               ))}

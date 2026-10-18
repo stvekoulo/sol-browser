@@ -139,6 +139,7 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
             privateMode = AppPaths.Private || _activePrivate,
             font = on?.Font ?? "default",
             uiScale = on?.UiFactor ?? 0.92,
+            fan = new { enabled = on?.FanEnabled ?? true, trigger = on?.FanTrigger ?? 0 },
             tint = new { topbar = on?.TintTopbar ?? true, sidebar = on?.TintSidebar ?? true, menus = on?.TintMenus ?? true, background = on?.TintBackground ?? true },
         });
         if (!force && s_lastThemeMsg == json) return;
@@ -186,7 +187,7 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
         core.Settings.AreDefaultContextMenusEnabled = false;
         core.Settings.IsStatusBarEnabled = false;
         core.Settings.IsZoomControlEnabled = false;
-        core.Settings.AreBrowserAcceleratorKeysEnabled = false;
+        NativeDownloadUi.Suppress(core);
         core.Settings.IsPasswordAutosaveEnabled = false;
         core.Settings.IsGeneralAutofillEnabled = false;
         core.PermissionRequested += (_, e) => e.State = CoreWebView2PermissionState.Deny;

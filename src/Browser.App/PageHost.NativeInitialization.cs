@@ -95,7 +95,7 @@ public sealed partial class PageHost
         {
             if(!core.Source.StartsWith("https://start.sol/",StringComparison.Ordinal)) { view.Opacity=1;ContentPainted?.Invoke(); }
         };
-        Harden(core);
+        await Harden(core);
         core.SetVirtualHostNameToFolderMapping("start.sol", Path.Combine(AppContext.BaseDirectory, "ui"), CoreWebView2HostResourceAccessKind.Deny);
         core.WebMessageReceived += (_, e) =>
         {

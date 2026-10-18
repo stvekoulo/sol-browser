@@ -106,6 +106,7 @@ public sealed partial class BrowserController
         check = Program.Check,
         zoom = (int)Math.Round(_settings.PageZoom * 100),
         uiScale = _settings.UiScale,
+        fanEnabled = _settings.FanEnabled, fanTrigger = _settings.FanTrigger, wallpaperCustom = _settings.StartWallpaperCustom,
         theme = Math.Max(0, Array.IndexOf(Themes, _settings.Theme)),
         language = Math.Max(0, Array.IndexOf(Languages, _settings.Language)),
         spelling = _settings.Spelling,
