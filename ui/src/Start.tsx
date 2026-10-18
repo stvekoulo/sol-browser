@@ -15,7 +15,7 @@ type StartData = {
   favorites: Site[];
   history: Site[];
   groups: { id: string; name: string; color: string; count: number }[];
-  categories?: { name: string; links: Site[] }[];
+  categories?: { name: string; total: number; links: Site[] }[];
 };
 
 const empty: StartData = {
@@ -87,6 +87,7 @@ export default function Start() {
   const [photo, setPhoto] = useState<{ url: string; author?: string; page?: string }>({ url: '' });
   // Favoris : quatre rangées, puis « Voir tout ». Le nombre de colonnes suit la largeur de la page.
   const [allFavorites, setAllFavorites] = useState(false);
+  const [openTopic, setOpenTopic] = useState('');
   const [columns, setColumns] = useState(9);
   const favoritesGrid = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -176,14 +177,21 @@ export default function Start() {
             <h2>{t('Vos sujets', 'Your topics')}</h2>
             <div className="start-categories">
               {data.categories.map(category => (
-                <div key={category.name} className="start-category">
-                  <h3>{category.name}</h3>
-                  {category.links.map(site => (
+                <div key={category.name} className={`start-category${openTopic === category.name ? ' open' : ''}`}>
+                  <h3>{category.name}<small>{category.total}</small></h3>
+                  {category.links.slice(0, openTopic === category.name ? undefined : 8).map(site => (
                     <button key={site.url} onClick={() => open(site.url)} title={site.url}>
                       <HistoryIcon site={site} />
                       <span>{site.title || formatDomain(site.url)}</span>
                     </button>
                   ))}
+                  {category.total > 8 && (
+                    <button className="start-category-more" onClick={() => setOpenTopic(openTopic === category.name ? '' : category.name)}>
+                      {openTopic === category.name
+                        ? category.total > category.links.length ? t(`Voir moins · ${category.total - category.links.length} autres dans l’historique`, `Show less · ${category.total - category.links.length} more in history`) : t('Voir moins', 'Show less')
+                        : t(`Voir tout (${category.total})`, `Show all (${category.total})`)}
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

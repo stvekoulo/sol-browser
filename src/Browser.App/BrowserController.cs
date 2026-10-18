@@ -71,6 +71,7 @@ public sealed partial class BrowserController
         Directory.CreateDirectory(AppPaths.DataDir);
         _db = new BrowserDb(AppPaths.Database);
         _capture = new CaptureService(window, json => CapturePanel?.Post(json), pages.RestoreCaptureViewportAsync);
+        _chatGpt.PreferredModel = _settings.SolAiChatModel;
         _chatGpt.Changed += () => _window.DispatcherQueue.TryEnqueue(() =>
         {
             if (_closingWindow) return;
@@ -123,7 +124,7 @@ public sealed partial class BrowserController
                 _ = PostStartWallpaperAsync(id);
                 foreach (var url in _db.Bookmarks().Select(b => b.Url).Take(48)) FetchStartIcon(url);
                 if (!_pages.IsPrivate(id))
-                    foreach (var url in _db.RecentHistory(12).Select(v => v.Url).Concat(_categories.Categories.SelectMany(c => c.Links.Take(8)).Select(l => l.Url))) FetchStartIcon(url);
+                    foreach (var url in _db.RecentHistory(12).Select(v => v.Url).Concat(CategoryViews().SelectMany(c => c.Links.Take(8)).Select(l => l.Url))) FetchStartIcon(url);
             }
             else if (command.Type == "start.navigate") _pages.Navigate(id, Resolve(command.Input!));
             else if (command.Type == "start.favorites") _ = FetchFavoriteIconsAsync();

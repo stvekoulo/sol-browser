@@ -119,4 +119,11 @@ public sealed class ChatGptOAuthTests
         Assert.Equal("http-429", ChatGptOAuth.ErrorCode("not json", 429));
         Assert.Equal("subscription_sharing_usage_unavailable", ChatGptOAuth.ErrorCode("""{"error":{"code":"subscription_sharing_usage_unavailable"}}""", 403));
     }
+
+    [Fact]
+    public void ListsAccountModelsWithDisplayNames()
+    {
+        var models = ChatGptOAuth.Models("""{"models":[{"slug":"a","visibility":"hide"},{"slug":"b","display_name":"Modèle B","visibility":"list"},{"slug":"c","visibility":"list"},{"visibility":"list"}]}""");
+        Assert.Equal([("b", "Modèle B"), ("c", "c")], models);
+    }
 }

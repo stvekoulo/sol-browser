@@ -66,7 +66,7 @@ await once(debugPort, 'listening');
 const port = debugPort.address().port;
 await new Promise(r => debugPort.close(r));
 await writeFile(resolve(profile, 'settings.json'), JSON.stringify({ Onboarded: true, Theme: 'dark', HomePage: `${origin}/a`, OnlineSuggestions: false, LiveColor: false, ...(process.argv.includes('--start-refresh') ? {Shortcuts:[],StartWallpaper:false} : {}), ...(process.argv.includes('--sol-ai') ? {SolAiCategories:true,StartWallpaper:false} : {}) }));
-if(process.argv.includes('--sol-ai'))await writeFile(resolve(profile,'ai-categories.json'),JSON.stringify({UpdatedAt:new Date().toISOString(),Categories:[{Name:'Développement',Links:[{Url:`${origin}/a`,Title:'Page A',Bookmark:true}]},{Name:'Actualités',Links:[{Url:`${origin}/b`,Title:'Page B',Bookmark:false}]}]}));
+if(process.argv.includes('--sol-ai'))await writeFile(resolve(profile,'ai-categories.json'),JSON.stringify({UpdatedAt:new Date().toISOString(),Names:['Développement','Actualités'],Sites:{'127.0.0.1':'Développement'}}));
 if(process.argv.includes('--site-reset'))await writeFile(resolve(profile,'permissions.json'),JSON.stringify({[origin+' Camera']:true,[`http://localhost:${server.address().port} Camera`]:true}));
 let app, ui;
 if (process.argv.includes('--history')) {
@@ -1233,7 +1233,8 @@ try {
     // Catégories du classement quotidien sur la page d'accueil.
     await command({type:'tab.open',url:'https://start.sol/index.html#start'});
     const start=await connect(await waitFor(async()=>(await targets()).find(t=>t.url==='https://start.sol/index.html#start'),'start page'));
-    await waitFor(()=>start.evaluate('document.querySelectorAll(".start-category").length===2'),'AI categories on start page');
+    // Catégories par site : toutes les pages de 127.0.0.1 visitées pendant le test héritent de « Développement ».
+    await waitFor(()=>start.evaluate('document.querySelectorAll(".start-category").length===1 && document.querySelector(".start-category h3").textContent.startsWith("Développement") && document.querySelectorAll(".start-category button").length>=2'),'AI categories on start page');
     await writeFile(resolve(base,'sol-ai-start.png'),Buffer.from((await start.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
     console.log('PASS Sol AI offers ChatGPT sign-in, stays closed until connected, renders a streamed answer and the chat panel');
     await stop(); console.log(`Evidence: ${base}`); process.exit(0);

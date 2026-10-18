@@ -23,7 +23,10 @@ public sealed partial class ChatGptAccount
     private readonly string _hostFile;
     private readonly string _lock;
     private CancellationTokenSource? _signIn;
-    private string? _model;
+    private IReadOnlyList<(string Slug, string Name)>? _models;
+    // Modèle choisi dans les paramètres ; vide ou absent du compte : le premier modèle proposé par OpenAI.
+    public string PreferredModel { get; set; } = "";
+    public IReadOnlyList<(string Slug, string Name)> Models => _models ?? [];
     public event Action? Changed;
     public bool SigningIn => _signIn != null;
     public string? Error { get; private set; }
@@ -69,7 +72,7 @@ public sealed partial class ChatGptAccount
             var tokens = new ChatGptTokens(clientId, subject, email, fresh.IdToken, fresh.Access, fresh.Refresh, fresh.Expires, fresh.Scopes);
             cts.Token.ThrowIfCancellationRequested();
             Locked(() => { cts.Token.ThrowIfCancellationRequested(); Save(tokens); SaveRegistration(new(clientId, subject, email)); });
-            Tokens = tokens; _model = null;
+            Tokens = tokens; _models = null;
             if (!ChatGptOAuth.HasPlan(tokens.Scopes)) Error = "plan-not-granted";
         }
         catch (ChatGptException e) { Error = e.Code; }
@@ -96,7 +99,7 @@ public sealed partial class ChatGptAccount
         try { tokens = Locked(() => { var saved = Load(); File.Delete(_file); return saved; }); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         { Error = "signout-failed"; Changed?.Invoke(); return; }
-        Tokens = null; _model = null; Error = null; Changed?.Invoke();
+        Tokens = null; _models = null; Error = null; Changed?.Invoke();
         if (tokens == null) return;
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
         for (var attempt = 0; attempt < 2; attempt++)
@@ -129,10 +132,10 @@ public sealed partial class ChatGptAccount
         for (var round = 0; round < SolAiAgent.MaxRounds; round++)
         {
             var token = await AccessTokenAsync(ct);
-            _model ??= await ModelAsync(token, ct);
+            var model = await ModelAsync(token, ct);
             object body = tools is null
-                ? new { model = _model, instructions, input, store = false, stream = true }
-                : new { model = _model, instructions, input, tools, store = false, stream = true, include = new[] { "reasoning.encrypted_content" } };
+                ? new { model, instructions, input, store = false, stream = true }
+                : new { model, instructions, input, tools, store = false, stream = true, include = new[] { "reasoning.encrypted_content" } };
             using var request = new HttpRequestMessage(HttpMethod.Post, ChatGptOAuth.Resource + "/responses") { Content = JsonContent.Create(body) };
             request.Headers.Authorization = new("Bearer", token);
             using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
@@ -165,14 +168,20 @@ public sealed partial class ChatGptAccount
         throw new ChatGptException("too-many-steps");
     }
 
+    public async Task LoadModelsAsync(CancellationToken ct) { _models = null; await ModelAsync(await AccessTokenAsync(ct), ct); }
+
     private async Task<string> ModelAsync(string token, CancellationToken ct)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, ChatGptOAuth.Resource + "/models");
-        request.Headers.Authorization = new("Bearer", token);
-        using var response = await _http.SendAsync(request, ct);
-        var body = await response.Content.ReadAsStringAsync(ct);
-        if (!response.IsSuccessStatusCode) throw new ChatGptException(response.StatusCode == HttpStatusCode.Unauthorized ? "signed-out" : ChatGptOAuth.ErrorCode(body, (int)response.StatusCode));
-        return ChatGptOAuth.FirstModel(body) ?? throw new ChatGptException("no-model");
+        if (_models is null)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, ChatGptOAuth.Resource + "/models");
+            request.Headers.Authorization = new("Bearer", token);
+            using var response = await _http.SendAsync(request, ct);
+            var body = await response.Content.ReadAsStringAsync(ct);
+            if (!response.IsSuccessStatusCode) throw new ChatGptException(response.StatusCode == HttpStatusCode.Unauthorized ? "signed-out" : ChatGptOAuth.ErrorCode(body, (int)response.StatusCode));
+            _models = ChatGptOAuth.Models(body);
+        }
+        return _models.Any(m => m.Slug == PreferredModel) ? PreferredModel : _models.Select(m => m.Slug).FirstOrDefault() ?? throw new ChatGptException("no-model");
     }
 
     // Jeton d'accès valide. Le jeton de renouvellement tourne et ne sert qu'une fois : renouvellement sous verrou
