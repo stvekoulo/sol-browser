@@ -1,21 +1,20 @@
 // Éventail d'actions au coin des éléments d'une page : texte sélectionné, liens en forme de carte, images, blocs de code.
-// Géométrie et ressorts du bloc « Action node » de Bencho (Copyright (c) 2026 Lorenzo Cabra, MIT ; voir
+// Géométrie du bloc « Action node » de Bencho (Copyright (c) 2026 Lorenzo Cabra, MIT ; voir
 // ui/licenses/bencho-MIT.txt). Icônes : tracés de Lucide (ISC). Isolé dans un Shadow DOM fermé : la page ne peut ni
 // le styler ni le lire. Chaque message porte une clé que Sol a écrite dans ce script : une page ne peut pas l'imiter.
 (() => {
   if (window.top !== window || window.__solFan) return;
-  window.__solFan = true;
   const KEY = '__SOL_FAN_KEY__';
   const webview = window.chrome?.webview;
   if (!webview) return;
+  window.__solFan = true;
   const post = webview.postMessage.bind(webview);
   const fr = /^fr\b/i.test(navigator.language || '');
   const T = (a, b) => (fr ? a : b);
-  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   /* ── la géométrie du bloc ─────────────────────────────────
      Les boutons suivent le contour de l'élément décalé d'un écart constant : le long du bord haut, autour du coin
-     sur un arc concentrique, puis le long du bord droit. Rangés sous l'élément, ils sortent du coin. */
+     sur un arc concentrique, puis le long du bord droit. Aucun ressort ni animation JavaScript. */
   const DOT = 32, R = DOT / 2, SPACING = DOT + 10, GAP = 10;
   const ride = (s, corner, off) => {
     const arc = Math.max(0.001, corner + off), len = (arc * Math.PI) / 2;
@@ -24,7 +23,6 @@
     const th = Math.PI / 2 - s / arc;
     return { x: -corner + arc * Math.cos(th), y: corner - arc * Math.sin(th) };
   };
-  const hideAt = c => (c >= R + 2 ? c * Math.SQRT2 : Math.max(R * Math.SQRT2 + 2, c * Math.SQRT2 + c + 2));
 
   /* ── icônes (Lucide, 24 × 24) ── */
   const ICONS = {
@@ -45,6 +43,7 @@
      droit, sinon chaque paragraphe se couvrirait de boutons. */
   const web = u => /^https?:/i.test(u || '');
   const kindOf = el => {
+    if (!(el instanceof Element) || el.closest('input,textarea,[contenteditable]:not([contenteditable="false"])')) return null;
     for (let n = el, depth = 0; n && n !== document.body && depth < 6; n = n.parentElement, depth++) {
       if (n.tagName === 'PRE' && n.offsetHeight >= 48) return { el: n, kind: 'code' };
       if (n.tagName === 'IMG' && n.offsetWidth >= 120 && n.offsetHeight >= 90 && web(n.currentSrc || n.src)) return { el: n, kind: 'image' };
@@ -62,91 +61,115 @@
       : [['copy', T('Copier le code', 'Copy code'), el.innerText], ['explain', T('Expliquer avec Sol AI', 'Explain with Sol AI'), el.innerText], ['note', T('Ajouter à une note', 'Add to a note'), el.innerText]];
 
   /* ── la vue : un hôte fixe, une racine fermée ── */
-  const host = document.createElement('sol-fan');
-  const root = host.attachShadow({ mode: 'closed' });
-  root.innerHTML = `<style>
+  // Fermer la racine et enregistrer les gestionnaires avant les scripts du site.
+  const create = document.createElement.bind(document), createSvg = document.createElementNS.bind(document);
+  const host = create('sol-fan'), root = host.attachShadow({ mode: 'closed' }), append = root.append.bind(root);
+  let pad, buttons = [];
+  root.addEventListener('mousedown', e => e.preventDefault());
+  root.addEventListener('click', onAction);
+  // Feuille construite : fonctionne aussi quand le site refuse les styles inline par sa CSP.
+  const sheet = new CSSStyleSheet();
+  sheet.replaceSync(`
     :host { all: initial; position: fixed; inset: 0; pointer-events: none; z-index: 2147483646; }
     .pad { position: fixed; pointer-events: none; }
     .pad.on { pointer-events: auto; }
     button { all: unset; position: fixed; width: ${DOT}px; height: ${DOT}px; margin: -${R}px 0 0 -${R}px; border-radius: 999px;
       display: grid; place-items: center; box-sizing: border-box; cursor: pointer; pointer-events: auto;
       background: rgba(28, 28, 32, .92); color: #fff; box-shadow: 0 0 0 1px rgba(255,255,255,.14), 0 4px 14px rgba(0,0,0,.28);
-      backdrop-filter: blur(10px); transition: scale 160ms cubic-bezier(.24,1.34,.38,1); }
+      transition: scale 120ms ease-out; }
     button:hover { scale: 1.12; } button:focus-visible { outline: 2px solid #4c8dff; outline-offset: 2px; }
     button[hidden] { display: none; }
     svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
     @media (prefers-color-scheme: light) { button { background: rgba(255,255,255,.95); color: #18181b; box-shadow: 0 0 0 1px rgba(0,0,0,.12), 0 4px 14px rgba(0,0,0,.16); } }
-  </style><i class="pad"></i>`;
-  const pad = root.querySelector('.pad');
-  const buttons = [0, 1, 2].map(() => { const b = document.createElement('button'); b.hidden = true; root.append(b); return b; });
-  const attach = () => { if (!host.isConnected) (document.documentElement || document).append(host); };
+    @media (prefers-reduced-motion: reduce) { button { transition: none; } }
+  `);
+  root.adoptedStyleSheets = [sheet];
+  const attach = () => {
+    if (!pad) {
+      pad = create('i'); pad.className = 'pad'; append(pad);
+      buttons = [0, 1, 2].map(() => { const b = create('button'); b.type = 'button'; b.hidden = true; append(b); return b; });
+    }
+    if (!host.isConnected) document.documentElement.append(host);
+  };
+  // Icônes constantes créées par l'API SVG : aucun HTML injecté, compatible avec Trusted Types.
+  const icon = id => {
+    const ns = 'http://www.w3.org/2000/svg', svg = createSvg(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true');
+    for (const [, tag, attributes] of ICONS[id].matchAll(/<(\w+)\s([^>]*?)\/>/g)) {
+      const child = createSvg(ns, tag);
+      for (const [, name, value] of attributes.matchAll(/([\w-]+)="([^"]*)"/g)) child.setAttribute(name, value);
+      svg.append(child);
+    }
+    return svg;
+  };
 
-  /* ── une ressort par bouton, l'échelonnement est un délai sur la cible ── */
-  const springs = buttons.map(() => ({ at: 0, v: 0, target: 0 }));
-  let current = null, open = false, raf = 0, prev = 0, showTimer = 0, hideTimer = 0;
+  /* Une seule vue réutilisée par page. La géométrie ne se recalcule que quand elle change. */
+  let current = null, frame = 0, selectionFrame = 0, hideTimer = 0;
+  let dismissed = false;
+  const clearDismissal = () => { dismissed = false; removeEventListener('pointermove', resumePointer, true); };
+  const resumePointer = e => {
+    if (!e.isTrusted || e.pointerType === 'touch' || (!e.movementX && !e.movementY)) return;
+    clearDismissal(); const target = kindOf(e.target); if (target) show(target);
+  };
+  const dismiss = () => {
+    dismissed = true; hide();
+    addEventListener('pointermove', resumePointer, { capture: true, passive: true });
+  };
   const rectOf = c => (c.range ? c.range.getBoundingClientRect() : c.el.getBoundingClientRect());
   const place = () => {
     if (!current) return;
+    if (!(current.el || current.range.commonAncestorContainer).isConnected) { hide(); return; }
     const r = rectOf(current);
-    const corner = current.el ? Math.min(16, parseFloat(getComputedStyle(current.el).borderTopRightRadius) || 0) : 0;
-    const off = GAP + R, n = current.actions.length, mid = ((corner + off) * Math.PI) / 4, deep = hideAt(corner) / Math.SQRT2;
-    let l = 0, t = 0, rr = 0, d = 0;
-    current.actions.forEach((_, i) => {
-      const spot = ride(mid + (i - (n - 1) / 2) * SPACING, corner, off), u = springs[i].at;
-      const x = r.right + (-deep + (spot.x + deep) * u), y = r.top + (deep + (spot.y - deep) * u);
-      const b = buttons[i];
-      b.style.left = `${x}px`; b.style.top = `${y}px`; b.style.scale = `${0.82 + 0.18 * Math.min(u, 1)}`;
-      b.style.visibility = u < 0.005 && springs[i].target === 0 ? 'hidden' : 'visible';
-      l = Math.min(l, spot.x - R - 6); rr = Math.max(rr, spot.x + R + 6); t = Math.min(t, spot.y - R - 6); d = Math.max(d, spot.y + R + 6);
+    if (!r.width || !r.height || r.bottom <= 0 || r.top >= innerHeight || r.right <= 0 || r.left >= innerWidth) { hide(); return; }
+    const { spots, bounds } = current;
+    const x = Math.max(8 - bounds.l, Math.min(r.right, innerWidth - 8 - bounds.r));
+    const y = Math.max(8 - bounds.t, Math.min(r.top, innerHeight - 8 - bounds.b));
+    spots.forEach((spot, i) => {
+      buttons[i].style.left = `${x + spot.x}px`; buttons[i].style.top = `${y + spot.y}px`;
     });
-    /* le pad comble l'air entre l'élément et l'éventail, pour que le pointeur puisse aller jusqu'aux boutons */
-    Object.assign(pad.style, { left: `${r.right + l}px`, top: `${r.top + t}px`, width: `${rr - l}px`, height: `${d - t}px` });
+    Object.assign(pad.style, { left: `${x + bounds.l}px`, top: `${y + bounds.t}px`, width: `${bounds.r - bounds.l}px`, height: `${bounds.b - bounds.t}px` });
   };
-  const tick = now => {
-    const dt = prev ? Math.min(2.5, (now - prev) / 16.67) : 1; prev = now;
-    let moving = false;
-    springs.forEach(s => {
-      if (still) { s.at = s.target; s.v = 0; return; }
-      s.v += (s.target - s.at) * 0.11 * dt; s.v *= Math.pow(0.66, dt); s.at += s.v * dt;
-      if (Math.abs(s.target - s.at) < 0.002 && Math.abs(s.v) < 0.002) { s.at = s.target; s.v = 0; } else moving = true;
-    });
-    place();
-    /* la boucle s'arrête dès que tout est posé ; le défilement repositionne ensuite */
-    raf = moving ? requestAnimationFrame(tick) : 0;
-    if (!moving && !open) { buttons.forEach(b => (b.hidden = true)); current = null; }
-  };
-  const run = () => { if (!raf) { prev = 0; raf = requestAnimationFrame(tick); } };
+  const schedulePlace = () => { if (current && !frame) frame = requestAnimationFrame(() => { frame = 0; place(); }); };
   const show = target => {
+    clearDismissal();
+    clearTimeout(hideTimer); cancelAnimationFrame(frame); hideTimer = frame = 0;
     attach();
-    current = { ...target, actions: actionsFor(target) };
+    const actions = actionsFor(target), corner = target.el ? Math.min(16, parseFloat(getComputedStyle(target.el).borderTopRightRadius) || 0) : 0;
+    const off = GAP + R, mid = (corner + off) * Math.PI / 4;
+    const spots = actions.map((_, i) => ride(mid + (i - (actions.length - 1) / 2) * SPACING, corner, off));
+    const bounds = spots.reduce((b, s) => ({ l: Math.min(b.l, s.x - R - 6), r: Math.max(b.r, s.x + R + 6), t: Math.min(b.t, s.y - R - 6), b: Math.max(b.b, s.y + R + 6) }), { l: 0, r: 0, t: 0, b: 0 });
+    current = { ...target, actions, spots, bounds };
     current.actions.forEach(([id, label], i) => {
       const b = buttons[i]; b.hidden = false; b.title = label; b.setAttribute('aria-label', label);
-      b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[id]}</svg>`; b.dataset.i = String(i);
+      if (b.dataset.action !== id) { b.replaceChildren(icon(id)); b.dataset.action = id; }
+      b.dataset.i = String(i);
     });
     buttons.slice(current.actions.length).forEach(b => (b.hidden = true));
-    open = true; pad.classList.add('on');
-    springs.forEach((s, i) => setTimeout(() => { if (open) { s.target = i < current.actions.length ? 1 : 0; run(); } }, still ? 0 : i * 45));
+    pad.classList.add('on'); place();
   };
   const hide = () => {
-    open = false; pad.classList.remove('on');
-    const n = current?.actions.length ?? 0;
-    springs.forEach((s, i) => setTimeout(() => { if (!open) { s.target = 0; run(); } }, still ? 0 : (n - 1 - i) * 45));
+    clearTimeout(hideTimer); cancelAnimationFrame(frame); cancelAnimationFrame(selectionFrame);
+    frame = selectionFrame = hideTimer = 0; current = null;
+    pad?.classList.remove('on'); buttons.forEach(b => { b.hidden = true; });
   };
+  const leave = () => { if (current && !hideTimer) hideTimer = setTimeout(() => { hideTimer = 0; hide(); }, 180); };
 
-  /* ── le pointeur : un temps d'arrêt avant d'ouvrir, un peu de grâce avant de refermer ── */
+  /* Ouverture immédiate ; une courte grâce permet de traverser l'espace vers les commandes. */
   const inside = e => { const p = e.composedPath(); return p.includes(host) || (!!current?.el && p.includes(current.el)); };
   addEventListener('pointerover', e => {
-    if (!e.isTrusted || e.pointerType === 'touch') return;
-    if (inside(e)) { clearTimeout(hideTimer); return; }
+    if (!e.isTrusted || e.pointerType === 'touch' || dismissed) return;
+    if (inside(e)) { clearTimeout(hideTimer); hideTimer = 0; return; }
     /* l'éventail d'une sélection reste tant que la sélection existe */
-    if (open && current?.kind === 'selection') return;
+    if (current?.kind === 'selection') return;
     const target = kindOf(e.target);
-    clearTimeout(showTimer);
-    if (!target) { if (open) { clearTimeout(hideTimer); hideTimer = setTimeout(hide, 250); } return; }
-    if (current?.el === target.el && open) return;
-    showTimer = setTimeout(() => { if (open && current?.el !== target.el) { hide(); setTimeout(() => show(target), 160); } else show(target); }, 450);
+    if (!target) { leave(); return; }
+    show(target);
   }, true);
-  addEventListener('pointerout', e => { if (e.isTrusted && open && current?.kind !== 'selection' && !e.relatedTarget) { clearTimeout(hideTimer); hideTimer = setTimeout(hide, 250); } }, true);
+  addEventListener('pointerout', e => { if (e.isTrusted && current?.kind !== 'selection' && !e.relatedTarget) leave(); }, true);
+  addEventListener('focusin', e => {
+    if (inside(e) || current?.kind === 'selection') return;
+    const target = kindOf(e.target); if (target) show(target); else leave();
+  }, true);
 
   /* ── la sélection : l'éventail s'ouvre tout de suite au coin du texte choisi ──
      Pas dans un champ de saisie : là, le menu contextuel propose déjà Corriger, Reformuler et Traduire. */
@@ -160,28 +183,29 @@
   };
   const onSelect = () => {
     const target = selected();
-    if (!target) return;
-    clearTimeout(showTimer); clearTimeout(hideTimer);
-    if (open) { hide(); setTimeout(() => show(target), 120); } else show(target);
+    cancelAnimationFrame(selectionFrame); selectionFrame = 0;
+    if (target) show(target); else if (current?.kind === 'selection') hide();
   };
-  addEventListener('mouseup', e => { if (e.isTrusted && e.button === 0 && !e.composedPath().includes(host)) setTimeout(onSelect, 10); }, true);
-  addEventListener('keyup', e => { if (e.isTrusted && e.shiftKey) setTimeout(onSelect, 10); }, true);
-  document.addEventListener('selectionchange', () => { if (open && current?.kind === 'selection' && getSelection()?.isCollapsed) hide(); });
-  addEventListener('scroll', () => { if (current) place(); }, { passive: true, capture: true });
-  addEventListener('resize', () => { if (current) place(); }, { passive: true });
-  addEventListener('keydown', e => { if (e.key === 'Escape' && open) hide(); }, true);
-
-  /* un appui sur l'éventail ne doit pas effacer la sélection qu'il sert */
-  root.addEventListener('mousedown', e => e.preventDefault());
+  addEventListener('mouseup', e => { if (e.isTrusted && e.button === 0 && !e.composedPath().includes(host)) onSelect(); }, true);
+  addEventListener('keyup', e => { if (e.isTrusted && e.shiftKey && e.key !== 'Escape') onSelect(); }, true);
+  document.addEventListener('selectionchange', () => {
+    if (current?.kind !== 'selection') return;
+    if (getSelection()?.isCollapsed) hide(); else if (!selectionFrame) selectionFrame = requestAnimationFrame(onSelect);
+  });
+  addEventListener('scroll', schedulePlace, { passive: true, capture: true });
+  addEventListener('resize', schedulePlace, { passive: true });
+  addEventListener('keydown', e => { if (e.key === 'Escape' && current) dismiss(); }, true);
+  addEventListener('pagehide', hide);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) hide(); });
 
   /* ── un clic part vers Sol, avec la clé ── */
-  root.addEventListener('click', e => {
+  function onAction(e) {
     const b = e.target.closest?.('button');
     if (!b || !current || !e.isTrusted) return;
     const [action, , value] = current.actions[Number(b.dataset.i)];
     const r = rectOf(current);
     post(JSON.stringify({ sol: 'fan', key: KEY, kind: current.kind, action, value: String(value).slice(0, 50000),
       x: r.right, y: r.top, ratio: devicePixelRatio, title: document.title, language: document.documentElement.lang || '' }));
-    hide();
-  });
+    dismiss();
+  }
 })();
