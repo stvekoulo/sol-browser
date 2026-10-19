@@ -135,12 +135,12 @@ public class JsonFileStoreTests : IDisposable
         Assert.Equal("{ not json", File.ReadAllText(path + ".corrupt"));
     }
     [Fact]
-    public void Fan_preferences_survive_restart_and_older_profiles_keep_immediate_hover()
+    public void Fan_preferences_survive_restart_and_new_profiles_default_to_right_click()
     {
         var path = File_("fan.json");
         File.WriteAllText(path, "{}");
         Assert.True(JsonFileStore.Load<Settings>(path).FanEnabled);
-        Assert.Equal(0, JsonFileStore.Load<Settings>(path).FanTrigger);
+        Assert.Equal(2, JsonFileStore.Load<Settings>(path).FanTrigger);
         foreach (var trigger in new[] { 0, 1, 2 })
         {
             Assert.True(JsonFileStore.Save(path, new Settings { FanEnabled = false, FanTrigger = trigger, StartWallpaperCustom = true }));
@@ -149,8 +149,26 @@ public class JsonFileStoreTests : IDisposable
             Assert.Equal(trigger, saved.FanTrigger);
             Assert.True(saved.StartWallpaperCustom);
         }
-        Assert.Equal(0, new Settings { FanTrigger = -1 }.FanTrigger);
-        Assert.Equal(0, new Settings { FanTrigger = 3 }.FanTrigger);
+        Assert.Equal(2, new Settings { FanTrigger = -1 }.FanTrigger);
+        Assert.Equal(2, new Settings { FanTrigger = 3 }.FanTrigger);
+    }
+
+    [Fact]
+    public void Old_hover_default_is_upgraded_once_and_later_user_choices_survive()
+    {
+        var path = File_("old-fan.json");
+        File.WriteAllText(path, "{\"FanTrigger\":0}");
+        var saved = JsonFileStore.Load<Settings>(path);
+        Assert.True(saved.ApplyFanDefault());
+        Assert.Equal(2, saved.FanTrigger);
+        saved.FanTrigger = 0;
+        Assert.True(JsonFileStore.Save(path, saved));
+        saved = JsonFileStore.Load<Settings>(path);
+        Assert.False(saved.ApplyFanDefault());
+        Assert.Equal(0, saved.FanTrigger);
+        var delayed = new Settings { FanTrigger = 1 };
+        delayed.ApplyFanDefault();
+        Assert.Equal(1, delayed.FanTrigger);
     }
 
 }

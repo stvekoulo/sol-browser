@@ -52,8 +52,13 @@ try {
     history:[{url:'https://'+'domainetreslong'.repeat(15)+'.invalid',title:'Titre très long '.repeat(20),last:Date.now()}],groups:[{id:'test',name:'Groupe au nom très long '.repeat(20),color:'#aa77cc',count:12}],categories:[{name:'Un sujet très long '.repeat(25),total:20,links:[]}]};
   await start.evaluate(`chrome.webview.dispatchEvent(new MessageEvent('message',{data:${JSON.stringify(data)}}))`);
   await host.wait(()=>start.evaluate('document.querySelectorAll(".start-site").length===20'),'fixture');
-  await hover(web,'#card');await hover(start,'.start-site');
-  await host.wait(async()=>await webButtons()===3&&await reactButtons()===3,'immediate hover on web and start');
+  assert.equal((await settings()).FanTrigger,2,'right click is the initial setting');
+  assert.equal(await start.evaluate('document.querySelectorAll(".nod,.nod-act,sol-fan").length'),0,'no fan integration on start');
+  await hover(web,'#card');assert.equal(await webButtons(),0,'no automatic fan by default');
+  await right(web,'#card');await host.wait(async()=>await webButtons()===3,'default right click');
+  await set('fanTrigger',0);await closed();
+  await hover(web,'body');await hover(web,'#card');await hover(start,'.start-site');
+  await host.wait(async()=>await webButtons()===3&&await reactButtons()===0,'web hover with no start fan');
   await set('fanEnabled',0);await closed();
   await hover(web,'body');await hover(web,'#card');await right(start,'.start-site');
   assert.equal(await webButtons(),0);assert.equal(await reactButtons(),0);
@@ -64,7 +69,7 @@ try {
   await hover(web,'#field');await hover(start,'h2');await delay(4100);await closed();
   await hover(web,'#card');await hover(start,'.start-site');const begin=Date.now();
   await delay(4300);assert.equal(await webButtons(),0);assert.equal(await reactButtons(),0);
-  await host.wait(async()=>await webButtons()===3&&await reactButtons()===3,'five-second hover',3000);
+  await host.wait(async()=>await webButtons()===3&&await reactButtons()===0,'five-second hover',3000);
   assert(Date.now()-begin>=4900);
   await web.call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});
   await host.wait(async()=>await webButtons()===0,'selection starts closed');
@@ -78,8 +83,8 @@ try {
   await hover(web,'body');await hover(web,'#card');await hover(start,'h2');await hover(start,'.start-site');
   assert.equal(await webButtons(),0);assert.equal(await reactButtons(),0);
   await command({type:'popup.close'});
-  await right(web,'#card');await right(start,'.start-site');
-  await host.wait(async()=>await webButtons()===3&&await reactButtons()===3,'right click opens fan');
+  await right(web,'#card');
+  await host.wait(async()=>await webButtons()===3&&await reactButtons()===0,'right click opens fan');
   const popup=await host.connect('#popup');
   assert(!await popup.evaluate('!!document.querySelector(".context-menu")'),'eligible right click has no second menu');
   await start.evaluate(`chrome.webview.dispatchEvent(new MessageEvent('message',{data:${JSON.stringify(data)}}))`);
@@ -103,5 +108,5 @@ try {
   await hover(web,'#card');assert.equal(await webButtons(),0);await right(web,'#card');
   await host.wait(async()=>await webButtons()===3,'right click after restart');
   await host.close(ui);
-  console.log('PASS global off/immediate/5s/cancel/right-click/live/reload/restart; responsive start 320–1200; '+host.base);
+  console.log('PASS default right click, global modes/live/restart/selection; start without fans at 320–1200; '+host.base);
 } finally { await host.dispose();await assert.rejects(access(host.profile)); }

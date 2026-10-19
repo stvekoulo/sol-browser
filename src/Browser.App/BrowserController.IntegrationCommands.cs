@@ -18,6 +18,7 @@ public sealed partial class BrowserController
                 {
                     if (c.Index is not (0 or 1 or 2)) return true;
                     _settings.FanTrigger = c.Index.Value;
+                    _settings.FanTriggerDefaultsVersion = 1;
                     JsonFileStore.Save(AppPaths.Settings, _settings);
                     _pages.ApplySettings(); _bridge.BroadcastTheme();
                     if (_settingsOpen) _popup.Post(SettingsJson());

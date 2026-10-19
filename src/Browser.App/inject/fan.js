@@ -9,7 +9,7 @@
   if (!webview) return;
   window.__solFan = true;
   const post = webview.postMessage.bind(webview);
-  let config = /*__SOL_FAN_SETTINGS__*/null || { enabled: true, trigger: 0 };
+  let config = /*__SOL_FAN_SETTINGS__*/null || { enabled: true, trigger: 2 };
   let pending = null, openTimer = 0;
   const cancelOpen = () => { clearTimeout(openTimer); openTimer = 0; pending = null; };
   webview.addEventListener('message', e => {

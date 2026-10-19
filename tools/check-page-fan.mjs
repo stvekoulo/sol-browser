@@ -42,6 +42,8 @@ const select=async()=>{
 };
 try {
   ui=await host.launch(850,1200);page=await host.connect(host.origin+'/2');
+  await ui.evaluate(`chrome.webview.postMessage('{"type":"settings.set","id":"fanTrigger","index":0}')`);
+  await delay(250);
   await host.wait(()=>page.evaluate('!!window.__solFan&&document.querySelector("#image").complete'),'native injection');
   await page.call('Emulation.setCPUThrottlingRate',{rate:4});
   await page.evaluate(`window.__fanStats={raf:0,timers:0};const raf=window.requestAnimationFrame.bind(window),timer=window.setTimeout.bind(window);window.requestAnimationFrame=fn=>{__fanStats.raf++;return raf(fn)};window.setTimeout=(...args)=>{__fanStats.timers++;return timer(...args)};`);
@@ -73,7 +75,7 @@ try {
     await page.call('Emulation.setDeviceMetricsOverride',{width:900,height:850,deviceScaleFactor:1,mobile:false});
     await page.call('Emulation.setCPUThrottlingRate',{rate:4});
     await page.evaluate(`window.__fanCommands=[];chrome.webview.postMessage=value=>{const c=JSON.parse(value);__fanCommands.push({kind:c.kind,action:c.action,value:c.value})};`);
-    await page.evaluate(await readFile('src/Browser.App/inject/fan.js','utf8'));
+    await page.evaluate((await readFile('src/Browser.App/inject/fan.js','utf8')).replace('/*__SOL_FAN_SETTINGS__*/null', '{enabled:true,trigger:0}'));
     await host.wait(()=>page.evaluate('document.querySelector("#image").complete'),'fixture image loaded');
     for(const [selector,kind,actions,value] of [
       ['#second','link',['tab','split','link'],host.origin+'/card-b'],

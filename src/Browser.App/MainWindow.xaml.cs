@@ -95,6 +95,7 @@ public sealed partial class MainWindow : Window
     private async Task InitAsync()
     {
         var settings = _settings;
+        if (settings.ApplyFanDefault()) JsonFileStore.Save(AppPaths.Settings, settings);
         if (settings.Font == "custom") settings.Font = "sf"; // ancien nom du choix « SF Pro »
         var blur = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "blur.js"));
 
