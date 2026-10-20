@@ -104,13 +104,13 @@ html.painted .sidebar-body:not(.floating) { transition: background-color 220ms v
 /* Liste verticale des onglets flottants */
 .sidebar-tabs {
   position: relative;
-  flex: 1;
+  flex: none;
   min-height: 0;
   margin-top: 14px;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  overflow-y: auto;
+  overflow: visible;
   scrollbar-width: none;
 }
 .sidebar-tabs::-webkit-scrollbar { display: none; }

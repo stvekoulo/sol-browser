@@ -72,10 +72,10 @@ public sealed partial class BrowserController
                 if (c.Url is null) _bridge.FocusAddress();
                 return true;
             case "tab.close": Close(id); break;
-            case "tab.activate": Activate(id); break;
+            case "tab.activate": _selectedTabs.Clear(); Activate(id); break;
             case "group.new": EditGroup(tabId: id, group: null); return true;
             // query = couleur « #rrggbb », input = icône ; une valeur invalide est ignorée par TabManager.
-            case "group.create": _tabs.CreateGroup(id, c.Title!, c.Query, icon: c.Input); break;
+            case "group.create": CreateSelectedGroup(c); break;
             case "group.update": _tabs.UpdateGroup(id, name: c.Title!, color: c.Query, icon: c.Input); break;
             case "group.add": _tabs.AddToGroup(id, c.Query!); KeepPairAdjacent(); break;
             case "group.remove": _tabs.RemoveFromGroup(id); KeepPairAdjacent(); break;

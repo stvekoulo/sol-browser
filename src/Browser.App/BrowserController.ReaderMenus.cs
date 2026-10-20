@@ -14,7 +14,9 @@ public sealed partial class BrowserController
     private (string? TabId, TabGroup? Group)? _groupEditing;
     private void EditGroup(string? tabId, TabGroup? group)
     {
+        var members = group is null ? GroupingTabs(tabId ?? "").Select(t => t.Id).ToArray() : [];
         HidePopup();
+        _groupCreationTabs = members;
         _groupEditing = (tabId, group); _groupSuggestion = null;
         _popup.ShowCentered(340, GroupEditJson(), top: 64);
     }
@@ -25,6 +27,7 @@ public sealed partial class BrowserController
         {
             popup = "group-edit",
             create = group is null,
+            count = group is null ? _groupCreationTabs.Length : _tabs.Tabs.Count(t => t.GroupId == group.Id),
             id = group?.Id ?? tabId,
             name = group?.Name ?? "",
             color = group?.Color ?? TabManager.GroupColors[_tabs.Groups.Count % TabManager.GroupColors.Count],

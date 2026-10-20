@@ -141,6 +141,7 @@ public sealed partial class BrowserController
             }),
             groups = _tabs.Groups.Select(g => new { id = g.Id, name = g.Name, color = g.Color, icon = g.Icon, collapsed = g.Collapsed }),
             activeId = _tabs.ActiveId,
+            selectedTabIds = SelectedTabs().Select(t => t.Id),
             privateMode = PrivateActive,
             aiAvailable = !PrivateActive, chatOpen = Chat?.IsOpen == true, aiTabs = TabGroupAiState(),
             shield = false,

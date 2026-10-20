@@ -32,6 +32,7 @@ export type State = {
   tabs: Tab[];
   groups: TabGroup[];
   activeId: string | null;
+  selectedTabIds?: string[]; // sélection temporaire pour créer un groupe avec Ctrl+clic
   privateMode: boolean; // onglet actif en navigation privée
   aiAvailable?: boolean; chatOpen?: boolean; // panneau de discussion Sol AI
   aiTabs?: import('./SidebarAiGroups').AiTabsState; // proposition de groupes d'onglets par Sol AI

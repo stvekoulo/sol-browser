@@ -10,6 +10,8 @@ public sealed partial class BrowserController
         var id = c.Id ?? "";
         switch (c.Type)
         {
+            case "tab.select": ToggleTabSelection(id); break;
+            case "tabs.selection.clear": _selectedTabs.Clear(); break;
             case "tab.pin":
                 if (c.Index is not (0 or 1)) return true;
                 PinTabs(id, c.Index == 1);
@@ -72,6 +74,8 @@ public sealed partial class BrowserController
     private void OpenTabMenu(string id, double x, double y)
     {
         if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is not { } tab) return;
+        if (OpenSelectedTabsMenu(id, x, y)) return;
+        if (_selectedTabs.Count > 0) { _selectedTabs.Clear(); Refresh(); }
         var ids = _split.Contains(id) ? new[] { _split.PrimaryId!, _split.SecondaryId! } : [id];
         var block = ids.Length > 1;
         ShowMenu(x, y,
@@ -98,6 +102,11 @@ public sealed partial class BrowserController
         var members = _tabs.Tabs.Where(t => t.GroupId == id).Select(t => t.Id).ToList();
         ShowMenu(x, y,
         [
+            (T("Ouvrir le groupe", "Open group"), () =>
+            {
+                _tabs.UpdateGroup(id, collapsed: false);
+                if (members.Count > 0) Activate(members.Contains(_tabs.ActiveId ?? "") ? _tabs.ActiveId! : members[0]);
+            }),
             (T("Nouvel onglet dans ce groupe", "New tab in this group"), () => OpenInGroup(id)),
             (group.Collapsed ? T("Déplier le groupe", "Expand group") : T("Replier le groupe", "Collapse group"), () => _tabs.UpdateGroup(id, collapsed: !group.Collapsed)),
             (T("Modifier le groupe (nom, couleur, icône)", "Edit group (name, color, icon)"), () => _afterMenu = () => EditGroup(null, group)),

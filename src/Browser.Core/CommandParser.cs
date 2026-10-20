@@ -54,6 +54,7 @@ public static class CommandParser
         ["window.minimize"] = [], ["window.maximize"] = [], ["window.close"] = [], ["window.drag"] = [],
         ["zoom.in"] = [], ["zoom.out"] = [], ["zoom.reset"] = [], ["zoom.set"] = ["index"],
         ["permission.answer"] = ["index"], ["permissions.clear"] = [], ["permissions.forget"] = ["id"], ["site-data.clear"] = [],
+        ["tab.select"] = ["id"], ["tabs.selection.clear"] = [],
         ["group.new"] = ["id"], ["group.create"] = ["id", "title"], ["group.add"] = ["id", "query"], ["group.remove"] = ["id"],
         ["group.toggle"] = ["id"], ["group.menu"] = ["id", "x", "y"], ["group.update"] = ["id", "title"],
         ["group.move"] = ["id", "index"], ["group.open"] = ["id"], ["group.edit"] = ["id"],

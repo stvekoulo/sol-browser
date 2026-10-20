@@ -10,16 +10,17 @@ import { SidebarAiGroups } from './SidebarAiGroups';
 
 export function SidebarTabs({ state, icons }: { state: State; icons: Record<string, string | null | undefined> }) {
   const { tabs, split, activeId } = state;
+  const selected = new Set(state.selectedTabIds ?? []);
   const rows = (from: number, to: number) => {
     const items: SidebarBlock[] = [];
     for (let i = from; i <= to; i++) {
       const tab = tabs[i], next = i < to ? tabs[i + 1] : undefined;
       if (next && tab.id === split.primaryId && next.id === split.secondaryId) {
         items.push({id:tab.id,kind:"tab",first:i,last:i+1,label:tab.title+" · "+next.title,node:<div key={tab.id} className={`sidebar-split-group${split.visible ? ' active' : ''}`} data-kind="tab" data-id={tab.id} data-first={i} data-last={i + 1}>
-          <TabRow tab={tab} index={i} icon={icons[tab.id]} active={tab.id === activeId} paired />
-          <TabRow tab={next} index={i + 1} icon={icons[next.id]} active={next.id === activeId} paired />
+          <TabRow tab={tab} index={i} icon={icons[tab.id]} active={tab.id === activeId} selected={selected.has(tab.id)} paired />
+          <TabRow tab={next} index={i + 1} icon={icons[next.id]} active={next.id === activeId} selected={selected.has(next.id)} paired />
         </div>}); i++;
-      } else items.push({id:tab.id,kind:"tab",first:i,last:i,label:tab.title,node:<TabRow key={tab.id} tab={tab} index={i} icon={icons[tab.id]} active={tab.id === activeId} />});
+      } else items.push({id:tab.id,kind:"tab",first:i,last:i,label:tab.title,node:<TabRow key={tab.id} tab={tab} index={i} icon={icons[tab.id]} active={tab.id === activeId} selected={selected.has(tab.id)} />});
     }
     return items;
   };
@@ -38,11 +39,16 @@ export function SidebarTabs({ state, icons }: { state: State; icons: Record<stri
       const active = tabs.slice(i, end + 1).some(tab => tab.id === activeId);
       items.push({id:group.id,kind:"group",first:i,last:end,label:group.name,node:<div key={group.id} className={`tab-group-block${expanded ? '' : ' collapsed'}${active ? ' has-active' : ''}`}
         data-kind="group" data-id={group.id} data-first={i} data-last={end} style={{ '--group': group.color } as CSSProperties}>
-        <div className="tab-group-heading" onContextMenu={e => sidebarMenu('group.menu', group.id, e)}>
+        <div className="tab-group-heading" onContextMenuCapture={e => sidebarMenu('group.menu', group.id, e)}>
           <button className="tab-group-header" aria-expanded={expanded}
-            title={t('Cliquer pour replier · Glisser pour déplacer le groupe', 'Click to collapse · Drag to move group')}
+            title={expanded
+              ? t('Cliquer pour replier · Glisser pour déplacer le groupe', 'Click to collapse · Drag to move group')
+              : t('Cliquer pour déplier · Glisser pour déplacer le groupe', 'Click to expand · Drag to move group')}
             onPointerDown={e => startSlotDrag(e.currentTarget.parentElement!.parentElement, e)}
-            onKeyDown={e => { if (e.key === 'F2') { e.preventDefault(); send({ type: 'group.edit', id: group.id }); } }}
+            onKeyDown={e => {
+              if (e.key === 'F2') { e.preventDefault(); send({ type: 'group.edit', id: group.id }); }
+              if (e.key === 'ContextMenu' || e.shiftKey && e.key === 'F10') sidebarMenu('group.menu', group.id, e);
+            }}
             onClick={() => send({ type: 'group.toggle', id: group.id })}>
             {group.icon ? <span className="tab-group-icon" aria-hidden>{group.icon}</span> : <span className="tab-group-dot" aria-hidden />}
             <span className="tab-group-name">{group.name}</span><span className="tab-group-count">{end - i + 1}</span>
@@ -58,7 +64,13 @@ export function SidebarTabs({ state, icons }: { state: State; icons: Record<stri
     }
     i = end;
   }
-  return <div className="sidebar-tabs" role="tablist" aria-label={t('Onglets', 'Tabs')} aria-orientation="vertical">
+  return <div className="sidebar-tabs" role="tablist" aria-label={t('Onglets', 'Tabs')} aria-orientation="vertical" aria-multiselectable="true"
+    onKeyDown={e => { if (e.key === 'Escape' && selected.size) { e.preventDefault(); send({ type: 'tabs.selection.clear' }); } }}>
+    {selected.size > 1 && <div className="sidebar-selection" role="group" aria-label={t('Onglets sélectionnés', 'Selected tabs')}>
+      <span role="status">{t(`${selected.size} sélectionnés`, `${selected.size} selected`)}</span>
+      <button className="pill-action" onClick={() => send({ type: 'group.new', id: [...selected][0] })}>{t('Créer un groupe', 'Create group')}</button>
+      <button className="pill-action" aria-label={t('Annuler la sélection', 'Clear selection')} onClick={() => send({ type: 'tabs.selection.clear' })}>×</button>
+    </div>}
     <SidebarSort blocks={items}/>
     <SidebarAiGroups ai={state.aiTabs} />
     <button className="sidebar-new-tab" title={t('Nouvel onglet · Ctrl+T', 'New tab · Ctrl+T')} onClick={() => send({ type: 'tab.open' })}>
@@ -67,13 +79,14 @@ export function SidebarTabs({ state, icons }: { state: State; icons: Record<stri
   </div>;
 }
 
-function TabRow({ tab, index, icon, active, paired = false }: { tab: Tab; index: number; icon: string | null | undefined; active: boolean; paired?: boolean }) {
+function TabRow({ tab, index, icon, active, selected, paired = false }: { tab: Tab; index: number; icon: string | null | undefined; active: boolean; selected: boolean; paired?: boolean }) {
   const label = tab.title && tab.title !== 'about:blank' ? tab.title : t('Nouvel onglet', 'New tab');
-  return <div role="tab" tabIndex={0} aria-selected={active} data-private={!!tab.privateMode} className={`sidebar-tab${active ? ' active' : ''}${tab.asleep ? ' asleep' : ''}`}
-    title={`${label}\n${tab.url}${tab.asleep ? t('\nEn veille · Cliquer pour reprendre', '\nSleeping · Click to resume') : ''}`}
+  const activate = (toggle: boolean) => send(toggle ? { type: 'tab.select', id: tab.id } : { type: 'tab.activate', id: tab.id });
+  return <div role="tab" tabIndex={0} aria-selected={selected || active} data-selected={selected || undefined} data-private={!!tab.privateMode} className={`sidebar-tab${active ? ' active' : ''}${selected ? ' selected' : ''}${tab.asleep ? ' asleep' : ''}`}
+    title={`${label}\n${tab.url}${tab.asleep ? t('\nEn veille · Cliquer pour reprendre', '\nSleeping · Click to resume') : ''}${t('\nCtrl+clic pour sélectionner plusieurs onglets', '\nCtrl+click to select multiple tabs')}`}
     {...(paired ? {} : { 'data-kind': 'tab', 'data-id': tab.id, 'data-first': index, 'data-last': index })}
-    onContextMenu={e => sidebarMenu('tab.menu', tab.id, e)} onClick={() => send({ type: 'tab.activate', id: tab.id })}
-    onKeyDown={e => { focusTab(e); if (e.target !== e.currentTarget) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); send({ type: 'tab.activate', id: tab.id }); } if (e.key === 'Delete') send({ type: 'tab.close', id: tab.id }); }}
+    onContextMenu={e => sidebarMenu('tab.menu', tab.id, e)} onClick={e => activate(e.ctrlKey || e.metaKey)}
+    onKeyDown={e => { focusTab(e); if (e.target !== e.currentTarget) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(e.ctrlKey || e.metaKey); } if (e.key === 'Delete') send({ type: 'tab.close', id: tab.id }); }}
     onMouseDown={e => middleClose(e, tab.id)} onAuxClick={e => e.preventDefault()}
     onPointerDown={e => startSlotDrag(e.currentTarget.closest<HTMLElement>('[data-kind="tab"]'), e)}>
     {tab.loading ? <span className="spinner" aria-hidden /> : icon ? <img className="favicon" src={icon} alt="" draggable={false} /> : <span className="favicon letter" aria-hidden>{label[0]?.toUpperCase()}</span>}
