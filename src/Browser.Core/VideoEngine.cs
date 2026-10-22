@@ -10,31 +10,39 @@ namespace Browser.Core;
 public static class VideoEngine
 {
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(12) };
-    private static readonly SemaphoreSlim Gate = new(1);
-    public sealed record Tools(string Downloader, string? Ffmpeg);
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> Gates = new();
+    public sealed record Tools(string Downloader, string? Ffmpeg, string? Runtime = null);
     private sealed record Receipt(string File, string Hash);
 
-    public static async Task<Tools> PrepareAsync(string root, Action<string> phase, CancellationToken ct)
+    public static async Task<Tools> PrepareAsync(string root, Action<string> phase, CancellationToken ct, bool inspectOnly = false)
     {
-        await Gate.WaitAsync(ct);
-        try
-        {
-            Directory.CreateDirectory(root);
-            await using var installLock = await LockAsync(Path.Combine(root, "install.lock"), ct);
-            var arch = RuntimeInformation.OSArchitecture;
-            var exe = arch == Architecture.Arm64 ? "yt-dlp_arm64.exe" : arch == Architecture.X86 ? "yt-dlp_x86.exe" : "yt-dlp.exe";
-            var downloader = await AcquireAsync(root, "yt-dlp/yt-dlp", exe, false, phase, ct);
-            // FFmpeg win64 fonctionne aussi sous Windows ARM64 par émulation ; pas sous Windows 32 bits.
-            var ffmpeg = arch == Architecture.X86 ? null : await AcquireAsync(root, "BtbN/FFmpeg-Builds",
-                "ffmpeg-master-latest-win64-lgpl-shared.zip", true, phase, ct);
-            return new(downloader, ffmpeg);
-        }
-        finally { Gate.Release(); }
+        Directory.CreateDirectory(root);
+        var arch = RuntimeInformation.OSArchitecture;
+        var exe = arch == Architecture.Arm64 ? "yt-dlp_arm64.exe" : arch == Architecture.X86 ? "yt-dlp_x86.exe" : "yt-dlp.exe";
+        var downloader = await AcquireAsync(root, "yt-dlp/yt-dlp", exe, false, "yt-dlp", "yt-dlp.exe", phase, ct);
+        var runtime = arch == Architecture.X86 ? null : await AcquireAsync(root, "denoland/deno",
+            "deno-x86_64-pc-windows-msvc.zip", true, "deno", "deno.exe", phase, ct);
+        // FFmpeg win64 fonctionne aussi sous Windows ARM64 par émulation ; pas sous Windows 32 bits.
+        var ffmpeg = arch == Architecture.X86 || inspectOnly ? null : await AcquireAsync(root, "BtbN/FFmpeg-Builds",
+            "ffmpeg-master-latest-win64-lgpl-shared.zip", true, "ffmpeg", "ffmpeg.exe", phase, ct);
+        return new(downloader, ffmpeg, runtime);
     }
 
-    private static async Task<string> AcquireAsync(string root, string repo, string assetName, bool zip, Action<string> phase, CancellationToken ct)
+    private static async Task<string> AcquireAsync(string root, string repo, string assetName, bool zip, string tool, string executableName, Action<string> phase, CancellationToken ct)
     {
-        var folder = Path.Combine(root, zip ? "ffmpeg" : "yt-dlp");
+        var gate = Gates.GetOrAdd(Path.GetFullPath(root) + ":" + tool, _ => new(1));
+        await gate.WaitAsync(ct);
+        try
+        {
+            await using var installLock = await LockAsync(Path.Combine(root, tool + ".install.lock"), ct);
+            return await AcquireVerifiedAsync(root, repo, assetName, zip, tool, executableName, phase, ct);
+        }
+        finally { gate.Release(); }
+    }
+
+    private static async Task<string> AcquireVerifiedAsync(string root, string repo, string assetName, bool zip, string tool, string executableName, Action<string> phase, CancellationToken ct)
+    {
+        var folder = Path.Combine(root, tool);
         var receiptPath = folder + ".json";
         if (File.Exists(receiptPath))
         {
@@ -45,13 +53,13 @@ public static class VideoEngine
                     && SafeChild(folder, e.File) is { } path && File.Exists(path)
                     && Hash(path) == e.Hash))
                 {
-                    var executable = entries.First(e => Path.GetFileName(e.File) == (zip ? "ffmpeg.exe" : "yt-dlp.exe"));
+                    var executable = entries.First(e => Path.GetFileName(e.File) == executableName);
                     return SafeChild(folder, executable.File)!;
                 }
             }
             catch (Exception e) when (e is IOException or JsonException or InvalidOperationException or ArgumentException) { }
         }
-        phase(zip ? "engine.ffmpeg" : "engine.downloader");
+        phase(tool == "ffmpeg" ? "engine.ffmpeg" : "engine.downloader");
         using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{repo}/releases/latest");
         request.Headers.UserAgent.ParseAdd("Sol-Video/1.0");
         using var response = await Http.SendAsync(request, ct);
@@ -77,7 +85,7 @@ public static class VideoEngine
             var unpacked = Path.Combine(temp, "unpacked");
             Directory.CreateDirectory(unpacked);
             if (zip) ZipFile.ExtractToDirectory(archive, unpacked);
-            else File.Move(archive, Path.Combine(unpacked, "yt-dlp.exe"));
+            else File.Move(archive, Path.Combine(unpacked, executableName));
             ct.ThrowIfCancellationRequested();
             // On garde les licences et notices présentes dans la distribution FFmpeg.
             var entries = Directory.GetFiles(unpacked, "*", SearchOption.AllDirectories)
@@ -85,7 +93,7 @@ public static class VideoEngine
             if (Directory.Exists(folder)) Directory.Delete(folder, true);
             Directory.Move(unpacked, folder);
             await File.WriteAllTextAsync(receiptPath, JsonSerializer.Serialize(entries), ct);
-            var executable = entries.Single(e => Path.GetFileName(e.File) == (zip ? "ffmpeg.exe" : "yt-dlp.exe"));
+            var executable = entries.Single(e => Path.GetFileName(e.File) == executableName);
             return SafeChild(folder, executable.File)!;
         }
         finally { if (Directory.Exists(temp)) Directory.Delete(temp, true); }

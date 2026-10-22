@@ -64,17 +64,21 @@ async function navigate(path) {
 }
 async function inspect(kind) {
   const id=(await state()).activeId;
+  await popup.evaluate('window.__video=null');
   await cmd({type:'video.open',id});
-  await host.wait(()=>popup.evaluate('window.__video?.items?.length'),'sources');
-  const source=await popup.evaluate(`window.__video.items.find(s=>s.kind===${JSON.stringify(kind)})`);
-  assert(source,`Source ${kind}`);
-  await cmd({type:'video.inspect',id,query:source.id});
+  await host.wait(()=>popup.evaluate('window.__video?.phase==="ready"||window.__video?.items?.length'),'cached qualities or sources');
+  let view=await popup.evaluate('window.__video');
+  if(view.phase!=='ready') {
+    const source=view.items.find(s=>s.kind===kind);assert(source,`Source ${kind}`);
+    await cmd({type:'video.inspect',id,query:source.id});
+  }
   await host.wait(async()=>{
     const p=await popup.evaluate('window.__video');
     if(p.phase==='failed')throw new Error('Video inspection failed');
     return p.phase==='ready';
   },'qualities',60000);
-  return {id,source,view:await popup.evaluate('window.__video')};
+  view=await popup.evaluate('window.__video');
+  return {id,source:{id:view.sourceId},view};
 }
 function probe(path) {
   const p=spawnSync(ffprobe,['-v','error','-show_streams','-of','json',path],{windowsHide:true,encoding:'utf8'});
@@ -116,7 +120,7 @@ try {
   const point={x:(box[0]+box[4])/2,y:(box[1]+box[5])/2};
   await writeFile(resolve(host.base,'video-fan.png'),Buffer.from((await page.call('Page.captureScreenshot')).data,'base64'));
   for(const type of ['mouseMoved','mousePressed','mouseReleased'])await page.call('Input.dispatchMouseEvent',{type,...point,...(type==='mouseMoved'?{}:{button:'left',clickCount:1})});
-  await host.wait(()=>popup.evaluate('window.__video.phase===""&&window.__video.items.length>0'),'fan opens quality flow');
+  await host.wait(()=>popup.evaluate('window.__video.phase==="ready"||window.__video.items.length>0'),'fan opens quality flow');
   await cmd({type:'popup.close'});
   const direct=await inspect('file');slow=true;
   await cmd({type:'video.download',id:direct.id,query:direct.source.id,index:direct.view.selected});

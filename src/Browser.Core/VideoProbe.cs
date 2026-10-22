@@ -7,7 +7,7 @@ public static class VideoProbe
     public static async Task<int[]> InspectAsync(string url, string referer, string toolsRoot,
         IReadOnlyList<VideoCookie> cookies, Action<string> phase, CancellationToken ct)
     {
-        var tools = await VideoEngine.PrepareAsync(toolsRoot, phase, ct);
+        var tools = await VideoEngine.PrepareAsync(toolsRoot, phase, ct, inspectOnly: true);
         phase("inspect");
         var jar = Path.Combine(toolsRoot, "cookies-" + Guid.NewGuid().ToString("N") + ".txt");
         try
@@ -18,6 +18,7 @@ public static class VideoProbe
             foreach (var arg in new[] { "--ignore-config", "--no-plugin-dirs", "--no-playlist", "--no-color", "--encoding", "utf-8", "--skip-download",
                 "--dump-single-json", "--socket-timeout", "25", "--retries", "1", "--referer", referer }) start.ArgumentList.Add(arg);
             if (tools.Ffmpeg is not null) { start.ArgumentList.Add("--ffmpeg-location"); start.ArgumentList.Add(Path.GetDirectoryName(tools.Ffmpeg)!); }
+            if (tools.Runtime is not null) { start.ArgumentList.Add("--js-runtimes"); start.ArgumentList.Add("deno:" + tools.Runtime); }
             if (cookies.Count > 0)
             {
                 await File.WriteAllTextAsync(jar, VideoCookie.Jar(cookies), ct);
@@ -34,12 +35,24 @@ public static class VideoProbe
                 if (data.Length + read > 8_000_000) { process.Kill(true); throw new InvalidDataException("Metadata too large"); }
                 data.Append(buffer, 0, read);
             }
-            await process.WaitForExitAsync(ct); await errors;
-            if (process.ExitCode != 0) throw new InvalidDataException("Unsupported source");
+            await process.WaitForExitAsync(ct);
+            var failure = await errors;
+            if (process.ExitCode != 0) throw new IOException("Video probe: " + failure);
             return VideoQualitySelection.Parse(data.ToString());
         }
         finally { if (File.Exists(jar)) File.Delete(jar); }
     }
-    private static async Task DrainAsync(StreamReader reader, CancellationToken ct)
-    { while (await reader.ReadLineAsync(ct) is not null) { } }
+    private static async Task<string> DrainAsync(StreamReader reader, CancellationToken ct)
+    {
+        var failure = "unavailable";
+        // Ne jamais conserver les messages bruts, qui peuvent contenir des URL signées.
+        while (await reader.ReadLineAsync(ct) is { } line)
+        {
+            if (line.Contains("sign in", StringComparison.OrdinalIgnoreCase) || line.Contains("bot", StringComparison.OrdinalIgnoreCase)) failure = "auth";
+            else if (line.Contains("DRM", StringComparison.OrdinalIgnoreCase)) failure = "protected";
+            else if (failure == "unavailable" && line.Contains("403")) failure = "http403";
+            else if (failure == "unavailable" && line.Contains("challenge", StringComparison.OrdinalIgnoreCase)) failure = "challenge";
+        }
+        return failure;
+    }
 }

@@ -18,7 +18,7 @@ export default function VideoPicker({content}:{content:VideoContent}) {
       <Button variant="ghost" size="sm" className="pill-action" aria-label={t('Fermer','Close')} onClick={()=>send({type:'popup.close'})}>×</Button></div>
     <p className="video-page-title">{content.title}</p>
     {content.protectedMedia ? <p role="status">{t('Ce lecteur utilise une protection DRM. Sol ne peut pas télécharger cette vidéo.','This player uses DRM protection. Sol cannot download this video.')}</p> : <>
-      {content.phase && <Button variant="ghost" size="sm" className="pill-action" onClick={()=>send({type:'video.open',id:content.id})}>← {t('Sources','Sources')}</Button>}
+      {content.phase && content.sourceId!=='catalog' && <Button variant="ghost" size="sm" className="pill-action" onClick={()=>send({type:'video.open',id:content.id})}>← {t('Sources','Sources')}</Button>}
       {content.phase==='ready'?<>
         <div className="video-sources" role="radiogroup" aria-label={t('Qualité de la vidéo','Video quality')}>
           {content.qualities.map(height=><Button key={height} variant="ghost" size="sm" className="video-source" role="radio" aria-checked={quality===height} onClick={()=>setQuality(height)}>
@@ -34,7 +34,7 @@ export default function VideoPicker({content}:{content:VideoContent}) {
           <small>{source.kind==='page'?t('Retrouver la vidéo et ses pistes sur le site','Find the video and its tracks on this site'):source.host}</small></span>
         <span aria-hidden>→</span>
       </Button>)}</div>}
-      <p className="video-help">{t('Choisissez une source, puis la qualité. Au premier usage, Sol prépare les moteurs yt-dlp et FFmpeg. Retrouvez la vidéo dans Téléchargements, avec pause, reprise et annulation.','Choose a source, then quality. On first use, Sol prepares yt-dlp and FFmpeg. Find the video in Downloads with pause, resume and cancel.')}</p>
+      <p className="video-help">{t('Choisissez la qualité, puis téléchargez. Retrouvez la vidéo dans Téléchargements, avec pause, reprise et annulation.','Choose a quality, then download. Find the video in Downloads with pause, resume and cancel.')}</p>
       <p className="video-help">{t('La compatibilité dépend du site et de son lecteur. Les contenus protégés ne sont pas pris en charge.','Compatibility depends on the site and its player. Protected content is not supported.')}</p>
     </>}
   </section>;

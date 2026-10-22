@@ -1,8 +1,9 @@
 # Téléchargement vidéo dans Sol
 
 La détection est activée par défaut et ne lance aucun téléchargement. Le bouton
-vidéo de la barre d’adresse ouvre les sources observées. L’utilisateur choisit
-une source, une qualité réellement annoncée par le site, puis Télécharger.
+vidéo de la barre d’adresse ouvre directement les qualités déjà connues du lecteur
+ou des réponses HLS/DASH, sans lancer d’inspection au clic. L’utilisateur choisit
+une qualité réellement annoncée par le site, puis Télécharger.
 L’éventail contextuel d’un lecteur vidéo propose aussi « Télécharger la vidéo… ».
 Il ouvre le même choix de sources et de qualité, sans lancer le téléchargement.
 
@@ -17,10 +18,16 @@ Il ne crée pas de résolution artificielle.
   manifestes HLS et DASH. Les fragments `.ts`/`.m4s` sont exclus des fichiers.
 - Un observateur DOM signale les lecteurs, les changements de source et les
   événements de protection, y compris dans les cadres. Une URL `blob:` est un
-  lecteur, pas un fichier téléchargeable : Sol propose l’extraction de la page.
+  lecteur, pas un fichier téléchargeable. Les métadonnées du lecteur YouTube et
+  les manifestes déjà reçus fournissent les qualités sans téléchargement supplémentaire.
+  Si ces données sont absentes, l’extraction de la page reste un recours.
 - Les identifiants proposés sont internes à l’onglet et au document courant.
   Les messages d’une page ne démarrent jamais directement un téléchargement.
-- yt-dlp inspecte les formats puis télécharge les pistes ; FFmpeg assemble les
+- Les fichiers directs démarrent par HTTP sans moteur externe. Les pistes
+  vidéo/audio résolues sont téléchargées en parallèle, puis assemblées.
+  Les requêtes reprennent avec Range et un ETag fort ; sinon le fichier repart
+  de zéro pour éviter de juxtaposer deux versions.
+- yt-dlp retrouve les URL non résolues et télécharge les flux segmentés ; FFmpeg assemble les
   pistes séparées. Sol fournit progression, pause/reprise et annulation dans
   ses cartes de téléchargement habituelles. La reprise conserve les fichiers
   partiels tant que le site permet de réutiliser la source.
@@ -29,10 +36,11 @@ Il ne crée pas de résolution artificielle.
 
 ## Moteurs et données
 
-Les outils sont acquis à la première inspection, dans le dossier de données
+Les outils sont préparés en arrière-plan dès la première détection, dans le dossier de données
 Sol `tools/video`, sans installation globale ni IDM. Seuls les actifs des
 distributions officielles [yt-dlp](https://github.com/yt-dlp/yt-dlp/releases)
-et [BtbN FFmpeg](https://github.com/BtbN/FFmpeg-Builds/releases) sont acceptés.
+et [BtbN FFmpeg](https://github.com/BtbN/FFmpeg-Builds/releases), ainsi que le
+runtime officiel [Deno](https://github.com/denoland/deno/releases), sont acceptés.
 Le SHA-256 annoncé par l’API GitHub est vérifié avant extraction/exécution.
 Un reçu local permet de revérifier les fichiers mis en cache.
 
@@ -51,7 +59,12 @@ La disponibilité dépend du site, de l’expiration des liens et des extracteur
 Pas de contournement DRM ni de capture d’écran réencodée ; les directs sont
 refusés lors de l’inspection. Un site exigeant des en-têtes spécifiques ou
 une vérification interactive peut refuser le téléchargement. Certains
-extracteurs nécessitent un moteur JavaScript externe non fourni ici.
+extracteurs nécessitent un moteur JavaScript : Deno est fourni automatiquement
+sur Windows 64 bits et passé explicitement à yt-dlp. Cela suit le parcours
+[EJS officiel de yt-dlp](https://github.com/yt-dlp/yt-dlp/wiki/EJS).
+L’affichage des qualités n’attend pas ces outils. Un premier téléchargement
+segmenté ou une URL YouTube à résoudre peut toutefois attendre leur acquisition
+et les réponses du site : aucun délai universel de cinq secondes n’est garanti.
 Sur Windows 32 bits, FFmpeg win64 est indisponible : seules les variantes
 déjà réunies peuvent être téléchargées. Windows ARM64 utilise FFmpeg win64
 par émulation ; cette architecture nécessite une validation sur appareil.
@@ -90,6 +103,11 @@ L’implémentation Sol est indépendante de ces scripts propriétaires.
 ## Vérification reproductible
 
 Après compilation de l’interface et de Sol en Release x64 :
+`node tools/check-video-instant.mjs` mesure sous cinq secondes la détection,
+l’affichage des qualités et le démarrage d’un fichier direct, moteurs absents.
+Ce banc utilise des métadonnées de lecteur et des réponses locales déterministes,
+et vérifie le cookie HttpOnly, les octets et le repli de qualité.
+
 `node tools/check-video-downloads.mjs`. Charger d’abord `tools/env.ps1`.
 Le banc prépare les moteurs vérifiés si nécessaire et génère ses propres
 vidéos locales. Il teste HLS 720p/1080p, le repli 1440p → 1080p, le choix

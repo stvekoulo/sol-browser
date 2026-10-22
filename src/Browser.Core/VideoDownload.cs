@@ -3,8 +3,8 @@ using System.Text.Json;
 
 namespace Browser.Core;
 
-public sealed class VideoDownload(string url, string referer, string title, string directory, string toolsRoot,
-    IReadOnlyList<VideoCookie> cookies, int height = 0)
+public sealed partial class VideoDownload(string url, string referer, string title, string directory, string toolsRoot,
+    IReadOnlyList<VideoCookie> cookies, int height = 0, bool direct = false, string? audioUrl = null)
 {
     public event Action? Changed;
     public string State { get; private set; } = "InProgress";
@@ -47,6 +47,12 @@ public sealed class VideoDownload(string url, string referer, string title, stri
         string? jar = null;
         try
         {
+            if (direct)
+            {
+                try { await DownloadDirectAsync(ct); return; }
+                catch (System.Net.Http.HttpRequestException) when (new Uri(url).Host.EndsWith(".googlevideo.com", StringComparison.OrdinalIgnoreCase))
+                { RemovePartialFiles(); url = referer; direct = false; }
+            }
             var tools = await VideoEngine.PrepareAsync(toolsRoot, p => { Phase = p; Changed?.Invoke(); }, ct);
             ct.ThrowIfCancellationRequested();
             Directory.CreateDirectory(directory);
@@ -61,6 +67,7 @@ public sealed class VideoDownload(string url, string referer, string title, stri
                 "--no-simulate", "--output", prefix + ".%(ext)s", "--format", VideoQualitySelection.Selector(height, tools.Ffmpeg is not null),
                 "--referer", referer }) args.Add(a);
             if (tools.Ffmpeg is not null) { args.Add("--ffmpeg-location"); args.Add(Path.GetDirectoryName(tools.Ffmpeg)!); }
+            if (tools.Runtime is not null) { args.Add("--js-runtimes"); args.Add("deno:" + tools.Runtime); }
             if (cookies.Count > 0)
             {
                 // Cookie jar temporaire, seulement les origines du site et de la source choisie.
@@ -82,7 +89,7 @@ public sealed class VideoDownload(string url, string referer, string title, stri
             else { State = "Completed"; Phase = "done"; BytesReceived = new FileInfo(ResultFilePath).Length; TotalBytesToReceive = BytesReceived; }
         }
         catch (OperationCanceledException) { State = "Interrupted"; Phase = Canceled ? "canceled" : "paused"; }
-        catch (Exception e) when (e is IOException or System.Net.Http.HttpRequestException or JsonException or InvalidOperationException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or ArgumentException)
+        catch (Exception e) when (e is IOException or InvalidDataException or System.Net.Http.HttpRequestException or JsonException or InvalidOperationException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or ArgumentException)
         { State = "Interrupted"; Phase = "failed"; }
         finally
         {

@@ -14,7 +14,7 @@ public sealed partial class PageHost
         _spellingSeen.Remove(id);
         _asleep.Remove(id);
         _pdf.Remove(id);
-        _videos.Remove(id);
+        if (_videos.Remove(id)) VideoChanged?.Invoke(id);
         _webApps.Remove(id);
         _webAppGeneration.Remove(id);
         _ready.Remove(id);

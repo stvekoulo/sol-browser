@@ -95,6 +95,7 @@ public sealed partial class BrowserController
             _tabs.Update(id, url, title); Refresh();
         };
         _pages.RuntimeChanged += Refresh;
+        _pages.VideoChanged += VideoAvailable;
         _sessions.Seed();
         _pages.CreatePopupTab = (source, url) =>
         {
@@ -190,6 +191,8 @@ public sealed partial class BrowserController
             _closingWindow = true;
             foreach (var job in _videoJobs) job.Cancel();
             _videoProbeCancel?.Cancel();
+            _videoWarmupCancel.Cancel();
+            foreach (var discovery in _videoDiscovery.Values) discovery.Cancel.Cancel();
             _noteMaintenance.Stop();
             CancelAi();
             CancelChat(); CancelCategories(); _chatGpt.CancelSignIn();
