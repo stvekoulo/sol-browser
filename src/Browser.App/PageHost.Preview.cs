@@ -1,17 +1,18 @@
 using Browser.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Markup;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.Web.WebView2.Core;
-using Windows.UI;
 using Windows.System;
+using Windows.UI;
 
 namespace Browser.App;
 
 public sealed partial class PageHost
 {
-    private sealed record PreviewSurface(string SourceId, Grid Overlay, WebView2 View, TextBlock Address, TextBlock Status,
-        Button Back, Button Forward, Button Reload, ProgressBar Progress)
+    private sealed record PreviewSurface(string SourceId, Grid Overlay, WebView2 View, TextBlock Status, ProgressBar Progress)
     { public string Url = ""; public bool Loading; }
     private PreviewSurface? _preview;
     private readonly string _previewEscape = "sol.preview.close:" + Guid.NewGuid().ToString("N");
@@ -42,7 +43,7 @@ public sealed partial class PageHost
     {
         if (!LinkPreview.Allowed(url) || Core(sourceId) is not { } source) return;
         ClosePreview();
-        var preview = CreatePreview(sourceId); preview.Url = url; preview.Address.Text = url; _preview = preview;
+        var preview = CreatePreview(sourceId); preview.Url = url; _preview = preview;
         container.Children.Add(preview.Overlay);
         try
         {
@@ -61,16 +62,14 @@ public sealed partial class PageHost
             {
                 if (!LinkPreview.Allowed(e.Uri)) { e.Cancel = true; return; }
                 preview.Loading = true; preview.Progress.Visibility = Visibility.Visible; preview.Status.Visibility = Visibility.Collapsed;
-                preview.Reload.Content = "×";
             };
-            core.SourceChanged += (_, _) => { if (LinkPreview.Allowed(core.Source)) { preview.Url = core.Source; preview.Address.Text = core.Source; ToolTipService.SetToolTip(preview.Address, core.Source); } };
-            core.HistoryChanged += (_, _) => { preview.Back.IsEnabled = core.CanGoBack; preview.Forward.IsEnabled = core.CanGoForward; };
+            core.SourceChanged += (_, _) => { if (LinkPreview.Allowed(core.Source)) preview.Url = core.Source; };
             core.NavigationCompleted += (_, e) =>
             {
-                preview.Loading = false; preview.Reload.Content = "↻"; preview.Progress.Visibility = Visibility.Collapsed;
+                preview.Loading = false; preview.Progress.Visibility = Visibility.Collapsed;
                 if (!e.IsSuccess && e.WebErrorStatus != CoreWebView2WebErrorStatus.OperationCanceled)
                 {
-                    preview.Status.Text = Language.T("La page n’a pas pu être chargée. Réessayez avec ↻.", "The page could not be loaded. Retry with ↻.");
+                    preview.Status.Text = Language.T("La page n’a pas pu être chargée. Réessayez.", "The page could not be loaded. Retry.");
                     preview.Status.Visibility = Visibility.Visible;
                 }
             };
@@ -103,7 +102,8 @@ public sealed partial class PageHost
     {
         var isDark = (0.299 * _pageColor.R + 0.587 * _pageColor.G + 0.114 * _pageColor.B < 160) || settings.Theme == "dark" || (settings.Theme != "light" && UiBridge.InitialBackground.R < 128);
         var surfaceBg = isDark ? Color.FromArgb(255, 18, 18, 20) : Color.FromArgb(255, 255, 255, 255);
-        var buttonBg = isDark ? Color.FromArgb(220, 26, 26, 30) : Color.FromArgb(235, 255, 255, 255);
+        var buttonBg = new SolidColorBrush(isDark ? Color.FromArgb(225, 28, 28, 32) : Color.FromArgb(235, 255, 255, 255));
+        var hoverBg = new SolidColorBrush(isDark ? Color.FromArgb(240, 48, 48, 54) : Color.FromArgb(245, 240, 240, 245));
         var borderBrush = new SolidColorBrush(isDark ? Color.FromArgb(38, 255, 255, 255) : Color.FromArgb(25, 0, 0, 0));
         var ink = new SolidColorBrush(isDark ? Color.FromArgb(255, 245, 245, 245) : Color.FromArgb(255, 24, 24, 27));
 
@@ -127,63 +127,69 @@ public sealed partial class PageHost
         overlay.KeyDown += (_, e) => { if (e.Key == VirtualKey.Escape) { ClosePreview(); e.Handled = true; } };
 
         var rail = new StackPanel { Spacing = 8, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
-        var toolbar = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 4,
-            HorizontalAlignment = HorizontalAlignment.Left,
-            VerticalAlignment = VerticalAlignment.Top,
-            CornerRadius = new CornerRadius(12),
-            Background = new SolidColorBrush(buttonBg),
-            BorderBrush = borderBrush,
-            BorderThickness = new Thickness(1),
-            Shadow = new ThemeShadow(),
-            Translation = new System.Numerics.Vector3(0, 0, 16),
-            Padding = new Thickness(3)
-        };
-        var navigation = new StackPanel { Orientation = Orientation.Horizontal, Visibility = Visibility.Collapsed, Spacing = 3 };
-        overlay.Children.Add(toolbar); overlay.Children.Add(rail); Canvas.SetZIndex(toolbar, 2); Canvas.SetZIndex(rail, 2);
+        overlay.Children.Add(rail); Canvas.SetZIndex(rail, 2);
 
-        Button Action(string label, string glyph, StackPanel parent, Action run, int size = 36, CornerRadius? radius = null)
+        void AnimateProp(DependencyObject target, string prop, double to, int ms = 160)
         {
+            var anim = new DoubleAnimation { To = to, Duration = TimeSpan.FromMilliseconds(ms), EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+            Storyboard.SetTarget(anim, target);
+            Storyboard.SetTargetProperty(anim, prop);
+            var sb = new Storyboard();
+            sb.Children.Add(anim);
+            sb.Begin();
+        }
+
+        Button CreateRailButton(string label, string pathData, Action run, Action<TransformGroup, bool> onHover)
+        {
+            var pathIcon = (PathIcon)XamlReader.Load($"<PathIcon xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' Data='{pathData}' />");
+            pathIcon.Foreground = ink;
+            var transforms = new TransformGroup();
+            var scale = new ScaleTransform { ScaleX = 1, ScaleY = 1, CenterX = 10, CenterY = 10 };
+            var rotate = new RotateTransform { Angle = 0, CenterX = 10, CenterY = 10 };
+            var translate = new TranslateTransform { X = 0, Y = 0 };
+            transforms.Children.Add(scale);
+            transforms.Children.Add(rotate);
+            transforms.Children.Add(translate);
+            pathIcon.RenderTransform = transforms;
+
+            var btnScale = new ScaleTransform { ScaleX = 1, ScaleY = 1, CenterX = 19, CenterY = 19 };
             var button = new Button
             {
-                Content = glyph,
-                Width = size,
-                Height = size,
-                MinWidth = 28,
-                MinHeight = 28,
-                CornerRadius = radius ?? new CornerRadius(12),
+                Content = pathIcon,
+                Width = 38,
+                Height = 38,
+                CornerRadius = new CornerRadius(12),
                 Padding = new Thickness(0),
-                Foreground = ink,
-                Background = new SolidColorBrush(buttonBg),
+                Background = buttonBg,
                 BorderBrush = borderBrush,
                 BorderThickness = new Thickness(1),
                 Shadow = new ThemeShadow(),
                 Translation = new System.Numerics.Vector3(0, 0, 16),
-                HorizontalContentAlignment = HorizontalAlignment.Center,
-                VerticalContentAlignment = VerticalAlignment.Center,
-                FontSize = 13.5
+                RenderTransform = btnScale
             };
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, label);
             ToolTipService.SetToolTip(button, label);
             button.Click += (_, _) => run();
-            parent.Children.Add(button);
+            button.PointerEntered += (_, _) => { button.Background = hoverBg; onHover(transforms, true); };
+            button.PointerExited += (_, _) => { button.Background = buttonBg; onHover(transforms, false); };
+            button.PointerPressed += (_, _) => { AnimateProp(btnScale, "ScaleX", 0.92, 80); AnimateProp(btnScale, "ScaleY", 0.92, 80); };
+            button.PointerReleased += (_, _) => { AnimateProp(btnScale, "ScaleX", 1.0, 120); AnimateProp(btnScale, "ScaleY", 1.0, 120); };
+            button.PointerCaptureLost += (_, _) => { AnimateProp(btnScale, "ScaleX", 1.0, 120); AnimateProp(btnScale, "ScaleY", 1.0, 120); };
+            rail.Children.Add(button);
             return button;
         }
 
-        Action(Language.T("Navigation de l’aperçu", "Preview navigation"), "☰", toolbar,
-            () => navigation.Visibility = navigation.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible, 30, new CornerRadius(9));
-        toolbar.Children.Add(navigation);
-        var back = Action(Language.T("Précédent", "Back"), "‹", navigation, () => NavigatePreview("back"), 30, new CornerRadius(9)); back.IsEnabled = false;
-        var forward = Action(Language.T("Suivant", "Forward"), "›", navigation, () => NavigatePreview("forward"), 30, new CornerRadius(9)); forward.IsEnabled = false;
-        var reload = Action(Language.T("Recharger / arrêter", "Reload / stop"), "↻", navigation, () => NavigatePreview("reload"), 30, new CornerRadius(9));
-        var address = new TextBlock { TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 240, VerticalAlignment = VerticalAlignment.Center, Foreground = ink, FontSize = 12, Margin = new Thickness(6, 0, 8, 0) };
-        navigation.Children.Add(address);
+        CreateRailButton(Language.T("Fermer l’aperçu (Échap)", "Close preview (Escape)"),
+            "M 4 4 L 16 16 M 16 4 L 4 16", ClosePreview,
+            (t, hover) => { AnimateProp(t.Children[1], "Angle", hover ? 90 : 0, 200); AnimateProp(t.Children[0], "ScaleX", hover ? 1.12 : 1, 160); AnimateProp(t.Children[0], "ScaleY", hover ? 1.12 : 1, 160); });
 
-        Action(Language.T("Fermer l’aperçu (Échap)", "Close preview (Escape)"), "✕", rail, ClosePreview, 38);
-        Action(Language.T("Ouvrir dans un nouvel onglet", "Open in a new tab"), "⤢", rail, () => PromotePreview(false), 38);
-        Action(Language.T("Ouvrir à côté", "Open beside"), "◫", rail, () => PromotePreview(true), 38);
+        CreateRailButton(Language.T("Ouvrir dans un nouvel onglet", "Open in a new tab"),
+            "M 9 3 H 4 C 3.4 3 3 3.4 3 4 v 10 c 0 .6 .4 1 1 1 h 10 c .6 0 1 -.4 1 -1 V 9 M 11 3 h 6 v 6 M 17 3 L 8 12", () => PromotePreview(false),
+            (t, hover) => { AnimateProp(t.Children[2], "X", hover ? 1.5 : 0, 160); AnimateProp(t.Children[2], "Y", hover ? -1.5 : 0, 160); AnimateProp(t.Children[0], "ScaleX", hover ? 1.08 : 1, 160); AnimateProp(t.Children[0], "ScaleY", hover ? 1.08 : 1, 160); });
+
+        CreateRailButton(Language.T("Ouvrir à côté", "Open beside"),
+            "M 3 3 h 14 v 14 H 3 Z M 10 3 v 14", () => PromotePreview(true),
+            (t, hover) => { AnimateProp(t.Children[0], "ScaleX", hover ? 1.18 : 1, 160); AnimateProp(t.Children[0], "ScaleY", hover ? 1.05 : 1, 160); });
 
         var view = new CursorWebView { DefaultBackgroundColor = surfaceBg, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch };
         card.Children.Add(view);
@@ -223,11 +229,9 @@ public sealed partial class PageHost
             var railX = cardLeft + cardW + 12;
             if (railX + 48 > w) railX = cardLeft + cardW - 50;
             rail.Margin = new Thickness(railX, cardTop, 0, 0);
-            toolbar.Margin = new Thickness(cardLeft + 14, cardTop + 14, 0, 0);
-            address.MaxWidth = Math.Max(80, Math.Min(340, cardW - 200));
         }
 
         overlay.SizeChanged += (_, _) => LayoutSurfaces();
-        return new(sourceId, overlay, view, address, status, back, forward, reload, progress);
+        return new(sourceId, overlay, view, status, progress);
     }
 }
