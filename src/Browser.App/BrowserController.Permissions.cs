@@ -34,6 +34,9 @@ public sealed partial class BrowserController
 
     private void OnPermissionRequested(CoreWebView2 core, CoreWebView2PermissionRequestedEventArgs args)
     {
+        // Les autorisations média et non sensibles (autoplay, polices, veille) sont accordées d'office.
+        if (args.PermissionKind is CoreWebView2PermissionKind.Autoplay or CoreWebView2PermissionKind.LocalFonts || (int)args.PermissionKind == 13)
+        { args.State = CoreWebView2PermissionState.Allow; return; }
         args.SavesInProfile = false;
         var origin = PermissionStore.OriginOf(args.Uri);
         var tab = _tabs.Tabs.FirstOrDefault(t => _pages.CoreOf(t.Id) == core);

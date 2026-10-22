@@ -162,11 +162,12 @@ public sealed partial class PageHost
         s.IsGeneralAutofillEnabled = false;
         s.HiddenPdfToolbarItems = CoreWebView2PdfToolbarItems.None; // recherche, pages, rotation, impression et enregistrement natifs
         _ = core.AddScriptToExecuteOnDocumentCreatedAsync(SidewaysScript);
-        _ = core.AddScriptToExecuteOnDocumentCreatedAsync("document.addEventListener('pointerdown',e=>{if(e.isTrusted)window.chrome.webview.postMessage('sol.page.pointer')},true)");
+        _ = core.AddScriptToExecuteOnDocumentCreatedAsync("document.addEventListener('pointerdown',e=>{if(e.isTrusted&&window.chrome?.webview)window.chrome.webview.postMessage('sol.page.pointer')},true)");
         if(withFan){await ConfigureFanAsync(core);core.DOMContentLoaded += (_, _) => PostFanSettings(core);}
         _ = core.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "video-cursor.js")));
         // Mémorise la sélection au clic droit pour Sol AI ; sans effet tant que l'utilisateur n'agit pas.
         _ = core.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "ai.js")));
+        _ = core.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "streaming-fix.js")));
         s.IsReputationCheckingRequired = true; // SmartScreen
         // Aucun certificat invalide n'est accepté silencieusement, même sur localhost.
         core.ServerCertificateErrorDetected += (_, e) =>
