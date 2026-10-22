@@ -19,7 +19,7 @@ public sealed partial class BrowserController
         _videoProbeCancel?.Cancel(); _videoQualities = null;
         _videoPicker = (id, core.Source);
         if (PublishVideoCatalog(id, true)) return;
-        _popup.ShowCentered(420, JsonSerializer.Serialize(new
+        _popup.ShowCentered(520, JsonSerializer.Serialize(new
         {
             popup = "videos", id, title = _tabs.Tabs.FirstOrDefault(t => t.Id == id)?.Title ?? "Vidéo",
             protectedMedia = _pages.VideoProtected(id), phase = "", sourceId = "", qualities = Array.Empty<int>(), preferred = _settings.VideoQuality, selected = 0,

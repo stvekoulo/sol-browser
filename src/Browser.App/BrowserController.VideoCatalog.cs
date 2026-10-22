@@ -70,7 +70,7 @@ public sealed partial class BrowserController
             protectedMedia = _pages.VideoProtected(id), phase = "ready", sourceId = "catalog", qualities = heights,
             preferred = _settings.VideoQuality, selected = VideoQualitySelection.Pick(heights, _settings.VideoQuality), items = Array.Empty<object>(),
         });
-        if (show) _popup.ShowCentered(420, json); else _popup.Post(json);
+        if (show) _popup.ShowCentered(520, json); else _popup.Post(json);
         return true;
     }
 }
