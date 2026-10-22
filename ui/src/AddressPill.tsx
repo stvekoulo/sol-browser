@@ -70,6 +70,13 @@ export default function AddressPill({ tab, focused, grow, shield }: { tab: Tab |
       </form>
 
       <div className="address-trail">
+        {!!tab?.videos && <button className="inline-btn" data-action="video.open" title={t('Vidéos disponibles au téléchargement','Videos available to download')} aria-label={t('Vidéos disponibles au téléchargement','Videos available to download')} onClick={()=>send({type:'video.open',id:tab.id})}><Icon d="M8 2v8M5 7l3 3 3-3M2 12v2h12v-2" size={14}/></button>}
+        {tab?.webApp && <button className="inline-btn" data-action="webapp.info"
+          title={t(`Application web disponible : ${tab.webApp.Name}`, `Web app available: ${tab.webApp.Name}`)}
+          aria-label={t(`Application web disponible : ${tab.webApp.Name}`, `Web app available: ${tab.webApp.Name}`)}
+          onClick={() => send({type:'webapp.info',id:tab.id})}>
+          <Icon d="M2 3h12v8H2zM5 14h6M8 11v3M10 5v4M8 7l2 2 2-2" size={14}/>
+        </button>}
         {tab?.ai && /^https?:/.test(rawUrl) && !rawUrl.startsWith('https://start.sol/') && <button className="inline-btn" title={t('Résumer cette page avec Sol AI','Summarize this page with Sol AI')} aria-label={t('Résumer cette page avec Sol AI','Summarize this page with Sol AI')} onClick={()=>send({type:'ai.open',id:tab.id})}><Icon d="M4 2.5h5.5L12 5v8.5H4zM6 7.5h4M6 10h4" size={14}/></button>}
         {tab && /^https?:/.test(rawUrl) && !isStartPage(rawUrl) && rawUrl !== 'https://start.sol/index.html#notes' && (
           <button className={`inline-btn${tab.reader ? ' on' : ''}`} aria-pressed={!!tab.reader}

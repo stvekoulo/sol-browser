@@ -31,6 +31,14 @@ public sealed partial class BrowserController
                 { HidePopup(); Execute(chosen); }
                 return true;
             case "reader.toggle": _ = ToggleReaderAsync(id); break;
+            case "video.open": OpenVideos(id); return true;
+            case "video.inspect": _ = InspectVideoAsync(id, c.Query!); return true;
+            case "video.download": _ = DownloadVideoAsync(id, c.Query!, c.Index!.Value); return true;
+            case "webapp.info":
+                if (_pages.WebAppOf(id) is { } app)
+                    Notice(app.Name, T($"Ce site propose une application web progressive (PWA).\nAdresse de lancement : {app.StartUrl}",
+                        $"This site offers a progressive web app (PWA).\nLaunch address: {app.StartUrl}"));
+                return true;
             case "design.toggle": _ = ToggleDesignAsync(id); return true;
             case "reader.listen" or "reader.stop": _ = ReaderSpeechAsync(id, c.Type == "reader.stop"); return true;
             case "bookmark.toggle":

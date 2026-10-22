@@ -1,4 +1,4 @@
-// Éventail d'actions au coin des éléments d'une page : texte sélectionné, liens en forme de carte, images, blocs de code.
+// Éventail d'actions au coin des éléments d'une page : texte sélectionné, cartes, images, vidéos, blocs de code.
 // Géométrie du bloc « Action node » de Bencho (Copyright (c) 2026 Lorenzo Cabra, MIT ; voir
 // ui/licenses/bencho-MIT.txt). Icônes : tracés de Lucide (ISC). Isolé dans un Shadow DOM fermé : la page ne peut ni
 // le styler ni le lire. Chaque message porte une clé que Sol a écrite dans ce script : une page ne peut pas l'imiter.
@@ -15,7 +15,7 @@
   webview.addEventListener('message', e => {
     if (e.data?.event !== 'fan-settings') return;
     const next = e.data.fan;
-    if (!next || next.enabled === config.enabled && next.trigger === config.trigger) return;
+    if (!next || next.enabled === config.enabled && next.trigger === config.trigger && next.video === config.video) return;
     config = next; cancelOpen(); clearDismissal(); hide();
   });
   const request = target => {
@@ -50,6 +50,7 @@
 
   /* ── icônes (Lucide, 24 × 24) ── */
   const ICONS = {
+    download: '<path d="M12 3v12m-4-4 4 4 4-4M4 17v4h16v-4"/>',
     tab: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 4v4M2 8h20M6 4v4"/>',
     split: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/>',
     link: '<path d="M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" y1="12" x2="16" y2="12"/>',
@@ -70,6 +71,7 @@
     if (!(el instanceof Element) || el.closest('input,textarea,[contenteditable]:not([contenteditable="false"])')) return null;
     for (let n = el, depth = 0; n && n !== document.body && depth < 6; n = n.parentElement, depth++) {
       if (n.tagName === 'PRE' && n.offsetHeight >= 48) return { el: n, kind: 'code' };
+      if (config.video !== false && n.tagName === 'VIDEO' && n.offsetWidth >= 120 && n.offsetHeight >= 70) return { el: n, kind: 'video' };
       if (n.tagName === 'IMG' && n.offsetWidth >= 120 && n.offsetHeight >= 90 && web(n.currentSrc || n.src)) return { el: n, kind: 'image' };
       if (n.tagName === 'A' && web(n.href) && n.offsetWidth >= 140 && n.offsetHeight >= 56) return { el: n, kind: 'link' };
     }
@@ -80,6 +82,8 @@
     ? [['copy', T('Copier', 'Copy'), text], ['sol', T('Sol AI', 'Sol AI'), text], ['more', T('Plus d’actions…', 'More actions…'), text]]
     : kind === 'link'
     ? [['tab', T('Ouvrir dans un nouvel onglet', 'Open in a new tab'), el.href], ['split', T('Ouvrir en vue scindée', 'Open in split view'), el.href], ['link', T('Copier le lien', 'Copy link'), el.href]]
+    : kind === 'video'
+      ? [['download', T('Télécharger la vidéo…', 'Download video…'), web(el.currentSrc || el.src) ? el.currentSrc || el.src : location.href], ['link', T('Copier le lien vidéo', 'Copy video link'), web(el.currentSrc || el.src) ? el.currentSrc || el.src : location.href], ['more', T('Plus d’actions…', 'More actions…'), web(el.currentSrc || el.src) ? el.currentSrc || el.src : location.href]]
     : kind === 'image'
       ? [['tab', T("Ouvrir l'image", 'Open image'), el.currentSrc || el.src], ['link', T("Copier le lien de l'image", 'Copy image link'), el.currentSrc || el.src], ['note', T('Ajouter à une note', 'Add to a note'), el.currentSrc || el.src]]
       : [['copy', T('Copier le code', 'Copy code'), el.innerText], ['explain', T('Expliquer avec Sol AI', 'Explain with Sol AI'), el.innerText], ['note', T('Ajouter à une note', 'Add to a note'), el.innerText]];
@@ -234,7 +238,7 @@
   addEventListener('contextmenu', e => {
     if (!e.isTrusted || !config.enabled || config.trigger !== 2 || e.composedPath().includes(host)) return;
     if (e.target.closest?.('input,textarea,[contenteditable]:not([contenteditable="false"])')) return;
-    const target = selected() || kindOf(e.target); if (!target) return;
+    const target = selected() || kindOf(e.target) || document.elementsFromPoint(e.clientX, e.clientY).map(kindOf).find(t => t?.kind === 'video'); if (!target) return;
     e.preventDefault(); e.stopImmediatePropagation(); show(target);
   }, true);
   addEventListener('pointerdown', e => { if (!e.composedPath().includes(host) && config.trigger === 2) hide(); }, true);

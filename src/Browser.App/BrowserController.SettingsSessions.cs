@@ -141,6 +141,7 @@ public sealed partial class BrowserController
             case "memory": _settings.MemorySaver = on; break;
             case "scrollbars": _settings.HideScrollbars = !on; break;
             case "blur": _settings.BlurEnabled = on; break;
+            case "videoDownloads": _settings.VideoDownloads = on; break;
             case "floatingDownloads": _settings.FloatingDownloads = on; break;
             case "onlineSuggestions": _settings.OnlineSuggestions = on; break;
             case "passwords": _settings.SavePasswords = on; break;
@@ -177,6 +178,8 @@ public sealed partial class BrowserController
     public void DismissAiPopup() { if (_aiPopup) HidePopup(); }
     private void HidePopup(bool cancelPermissions = true)
     {
+        _videoProbeCancel?.Cancel();
+        _videoPicker = null; _videoQualities = null;
         if (_aiPopup) { _aiPopup = false; CancelAi(); _aiContext = null; _aiBusy = false; }
         _groupEditing = null;
         _siteReset = null;

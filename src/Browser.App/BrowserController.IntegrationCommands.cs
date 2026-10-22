@@ -14,6 +14,14 @@ public sealed partial class BrowserController
         switch (c.Type)
         {
             case "settings.set":
+                if (id == "videoQuality")
+                {
+                    if (c.Index is not { } quality || !VideoQualitySelection.Preferences.Contains(quality)) return true;
+                    _settings.VideoQuality = quality;
+                    JsonFileStore.Save(AppPaths.Settings, _settings);
+                    if (_settingsOpen) _popup.Post(SettingsJson());
+                    return true;
+                }
                 if (id == "fanTrigger")
                 {
                     if (c.Index is not (0 or 1 or 2)) return true;

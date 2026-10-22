@@ -32,12 +32,12 @@ public sealed partial class BrowserController
         if (changed) Refresh(); // le bouton de la barre apparaît quand l'encart disparaît, et inversement
     }
 
-    private string DownloadsJson(IEnumerable<(string Id, Microsoft.Web.WebView2.Core.CoreWebView2DownloadOperation Op, string TabId)> downloads) => JsonSerializer.Serialize(new
+    private string DownloadsJson(IEnumerable<(string Id, DownloadOperation Op, string TabId)> downloads) => JsonSerializer.Serialize(new
     {
         popup = "downloads",
         items = downloads.Select(d => new
         {
-            id = d.Id,
+            id = d.Id, phase = d.Op.Phase,
             name = Path.GetFileName(d.Op.ResultFilePath),
             received = d.Op.BytesReceived,
             total = d.Op.TotalBytesToReceive>0?(long?)d.Op.TotalBytesToReceive:null,
@@ -106,6 +106,7 @@ public sealed partial class BrowserController
         check = Program.Check,
         zoom = (int)Math.Round(_settings.PageZoom * 100),
         uiScale = _settings.UiScale,
+        videoQuality = _settings.VideoQuality,
         fanEnabled = _settings.FanEnabled, fanTrigger = _settings.FanTrigger, wallpaperCustom = _settings.StartWallpaperCustom,
         theme = Math.Max(0, Array.IndexOf(Themes, _settings.Theme)),
         language = Math.Max(0, Array.IndexOf(Languages, _settings.Language)),
@@ -149,6 +150,7 @@ public sealed partial class BrowserController
             new { key = "memory", label = T("Économie de mémoire", "Memory saver"), hint = MemoryHint(), on = _settings.MemorySaver },
             new { key = "scrollbars", label = T("Barre de défilement fine", "Thin scrollbar"), hint = T("Apparaît seulement pendant le défilement", "Only appears while scrolling"), on = !_settings.HideScrollbars },
             new { key = "blur", label = T("Flou progressif en bas des pages", "Progressive blur at the bottom of pages"), hint = "", on = _settings.BlurEnabled },
+            new { key = "videoDownloads", label = T("Détecter les vidéos à télécharger", "Detect downloadable videos"), hint = T("Propose les sources dans la barre d’adresse ; télécharge uniquement au clic", "Shows sources in the address bar; downloads only on click"), on = _settings.VideoDownloads },
             new { key = "floatingDownloads", label = T("Téléchargements en bas à droite", "Downloads at the bottom right"), hint = T("Sinon, uniquement dans le panneau de la barre", "Otherwise, only in the toolbar panel"), on = _settings.FloatingDownloads },
             new { key = "onlineSuggestions", label = T("Suggestions de recherche", "Search suggestions"), hint = T("Envoie au moteur de recherche ce qui est tapé dans la barre d'adresse", "Sends what you type in the address bar to the search engine"), on = _settings.OnlineSuggestions },
             new { key = "passwords", label = T("Enregistrer les mots de passe", "Save passwords"), hint = T("Stockage chiffré du moteur, sur cet ordinateur", "Encrypted engine storage, on this computer"), on = _settings.SavePasswords },

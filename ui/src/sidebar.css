@@ -210,7 +210,7 @@ html.painted .sidebar-body:not(.floating) { transition: background-color 220ms v
 .sidebar-body.floating { background: var(--bg-sidebar-card); transition: none; }
 
 /* Groupes d'onglets : un en-tête à la couleur du groupe, ses onglets en retrait derrière un filet de même couleur */
-.tab-group-block { display: flex; flex-direction: column; gap: 2px; --group: #8fa8e8; }
+.tab-group-block { display: flex; flex-direction: column; gap: 5px; --group: #8fa8e8; }
 
 .tab-group-header {
   flex: none;

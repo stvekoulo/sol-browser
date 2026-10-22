@@ -22,6 +22,8 @@ export type Tab = {
   storeDetail?: boolean;
   translated?: boolean;
   reader?: boolean;
+  videos?: number; videoProtected?: boolean;
+  webApp?: { Name: string; StartUrl: string; ManifestUrl: string } | null;
   ai?: boolean;
   storeInstalled?: boolean; // fiche du store d'une extension déjà installée
 };

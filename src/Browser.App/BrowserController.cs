@@ -188,6 +188,8 @@ public sealed partial class BrowserController
         _window.Closed += (_, _) =>
         {
             _closingWindow = true;
+            foreach (var job in _videoJobs) job.Cancel();
+            _videoProbeCancel?.Cancel();
             _noteMaintenance.Stop();
             CancelAi();
             CancelChat(); CancelCategories(); _chatGpt.CancelSignIn();

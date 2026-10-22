@@ -137,6 +137,8 @@ public sealed partial class BrowserController
                 storeInstalled = _pages.CoreOf(t.Id) is { } storeShown && StoreExtension(storeShown.Source) is { } storeId && _installedExtensions.Contains(storeId),
                 translated = _translationOriginals.ContainsKey(t.Id) && PageTranslation.IsGooglePage(t.Url),
                 reader = _reading.Contains(t.Id),
+                webApp = _pages.WebAppOf(t.Id),
+                videos = _pages.VideosOf(t.Id).Count, videoProtected = _pages.VideoProtected(t.Id),
                 ai = AiReady,
             }),
             groups = _tabs.Groups.Select(g => new { id = g.Id, name = g.Name, color = g.Color, icon = g.Icon, collapsed = g.Collapsed }),

@@ -1,3 +1,4 @@
+import VideoPicker from './VideoPicker';
 import ExtensionsPopup from './ExtensionsPopup';
 import {Button} from '@/components/motion/button/base';
 import SolMenu from './SolMenu';
@@ -23,6 +24,7 @@ export default function PopupViews({content,rootRef,opening,selected,settingsSec
 const root=rootRef;
 
 
+  if (content.popup === 'videos') return <div key={opening} ref={root} className="popup arriving"><VideoPicker content={content}/></div>;
   if (content.popup === 'ai-action') return <div key={opening} ref={root} className="popup arriving"><Suspense fallback={null}><SolAiAction content={content}/></Suspense></div>;
 
   if (content.popup === 'palette')

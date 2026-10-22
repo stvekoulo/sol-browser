@@ -15,6 +15,14 @@ public sealed partial class BrowserController
         var text = value.Text;
         switch (action)
         {
+            case "download" when kind == "video" && _settings.VideoDownloads: OpenVideos(tabId); break;
+            case "more" when kind == "video":
+                ShowMenu(x, y, [
+                    (T("Télécharger la vidéo…", "Download video…"), () => _afterMenu = () => OpenVideos(tabId)),
+                    (T("Copier le lien vidéo", "Copy video link"), () => Copy(text)),
+                    (T("Ouvrir dans un nouvel onglet", "Open in a new tab"), () => { if (IsWeb(text)) { Open(text, activate: false); Refresh(); } })
+                ]);
+                break;
             case "tab" when IsWeb(text): Open(text, activate: false); Refresh(); break;
             case "split" when IsWeb(text) && _tabs.ActiveId == tabId: Split(Open(text, activate: false).Id); Refresh(); break;
             case "link" when IsWeb(text):

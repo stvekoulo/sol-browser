@@ -4,7 +4,7 @@ import { Icon } from './Icons';
 import {Button} from '@/components/motion/button/base';
 import './downloads.css';
 
-export type Download = { id: string; name: string; received: number; total: number | null; state: 'InProgress' | 'Interrupted' | 'Completed';paused?:boolean;canceled?:boolean;canResume?:boolean;reason?:string };
+export type Download = { id: string; name: string; received: number; total: number | null; state: 'InProgress' | 'Interrupted' | 'Completed';paused?:boolean;canceled?:boolean;canResume?:boolean;reason?:string;phase?:string };
 
 const size = (bytes: number) =>
   bytes < 1024 * 1024 ? `${Math.max(0, Math.round(bytes / 1024))} ${t('Ko', 'KB')}` : `${(bytes / 1024 / 1024).toFixed(1)} ${t('Mo', 'MB')}`;
@@ -16,6 +16,10 @@ function status(d: Download) {
   if (d.state === 'Completed') return `${t('Terminé', 'Done')} · ${size(d.received)}`;
   if(d.canceled)return t('Annulé','Canceled');
   if(d.paused)return `${t('En pause','Paused')} · ${size(d.received)}${d.total?` / ${size(d.total)}`:''}`;
+  if(d.phase && !d.paused && !d.canceled) {
+    const phases:Record<string,string>={'engine.downloader':t('Préparation du moteur vidéo…','Preparing video engine…'),'engine.ffmpeg':t('Préparation de l’assemblage vidéo…','Preparing video merging…'),merge:t('Assemblage des pistes…','Merging tracks…'),protected:t('Vidéo protégée : téléchargement indisponible','Protected video: download unavailable'),auth:t('Accès au site refusé ou connexion nécessaire','Site denied access or sign-in required'),failed:t('Échec du téléchargement vidéo — réessayez ou choisissez une autre source','Video download failed — retry or choose another source')};
+    if(phases[d.phase])return phases[d.phase];
+  }
   if (d.state === 'Interrupted') {
     const reasons:Record<string,string>={NetworkDisconnected:t('Connexion interrompue','Connection interrupted'),NetworkFailed:t('Erreur réseau','Network error'),NetworkTimeout:t('Délai réseau dépassé','Network timeout'),FileNoSpace:t('Espace disque insuffisant','Not enough disk space'),FileAccessDenied:t('Accès au fichier refusé','File access denied'),ServerForbidden:t('Accès refusé par le serveur','Server denied access'),ServerUnauthorized:t('Connexion au site nécessaire','Sign-in required'),UserShutdown:t('Onglet ou navigateur fermé','Tab or browser closed')};
     return reasons[d.reason??'']||t('Interrompu','Interrupted');

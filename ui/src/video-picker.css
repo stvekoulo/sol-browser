@@ -1,0 +1,8 @@
+.video-picker { padding: 10px; min-width: 0; }
+.video-page-title { margin: 4px 8px 12px; overflow-wrap: anywhere; font-size: 13px; }
+.video-sources { display: grid; gap: 4px; max-height: 300px; overflow-y: auto; }
+.video-source { display: flex; width: 100%; height: auto; min-height: 54px; gap: 10px; justify-content: flex-start; text-align: left; padding: 10px; }
+.video-source > span:first-of-type { display: grid; gap: 3px; min-width: 0; flex: 1; }
+.video-source strong { font-size: 13px; font-weight: 500; }
+.video-source small { font-size: 11px; opacity: .65; overflow-wrap: anywhere; }
+.video-help { margin: 12px 8px 4px; font-size: 11px; line-height: 1.5; opacity: .65; }
