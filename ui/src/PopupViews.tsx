@@ -1,4 +1,6 @@
 import VideoPicker from './VideoPicker';
+import WorkspaceSnapshots from './WorkspaceSnapshots';
+import LanPreview from './LanPreview';
 import ExtensionsPopup from './ExtensionsPopup';
 import {Button} from '@/components/motion/button/base';
 import SolMenu from './SolMenu';
@@ -22,6 +24,8 @@ import './suggestions-layout.css';
 import LibraryPopup from './LibraryPopup';
 export default function PopupViews({content,rootRef,opening,selected,settingsSection,setSettingsSection}:{content:Content;rootRef:RefObject<HTMLDivElement|null>;opening:number;selected:number;settingsSection:string;setSettingsSection:(section:string)=>void}){
 const root=rootRef;
+  if(content.popup==='workspaces')return <WorkspaceSnapshots content={content}/>;
+  if(content.popup==='lan-preview')return <LanPreview content={content}/>;
 
 
   if (content.popup === 'videos') return <div key={opening} ref={root} className="popup arriving"><VideoPicker content={content}/></div>;

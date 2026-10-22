@@ -7,6 +7,7 @@ import { useAddressSuggestions } from './useAddressSuggestions';
 export default function AddressPill({ tab, focused, grow, shield }: { tab: Tab | undefined; focused: boolean; grow: number; shield: boolean }) {
   const rawUrl = !tab || (tab.url === 'about:blank' || isStartPage(tab.url)) ? '' : displayAddress(tab.url);
   const domain = formatDomain(rawUrl);
+  const local=(()=>{try{const u=new URL(tab?.url??'');return ['http:','https:'].includes(u.protocol)&&['localhost','127.0.0.1','[::1]'].includes(u.hostname)}catch{return false}})();
   const [text, setText] = useState(rawUrl);
   const [editing, setEditing] = useState(false);
   const pillRef = useRef<HTMLDivElement>(null);
@@ -27,6 +28,7 @@ export default function AddressPill({ tab, focused, grow, shield }: { tab: Tab |
       </span>
 
       <form
+        data-local-preview={local||undefined}
         className="address-form"
         onSubmit={e => {
           e.preventDefault();
@@ -101,6 +103,7 @@ export default function AddressPill({ tab, focused, grow, shield }: { tab: Tab |
             <Icon d="M5 2.5h5.5a1 1 0 0 1 1 1V8M4 6.5h3.5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1zM13.5 6.5l-2 2-2-2" size={14} />
           </button>
         )}
+        {local&&<button className="inline-btn" title={t('Aperçu Wi-Fi par QR code','LAN QR preview')} aria-label={t('Aperçu Wi-Fi par QR code','LAN QR preview')} onClick={()=>id&&send({type:'lan.open',id})}><Icon d="M2 2h4v4H2zM10 2h4v4h-4zM2 10h4v4H2zM10 10h2v2h2v2h-4z" size={14}/></button>}
         {rawUrl && (
           <button
             className={`inline-btn${tab?.bookmarked ? ' on' : ''}`}

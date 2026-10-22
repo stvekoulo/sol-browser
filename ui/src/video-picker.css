@@ -6,3 +6,6 @@
 .video-source strong { font-size: 13px; font-weight: 500; }
 .video-source small { font-size: 11px; opacity: .65; overflow-wrap: anywhere; }
 .video-help { margin: 12px 8px 4px; font-size: 11px; line-height: 1.5; opacity: .65; }
+.video-source[aria-checked="true"] { background: color-mix(in srgb,currentColor 8%,transparent); outline: 1px solid color-mix(in srgb,currentColor 22%,transparent); outline-offset: -1px; }
+.video-source:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
+@media(max-height:500px) { .video-sources { max-height: 42vh; } }

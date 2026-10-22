@@ -14,6 +14,9 @@ public sealed partial class BrowserController
         var id = c.Id ?? "";
         switch (c.Type)
         {
+            case "lan.open": ShowLanPreview(id); return true;
+            case "device.sync": _pages.ToggleDeviceSync(id); return true;
+            case "device.theme": _pages.ToggleDeviceDark(id); return true;
             case "ai.connect": if (!PrivateActive) _ = _chatGpt.SignInAsync(); return true;
             case "ai.connect.cancel": _chatGpt.CancelSignIn(); return true;
             case "ai.disconnect": CancelAi(); CancelChat(); CancelCategories(); _chat.Clear(); PublishChat(); _ = _chatGpt.SignOutAsync(); return true;

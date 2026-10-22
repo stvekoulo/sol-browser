@@ -45,7 +45,7 @@
   for (const type of ['yt-navigate-finish','yt-player-updated']) document.addEventListener(type,()=>{ seen=new WeakMap(); signature=''; ready(); });
   const start = () => {
     ready();
-    new MutationObserver(queue).observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['src'] });
+    new MutationObserver(records=>{if(records.some(r=>r.type==='attributes'||[...r.addedNodes,...r.removedNodes].some(n=>n.nodeType===1&&n.nodeName!=='SOL-FAN')))queue()}).observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['src'] });
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
   else start();

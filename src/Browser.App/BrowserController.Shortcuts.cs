@@ -23,6 +23,7 @@ public sealed partial class BrowserController
             items.Add(new { id = key, title, hint, shortcut = shortcut.Length > 0 ? shortcut : BrowserShortcuts.TextFor(command.Type, Language.Current == "en"), group, keywords });
         }
         Add(T("Nouvel onglet", "New tab"), new("tab.open"), keywords: "onglet tab new nouveau");
+        Add(T("Espaces de travail enregistrés", "Saved workspaces"), new("workspace.open"), keywords: "workspace snapshot disposition maquettes projet");
         Add(T("Rouvrir l’onglet fermé", "Reopen closed tab"), new("tab.reopen"), keywords: "reopen rouvrir fermer onglet");
         Add(T("Navigation privée", "Private browsing"), new("window.private"), keywords: "private incognito privee");
         Add(T("Ouvrir les notes", "Open notes"), new("notes.manage"), keywords: "notes scratchpad");
@@ -266,6 +267,7 @@ public sealed partial class BrowserController
     }
     private void Activate(string id)
     {
+        if(_pages.PreviewSourceId is {} source&&source!=id)_pages.ClosePreview();
         if (_asking is not null && _tabs.ActiveId != id) HidePopup();
         if (!_tabs.Activate(id)) return;
         // Un onglet rangé dans un groupe replié : le groupe se déplie pour le montrer.

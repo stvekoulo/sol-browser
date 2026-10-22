@@ -30,7 +30,7 @@ const visible=async()=>{
 const hover=async selector=>{
   const point=await page.evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`);
   await page.call('Input.dispatchMouseEvent',{type:'mouseMoved',...point});
-  await host.wait(async()=>(await visible()).filter(b=>!b.hidden&&b.visible).length===3,'three available commands',5000);
+  await host.wait(async()=>(await visible()).filter(b=>!b.hidden&&b.visible).length===4,'four available commands',5000);
   await host.wait(async()=>(await visible()).every(b=>!b.moving),'spring animation settled',5000);
 };
 const escape=async()=>{await page.call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});await host.wait(async()=>(await visible()).every(b=>b.hidden),'Escape closes commands',5000);};
@@ -62,10 +62,10 @@ try {
     await page.evaluate(`delete document.querySelector('#first').getBoundingClientRect`);
     // Un vrai clic valide aussi la clé native, sans lire ni journaliser sa valeur.
     const before=await ui.evaluate('window.__sidebarState.tabs.length');
-    const button=(await visible())[0],point={x:button.x+button.width/2,y:button.y+button.height/2};
+    const button=(await visible())[1],point={x:button.x+button.width/2,y:button.y+button.height/2};
     for(const type of ['mouseMoved','mousePressed','mouseReleased'])await page.call('Input.dispatchMouseEvent',{type,...point,...(type==='mouseMoved'?{}:{button:'left',clickCount:1})});
     await host.wait(()=>ui.evaluate(`window.__sidebarState.tabs.length===${before+1}&&window.__sidebarState.tabs.some(t=>t.url===${JSON.stringify(host.origin+'/card-a')})`),'native tab opening');
-    // Les 12 charges utiles sont exercées dans un WebView UI distinct, avec le script de production inchangé.
+    // Les 15 charges utiles sont exercées dans un WebView UI distinct, avec le script de production inchangé.
     // Le canal est remplacé AVANT son chargement pour préserver le presse-papiers et éviter toute requête IA.
     await ui.evaluate(`chrome.webview.postMessage('{"type":"chat.toggle"}')`);
     page=await host.connect('#chat');await host.wait(()=>page.evaluate('!!document.querySelector(".sol-chat")'),'isolated action fixture');
@@ -78,9 +78,9 @@ try {
     await page.evaluate((await readFile('src/Browser.App/inject/fan.js','utf8')).replace('/*__SOL_FAN_SETTINGS__*/null', '{enabled:true,trigger:0}'));
     await host.wait(()=>page.evaluate('document.querySelector("#image").complete'),'fixture image loaded');
     for(const [selector,kind,actions,value] of [
-      ['#second','link',['tab','split','link'],host.origin+'/card-b'],
-      ['#image','image',['tab','link','note'],host.origin+'/image.svg'],
-      ['#code','code',['copy','explain','note'],'const answer = 42;\nconsole.log(answer);'],
+      ['#second','link',['preview','tab','split','more'],host.origin+'/card-b'],
+      ['#image','image',['tab','link','note','more'],host.origin+'/image.svg'],
+      ['#code','code',['copy','explain','note','more'],'const answer = 42;\nconsole.log(answer);'],
       ['#selection','selection',['copy','sol','more'],'Un passage de texte à sélectionner dans la page.'],
     ])for(let i=0;i<actions.length;i++){
       stage=`${kind}:${actions[i]}`;
@@ -104,11 +104,11 @@ try {
     assert((await visible()).every(b=>b.x>=0&&b.y>=0&&b.x+b.width<=360&&b.y+b.height<=650),'commands fit viewport edges');
     await writeFile(resolve(host.base,'page-fan-narrow.png'),Buffer.from((await page.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
     stage='keyboard and scroll';await escape();await page.evaluate(`document.querySelector('#first').style.cssText='';document.querySelector('#code').focus()`);
-    await host.wait(async()=>(await visible()).filter(b=>!b.hidden).length===3,'keyboard focus opens commands');
+    await host.wait(async()=>(await visible()).filter(b=>!b.hidden).length===4,'keyboard focus opens commands');
     await page.evaluate(`document.querySelector('#code').remove();dispatchEvent(new Event('scroll'))`);
     await host.wait(async()=>(await visible()).every(b=>b.hidden),'removed target hides safely');
     await escape();
-    console.log('PASS strict CSP/Trusted Types, four target types, 12 action payloads, trusted native tab opening, keyboard, Escape, fields excluded, viewport bounds, coalesced scroll and no idle animation');
+    console.log('PASS strict CSP/Trusted Types, four target types, 15 action payloads, trusted native tab opening, keyboard, Escape, fields excluded, viewport bounds, coalesced scroll and no idle animation');
   }
   await writeFile(resolve(host.base,'page-fan.json'),JSON.stringify(report,null,2));
   await host.close(ui);

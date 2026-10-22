@@ -9,7 +9,10 @@ public sealed partial class PageHost
 {
     public void Remove(string id)
     {
+        if(PreviewSourceId==id)ClosePreview();
         _privateTabs.Remove(id);
+        _deviceSync.Remove(id); _deviceDark.Remove(id);
+        if(Core(id) is {} syncCore)_deviceSyncWired.Remove(syncCore);
         _spellingCache.Remove(id);
         _spellingSeen.Remove(id);
         _asleep.Remove(id);

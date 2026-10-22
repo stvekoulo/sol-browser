@@ -10,6 +10,11 @@ public static class CommandParser
 {
     private static readonly Dictionary<string, string[]> Required = new()
     {
+        ["workspace.open"] = [], ["workspace.save"] = ["title"], ["workspace.restore"] = ["id"], ["workspace.delete"] = ["id"],
+        ["lan.open"] = ["id"],
+        ["preview.open"] = ["id","input"], ["preview.close"] = [], ["preview.tab"] = [], ["preview.split"] = [],
+        ["preview.back"] = [], ["preview.forward"] = [], ["preview.reload"] = [],
+        ["device.sync"] = ["id"], ["device.theme"] = ["id"],
         ["tab.open"] = [], ["tab.close"] = ["id"], ["tab.activate"] = ["id"],
         ["session.menu"] = ["id", "x", "y"], ["session.set"] = ["id", "query"],
         ["session.new"] = [], ["session.create"] = ["title"], ["session.rename"] = ["id", "title"],

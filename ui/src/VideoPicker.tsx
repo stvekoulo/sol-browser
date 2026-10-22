@@ -3,7 +3,7 @@ import {send} from './bridge';
 import {t} from './i18n';
 import {Icon} from './Icons';
 import './video-picker.css';
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 
 export type VideoContent = {popup:'videos';id:string;title:string;protectedMedia:boolean;
   phase:string;sourceId:string;qualities:number[];preferred:number;selected:number;
@@ -11,7 +11,8 @@ export type VideoContent = {popup:'videos';id:string;title:string;protectedMedia
 
 export default function VideoPicker({content}:{content:VideoContent}) {
   const [quality,setQuality]=useState(content.selected);
-  useEffect(()=>setQuality(content.selected),[content.selected,content.sourceId]);
+  const identity=`${content.id}:${content.title}:${content.sourceId}`,previous=useRef(identity);
+  useEffect(()=>{const changed=previous.current!==identity;previous.current=identity;setQuality(current=>!changed&&content.qualities.includes(current)?current:content.selected)},[identity,content.selected,content.qualities]);
   const label=(height:number)=>height===0?t('Qualité d’origine','Original quality'):height===2160?'4K · 2160p':height===4320?'8K · 4320p':`${height}p`;
   return <section className="video-picker" aria-label={t('Télécharger une vidéo','Download a video')}>
     <div className="popup-header"><span className="popup-header-title">{t('Vidéos de cette page','Videos on this page')}</span>
@@ -20,8 +21,8 @@ export default function VideoPicker({content}:{content:VideoContent}) {
     {content.protectedMedia ? <p role="status">{t('Ce lecteur utilise une protection DRM. Sol ne peut pas télécharger cette vidéo.','This player uses DRM protection. Sol cannot download this video.')}</p> : <>
       {content.phase && content.sourceId!=='catalog' && <Button variant="ghost" size="sm" className="pill-action" onClick={()=>send({type:'video.open',id:content.id})}>← {t('Sources','Sources')}</Button>}
       {content.phase==='ready'?<>
-        <div className="video-sources" role="radiogroup" aria-label={t('Qualité de la vidéo','Video quality')}>
-          {content.qualities.map(height=><Button key={height} variant="ghost" size="sm" className="video-source" role="radio" aria-checked={quality===height} onClick={()=>setQuality(height)}>
+        <div className="video-sources" role="radiogroup" aria-label={t('Qualité de la vidéo','Video quality')} onKeyDown={e=>{if(!['ArrowDown','ArrowUp','Home','End'].includes(e.key))return;e.preventDefault();const values=content.qualities,index=values.indexOf(quality);const next=e.key==='Home'?0:e.key==='End'?values.length-1:(index+(e.key==='ArrowDown'?1:-1)+values.length)%values.length;setQuality(values[next]);(e.currentTarget.querySelectorAll('button')[next] as HTMLButtonElement)?.focus()}}>
+          {content.qualities.map(height=><Button key={height} variant="ghost" size="sm" className="video-source" role="radio" tabIndex={quality===height?0:-1} aria-checked={quality===height} onClick={()=>setQuality(height)}>
             <span>{label(height)}</span><span aria-hidden>{quality===height?'✓':''}</span>
           </Button>)}
         </div>

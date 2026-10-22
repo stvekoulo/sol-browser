@@ -40,10 +40,10 @@ export async function sidebarHost(executable,{serve=null,downloads=false,capture
     throw new Error(`Timed out: ${label}`);
   };
   const targets = () => fetch(`http://127.0.0.1:${port}/json/list`).then(r=>r.json()).catch(()=>[]);
-  const connect = async hash => {
+  const connect = async (hash,targetId=null) => {
     if(hash==='#sidebar')hash='';
     const url=hash.includes('://')?hash:`https://ui.navigateur/index.html${hash}`;
-    const target = await wait(async()=> (await targets()).find(t=>t.url === url), `target ${hash}`);
+    const target = await wait(async()=> (await targets()).find(t=>t.url === url&&(!targetId||t.id===targetId)), `target ${hash}`);
     const ws = new WebSocket(target.webSocketDebuggerUrl); await once(ws,'open'); connections.push(ws);
     let seq=0; const pending=new Map();
     ws.addEventListener('message', e=> { const m=JSON.parse(e.data); const p=pending.get(m.id); if(p) {pending.delete(m.id);clearTimeout(p.timer);if(m.error)p.reject(new Error(m.error.message));else p.resolve(m.result);} });

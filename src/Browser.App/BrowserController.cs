@@ -65,6 +65,8 @@ public sealed partial class BrowserController
         _welcome = welcome;
         (_window, _pages, _bridge, _popup, _dock, _tools, _settings) = (window, pages, bridge, popup, dock, panel, settings);
         _pages.PagePressed += DismissAiPopup;
+        _pages.PreviewPromoted+=PromoteLinkPreview;
+        _pages.LinkPreviewRequested+=(id,url)=>_=ShowLinkPreviewAsync(id,url);
         WireSelection();
         _network = new NetworkInspector(panel.Post);
         _sessionSave.Tick += (_, _) => { _sessionSave.Stop(); SaveSession(); };
@@ -189,6 +191,7 @@ public sealed partial class BrowserController
         _window.Closed += (_, _) =>
         {
             _closingWindow = true;
+            _pages.ClosePreview();
             foreach (var job in _videoJobs) job.Cancel();
             _videoProbeCancel?.Cancel();
             _videoWarmupCancel.Cancel();
@@ -223,6 +226,8 @@ public sealed partial class BrowserController
     {
         if (c.Type is not ("popup.size" or "dock.size" or "split.resize")) DebugLog.Write($"commande {c.Type} {c.Id} {c.Index}");
         if (SidebarCommand(c)) return;
+        if (PreviewCommand(c)) return;
+        if (WorkspaceCommand(c)) return;
         if (ChatCommand(c)) return;
         if (TabGroupAiCommand(c)) return;
         if (ExecuteCommands0(c)) return;

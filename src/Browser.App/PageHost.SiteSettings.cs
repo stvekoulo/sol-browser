@@ -146,7 +146,7 @@ public sealed partial class PageHost
     }
 
     // Une page web est non fiable : aucun objet hôte, aucune permission ; seuls les messages filtrés sont acceptés.
-    private async Task Harden(CoreWebView2 core)
+    private async Task Harden(CoreWebView2 core,bool withFan=true)
     {
         var s = core.Settings;
         s.AreHostObjectsAllowed = false;
@@ -163,8 +163,7 @@ public sealed partial class PageHost
         s.HiddenPdfToolbarItems = CoreWebView2PdfToolbarItems.None; // recherche, pages, rotation, impression et enregistrement natifs
         _ = core.AddScriptToExecuteOnDocumentCreatedAsync(SidewaysScript);
         _ = core.AddScriptToExecuteOnDocumentCreatedAsync("document.addEventListener('pointerdown',e=>{if(e.isTrusted)window.chrome.webview.postMessage('sol.page.pointer')},true)");
-        await ConfigureFanAsync(core);
-        core.DOMContentLoaded += (_, _) => PostFanSettings(core);
+        if(withFan){await ConfigureFanAsync(core);core.DOMContentLoaded += (_, _) => PostFanSettings(core);}
         _ = core.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "video-cursor.js")));
         // Mémorise la sélection au clic droit pour Sol AI ; sans effet tant que l'utilisateur n'agit pas.
         _ = core.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "ai.js")));

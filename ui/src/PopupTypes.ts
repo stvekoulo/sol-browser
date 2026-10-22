@@ -7,6 +7,8 @@ export type PaletteItem = { id: string; title: string; hint: string; shortcut: s
 export type Wallpaper = { id: number; thumb: string; author: string };
 import type {VideoContent} from './VideoPicker';
 export type Content =
+  | import('./WorkspaceSnapshots').WorkspaceContent
+  | import('./LanPreview').LanContent
   | VideoContent
   | { popup: 'palette'; items: PaletteItem[]; listHeight: number }
   | AiContent

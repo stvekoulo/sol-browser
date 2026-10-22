@@ -1,0 +1,58 @@
+import assert from 'node:assert/strict';
+import {readFile,writeFile} from 'node:fs/promises';
+import {resolve} from 'node:path';
+import {sidebarHost} from './sidebar-check-host.mjs';
+const host=await sidebarHost(process.argv[2]??'src/Browser.App/bin/x64/Release/net10.0-windows10.0.19041.0/win-x64/Sol.exe',{serve(req,res){
+  if(req.url!=='/dev')return false;
+  res.writeHead(200,{'Content-Type':'text/html'});res.end(`<html><body style="height:4000px"><input id="name"><input type="password" id="secret"><button id="counter" onclick="this.dataset.count=Number(this.dataset.count||0)+1">Count</button><a href="/other">Inline link</a><pre style="height:60px">const answer=42;</pre></body></html>`);return true;
+}});
+let ui,popup;
+const cmd=c=>ui.evaluate(`chrome.webview.postMessage(${JSON.stringify(JSON.stringify(c))})`);
+const state=()=>ui.evaluate('window.__sidebarState');
+try{
+  ui=await host.launch();popup=await host.connect('#popup');
+  await popup.evaluate(`chrome.webview.addEventListener('message',e=>window.__popup=e.data)`);
+  const id=(await state()).activeId;
+  await cmd({type:'nav.go',id,input:host.origin+'/dev'});
+  const page=await host.connect(host.origin+'/dev');
+  await host.wait(()=>page.evaluate('document.readyState==="complete"'),'fixture');
+  await host.wait(async()=>(await state()).tabs.find(t=>t.id===id)?.url===host.origin+'/dev','tab URL published');
+  await cmd({type:'lan.open',id});
+  await host.wait(()=>popup.evaluate('window.__popup?.popup==="lan-preview"'),'LAN preview');
+  const lan=await popup.evaluate('window.__popup');
+  if(lan.items.length){assert.match(lan.items[0].url,new RegExp(':'+new URL(host.origin).port+'/dev'));await host.wait(()=>popup.evaluate('!!document.querySelector("svg")'),'local QR rendered')}
+  await cmd({type:'popup.close'});
+  await cmd({type:'device.compare',id,query:'iPhone SE|iPad mini'});
+  const targets=await host.wait(async()=>{const all=(await host.targets()).filter(t=>t.url===host.origin+'/dev');return all.length>=2&&all;},'comparison targets');
+  const peers=await Promise.all(targets.map(t=>host.connect(t.url,t.id)));
+  for(const peer of peers)await host.wait(()=>peer.evaluate('!!window.__solDeviceApply'),'sync script');
+  await cmd({type:'device.sync',id});
+  await peers[0].evaluate('document.querySelector("#name").focus()');
+  await peers[0].call('Input.insertText',{text:'Synchronized'});
+  await host.wait(()=>peers[1].evaluate('document.querySelector("#name").value==="Synchronized"'),'form sync');
+  await peers[0].evaluate('document.querySelector("#secret").focus()');await peers[0].call('Input.insertText',{text:'not-shared'});
+  assert.equal(await peers[1].evaluate('document.querySelector("#secret").value'),'');
+  await peers[0].evaluate('document.querySelector("#counter").focus()');
+  for(const type of ['keyDown','char','keyUp'])await peers[0].call('Input.dispatchKeyEvent',{type,key:'Enter',code:'Enter',windowsVirtualKeyCode:13,...(type==='char'?{text:'\r'}:{})});
+  console.log('Click state',await Promise.all(peers.map(p=>p.evaluate('({count:document.querySelector("#counter").dataset.count,focus:document.activeElement.id})'))));
+  await host.wait(()=>peers[1].evaluate('Number(document.querySelector("#counter").dataset.count)>=1'),'click sync');
+  await peers[0].evaluate('window.scrollTo(0,1200)');await host.wait(()=>peers[1].evaluate('scrollY>300'),'scroll sync');
+  await cmd({type:'device.theme',id});for(const peer of peers)await host.wait(()=>peer.evaluate('matchMedia("(prefers-color-scheme: dark)").matches'),'dark mode');
+  const secondary=(await state()).tabs.find(t=>t.id!==id&&!t.pinned).id;
+  await cmd({type:'split.open',id:secondary});await cmd({type:'split.resize',ratio:.63});
+  await host.wait(async()=>(await state()).split.secondaryId===secondary,'split before saving');
+  await cmd({type:'workspace.save',title:'Developer layout'});
+  await host.wait(()=>popup.evaluate('window.__popup?.popup==="workspaces"&&window.__popup.items.length===1'),'save workspace');
+  const snapshot=JSON.parse(await readFile(resolve(host.profile,'workspaces.json'),'utf8'))[0];
+  assert(snapshot.Session.Devices.includes('compare'));assert.deepEqual(snapshot.ComparisonDevices,['iPhone SE','iPad mini']);
+  assert.notEqual(snapshot.Session.PrimaryIndex,null);assert.notEqual(snapshot.Session.SecondaryIndex,null);assert.equal(snapshot.Session.Ratio,.63);
+  const before=(await state()).tabs.length;
+  await cmd({type:'workspace.restore',id:snapshot.Id});
+  await host.wait(async()=>(await state()).tabs.length===before+snapshot.Session.Urls.length,'restore tabs without losing current tabs');
+  await host.wait(async()=>{const s=await state();return s.split.ratio===.63&&s.split.primaryId!==id&&s.split.secondaryId!==secondary},'restored split maps to new tabs');
+  await cmd({type:'workspace.delete',id:snapshot.Id});
+  await host.wait(()=>popup.evaluate('window.__popup?.popup==="workspaces"&&window.__popup.items.length===0'),'delete snapshot');
+  await writeFile(resolve(host.base,'developer-verification.json'),JSON.stringify({checks:['LAN URL preserves port','local QR','comparison input sync','password excluded','click sync once','scroll sync','dark mode','named workspace save/restore/delete','device restore','existing tabs preserved']},null,2));
+  await writeFile(resolve(host.base,'developer-workspaces.png'),Buffer.from((await popup.call('Page.captureScreenshot')).data,'base64'));
+  await host.close(ui);console.log('Developer checks passed: '+host.base);
+}finally{await host.dispose()}

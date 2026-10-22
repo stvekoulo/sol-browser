@@ -121,6 +121,7 @@ public sealed partial class PageHost
             await ApplySettingsAsync(id, core); // retire le flou du bas des pages
             await PageZoom.TabAsync(core, 1);   // l'appareil a ses dimensions exactes : sa page n'est pas zoomée
             await EmulateAsync(id, sims[0]);
+            await WireDeviceSyncAsync(id,core);
             core.Reload();
             await Task.WhenAll(sims.Skip(1).Select(async sim =>
             {
@@ -162,6 +163,7 @@ public sealed partial class PageHost
         await StartEngineAsync(view, source.Profile.ProfileName);
         if (view.CoreWebView2 is not { } core) return false;
         await Harden(core);
+        await WireDeviceSyncAsync(id,core);
         core.Settings.AreDefaultContextMenusEnabled = false;
         core.Settings.IsStatusBarEnabled = false;
         core.NewWindowRequested += (sender, e) => _ = OpenWindowAsync(id, e);
@@ -210,6 +212,7 @@ public sealed partial class PageHost
             if (sim.Above is not null) container.Children.Remove(sim.Above);
             if (sim.View == main) continue;
             _following.Remove(sim.View);
+            if(sim.View.CoreWebView2 is {} closedCore)_deviceSyncWired.Remove(closedCore);
             container.Children.Remove(sim.View);
             sim.View.Close();
         }

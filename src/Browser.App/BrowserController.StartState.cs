@@ -12,10 +12,15 @@ public sealed partial class BrowserController
     private void SaveSession()
     {
         if (AppPaths.Private) return; // navigation privée : la fenêtre ne laisse pas d'onglets derrière elle
+        JsonFileStore.Save(AppPaths.Session, CaptureWorkspace());
+    }
+
+    private Session CaptureWorkspace()
+    {
         var tabs = _tabs.Tabs.Where(t => !t.Private).ToList();
         var groups = _tabs.Groups.Where(g => tabs.Any(t => t.GroupId == g.Id)).ToList();
         int? IndexOf(string? id) => tabs.FindIndex(t => t.Id == id) is >= 0 and var i ? i : null;
-        JsonFileStore.Save(AppPaths.Session, new Session
+        return new Session
         {
             Urls = tabs.Select(t => t.Url).ToList(),
             SessionIds = tabs.Select(t => t.SessionId).ToList(),
@@ -31,7 +36,7 @@ public sealed partial class BrowserController
             PrimaryIndex = IndexOf(_split.PrimaryId),
             SecondaryIndex = IndexOf(_split.SecondaryId),
             Ratio = _split.Ratio,
-        });
+        };
     }
 
     private string? _lastActive;
