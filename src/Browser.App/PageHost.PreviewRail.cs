@@ -9,6 +9,7 @@ namespace Browser.App;
 
 public sealed partial class PageHost
 {
+    private const double PreviewActionSize = 32, PreviewActionSpacing = 6, PreviewRailGap = 10;
     private static Button PreviewRailButton(string label, string geometry, Action run, string kind,
         Brush ink, Brush background, Brush hover, Brush border)
     {
@@ -18,16 +19,17 @@ public sealed partial class PageHost
         path.Stroke = ink;
         var canvas = new Canvas { Width = 20, Height = 20 };
         canvas.Children.Add(path);
-        var icon = new Viewbox { Width = 24, Height = 24, Child = canvas };
-        var turn = new CompositeTransform { CenterX = 12, CenterY = 12 };
+        var icon = new Viewbox { Width = 18, Height = 18, Child = canvas };
+        var turn = new CompositeTransform { CenterX = 9, CenterY = 9 };
         icon.RenderTransform = turn;
-        var press = new ScaleTransform { CenterX = 22, CenterY = 22 };
+        var press = new ScaleTransform { CenterX = PreviewActionSize / 2, CenterY = PreviewActionSize / 2 };
         var button = new Button
         {
-            Content = icon, Width = 44, Height = 44, Padding = new Thickness(0),
+            Content = icon, Width = PreviewActionSize, Height = PreviewActionSize,
+            MinWidth = PreviewActionSize, MinHeight = PreviewActionSize, Padding = new Thickness(0),
             HorizontalContentAlignment = HorizontalAlignment.Center,
             VerticalContentAlignment = VerticalAlignment.Center,
-            CornerRadius = new CornerRadius(14), Background = background,
+            CornerRadius = new CornerRadius(10), Background = background,
             BorderBrush = border, BorderThickness = new Thickness(1), RenderTransform = press
         };
         button.Resources["ButtonBackgroundPointerOver"] = hover;

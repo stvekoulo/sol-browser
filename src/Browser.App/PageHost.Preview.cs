@@ -140,7 +140,7 @@ public sealed partial class PageHost
         overlay.PointerPressed += (_, e) => { if (ReferenceEquals(e.OriginalSource, overlay)) { ClosePreview(); e.Handled = true; } };
         overlay.KeyDown += (_, e) => { if (e.Key == VirtualKey.Escape) { ClosePreview(); e.Handled = true; } };
 
-        var rail = new StackPanel { Spacing = 8, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
+        var rail = new StackPanel { Spacing = PreviewActionSpacing, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
         overlay.Children.Add(rail); Canvas.SetZIndex(rail, 2);
 
         rail.Children.Add(PreviewRailButton(Language.T("Fermer l’aperçu (Échap)", "Close preview (Escape)"),
@@ -179,15 +179,17 @@ public sealed partial class PageHost
             // Reserve a real rail on wide windows; move it above the page on compact ones.
             var compact = w < 620;
             var margin = w < 360 ? 8 : 16;
-            var cardW = Math.Max(1, Math.Min(1440, compact ? w - margin * 2 : Math.Min(w * .84, w - 152)));
-            var cardH = Math.Max(1, Math.Min(980, compact ? h - 84 : Math.Min(h * .88, h - 40)));
+            var railWidth = 3 * PreviewActionSize + 2 * PreviewActionSpacing;
+            var reserve = PreviewActionSize + PreviewRailGap + margin;
+            var cardW = Math.Max(1, Math.Min(1440, compact ? w - margin * 2 : Math.Min(w * .84, w - reserve * 2)));
+            var cardH = Math.Max(1, Math.Min(980, compact ? h - PreviewActionSize - PreviewRailGap - 2 * margin : Math.Min(h * .88, h - 40)));
             card.Width = cardW; card.Height = cardH;
-            card.Margin = new Thickness(0, compact ? 44 : 0, compact ? 0 : 44, 0);
-            var cardLeft = (w - cardW - (compact ? 0 : 44)) / 2;
-            var cardTop = (h - cardH + (compact ? 44 : 0)) / 2;
+            card.Margin = new Thickness(0, compact ? PreviewActionSize : 0, compact ? 0 : PreviewActionSize, 0);
+            var cardLeft = (w - cardW - (compact ? 0 : PreviewActionSize)) / 2;
+            var cardTop = (h - cardH + (compact ? PreviewActionSize : 0)) / 2;
             rail.Orientation = compact ? Orientation.Horizontal : Orientation.Vertical;
-            rail.Margin = new Thickness(compact ? Math.Max(margin, (w - 152) / 2) : cardLeft + cardW + 12,
-                compact ? Math.Max(4, cardTop - 56) : cardTop, 0, 0);
+            rail.Margin = new Thickness(compact ? Math.Max(margin, (w - railWidth) / 2) : cardLeft + cardW + PreviewRailGap,
+                compact ? Math.Max(4, cardTop - PreviewActionSize - PreviewRailGap) : cardTop, 0, 0);
         }
 
         overlay.SizeChanged += (_, _) => LayoutSurfaces();

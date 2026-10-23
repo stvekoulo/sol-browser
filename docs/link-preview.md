@@ -6,7 +6,7 @@ et dans le menu du clic droit. Les clics ordinaires gardent leur comportement.
 
 L’aperçu reprend la composition de la référence fournie : grande carte
 arrondie, page assombrie derrière et commandes flottantes à droite.
-Les boutons de 44 px utilisent des icônes dessinées en traits, animées au
+Les boutons de 32 px utilisent des icônes de 18 px dessinées en traits, animées au
 survol et au clavier. Sur une zone étroite, les commandes passent au-dessus
 de la page. Les animations respectent la préférence système de mouvement réduit.
 

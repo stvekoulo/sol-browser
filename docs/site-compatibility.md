@@ -7,12 +7,23 @@ formulaires de consentement Amazon toutes les 600 ms, masquait certains calques
 et changeait le verrouillage du défilement. Cela interférait avec les interfaces
 de consentement et de profil/PIN. Sol laisse maintenant ces interactions au site.
 
+Un diagnostic sur la vraie page Prime a ensuite identifié une autre panne :
+`DVWebClient_app` lit `chrome.webview.hostObjects.sync.PrimeVideoWinRTComponent`
+sans protéger cette détection. Le proxy WebView2 refuse cet accès avec
+`0x80070005`, interrompant l’initialisation JavaScript avant la lecture.
+Sol n’intègre pas l’application WinRT d’Amazon. `web-host-compat.js` expose donc
+un espace d’objets natifs vide uniquement sur Prime/Amazon, tout en conservant
+`AreHostObjectsAllowed=false` et les messages filtrés de Sol. Les autres sites
+gardent le comportement du moteur. Aucun droit natif n’est accordé au site.
+
 `node tools/check-streaming-compat.mjs` lance Sol hors écran sur une page HTTPS
 interceptée, sans compte Prime ni requête de licence. Il vérifie l’absence de
 soumissions automatiques, les calques et les clics réels de profil/lecture.
 Il sonde aussi les capacités EME Widevine et PlayReady du runtime. Un résultat
 « available » ne garantit pas l’acceptation du navigateur, des codecs et de
-la licence par Prime Video ; une lecture authentifiée reste à vérifier.
+la licence par Prime Video. Le correctif a aussi été essayé dans la session
+Prime réelle : le profil Jourdan ouvre le catalogue et le lecteur. L’utilisateur
+a ensuite confirmé que la lecture fonctionne.
 
 ## GitLab
 

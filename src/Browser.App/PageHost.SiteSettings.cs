@@ -150,6 +150,7 @@ public sealed partial class PageHost
     {
         var s = core.Settings;
         s.AreHostObjectsAllowed = false;
+        await core.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "web-host-compat.js")));
         NativeDownloadUi.Suppress(core, () => NativeDownloadsRequested?.Invoke(), disableAccelerators: false);
         var downloadSignal = System.Text.Json.JsonSerializer.Serialize("sol.downloads:" + FanKey);
         await core.AddScriptToExecuteOnDocumentCreatedAsync("(() => { const post=chrome.webview.postMessage.bind(chrome.webview); addEventListener('keydown',e=>{if(e.isTrusted&&e.ctrlKey&&!e.altKey&&!e.shiftKey&&e.code==='KeyJ'){e.preventDefault();e.stopImmediatePropagation();post(" + downloadSignal + ");}},true); })()");
