@@ -6,9 +6,9 @@
 
 *[English version](README.md)*
 
-![Sol affichant une page, la carte des onglets à gauche](docs/images/browser.png)
+![Sol — nouvelle identité et fond monochrome](docs/images/start.png)
 
-![Sol en thème sombre](docs/images/browser-dark.png)
+![Configuration de première ouverture avec les composants beUI](docs/images/setup.png)
 
 > Un projet personnel, partagé tel quel : tout n'est pas encore poli.
 
@@ -32,7 +32,7 @@
 **Apparence**
 - Thème clair, sombre, celui de Windows ou celui de la page.
 - La couleur de l'interface suit la page, y compris la vidéo en cours ou la partie de la page à l'écran. Chaque zone peut être désactivée.
-- Polices de l'interface : système, Inter, SF Pro, Geist, Manrope, DM Sans, Plus Jakarta Sans, Outfit, Figtree, Nunito ou Lora.
+- Polices de l'interface : système, Inter, Segoe UI, Geist, Manrope, DM Sans, Plus Jakarta Sans, Outfit, Figtree, Nunito ou Lora.
 - Fond du nouvel onglet : l'image de Sol, une photo d'Unsplash au choix, ou une nouvelle chaque jour.
 
 **Moins de distractions**

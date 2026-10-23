@@ -82,7 +82,7 @@ public sealed class Settings
         set => _homePage = string.IsNullOrWhiteSpace(value) || value is "https://www.google.com" or "https://www.google.com/" ? DefaultHomePage : value;
     }
     /// <summary>Affiche l'image d'arrière-plan sur la page d'accueil d'un nouvel onglet.</summary>
-    public bool StartWallpaper { get; set; }
+    public bool StartWallpaper { get; set; } = true;
     /// <summary>Photo choisie pour ce fond (voir StartWallpapers) ; 0 : l'image livrée avec Sol.</summary>
     public int StartWallpaperPhoto { get; set; }
     /// <summary>Une photo différente chaque jour, à la place de la photo choisie.</summary>

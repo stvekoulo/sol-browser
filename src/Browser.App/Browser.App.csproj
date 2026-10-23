@@ -15,10 +15,11 @@
     <UseWinUI>true</UseWinUI>
     <!-- Point d'entrée écrit à la main (Program.cs) : l'installateur doit pouvoir agir avant l'interface. -->
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+    <DefineConstants Condition="'$(SolStoreBuild)' == 'true'">$(DefineConstants);SOL_STORE</DefineConstants>
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <EnableMsixTooling>true</EnableMsixTooling>
-    <Version>1.1.0</Version>
+    <Version>1.1.1</Version>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>

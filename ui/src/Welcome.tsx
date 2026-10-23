@@ -1,18 +1,14 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { fontLabels, onMessage, send } from './bridge';
 import { t, useLang } from './i18n';
 import { Icon } from './Icons';
-import {Card} from '@/components/motion/card';
-import logo from './assets/logo.png';
-import browserLight from './assets/welcome/browser-light.webp';
-import browserDark from './assets/welcome/browser-dark.webp';
-import libraryLight from './assets/welcome/library-light.webp';
-import libraryDark from './assets/welcome/library-dark.webp';
-import playerLight from './assets/welcome/player-light.webp';
-import playerDark from './assets/welcome/player-dark.webp';
-import compareLight from './assets/welcome/compare-light.webp';
-import compareDark from './assets/welcome/compare-dark.webp';
-import { drawSol } from './solScene';
+import { WelcomeIdentity } from './WelcomeIdentity';
+import { Button } from '@/components/motion/button';
+import { Input } from '@/components/motion/input';
+import { Switch } from '@/components/motion/switch';
+import { Card } from '@/components/motion/card';
+import SolTabs from './SolTabs';
+import {WelcomeFonts} from './WelcomeFonts';
 
 type Browser = { id: string; name: string; profiles: { folder: string; name: string }[] };
 type Setup = {
@@ -73,13 +69,10 @@ export default function Welcome() {
 
   const steps: ReactNode[] = [
     <>
-      <img className="welcome-logo" src={logo} alt="" draggable={false} />
-      <h1>{t('Bienvenue dans Sol', 'Welcome to Sol')}</h1>
-      <p className="welcome-lead">{t('Configurez Sol en quelques étapes.', 'Set up Sol in a few steps.')}</p>
-      <label className="welcome-field">
-        <span>{t('Votre nom', 'Your name')}</span>
-        <input autoFocus maxLength={40} spellCheck={false} placeholder={t('Facultatif', 'Optional')} value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && next()} />
-      </label>
+      <span className="welcome-kicker">{t('PREMIERS PAS', 'GETTING STARTED')}</span>
+      <h1>{t('Un espace à vous.', 'A space of your own.')}</h1>
+      <p className="welcome-lead">{t('Quelques choix pour faire de Sol votre nouveau point de départ.', 'A few choices to make Sol your new starting point.')}</p>
+      <Input className="welcome-field" classNames={{field:'welcome-input-shell'}} label={t('Votre nom', 'Your name')} autoFocus maxLength={40} spellCheck={false} placeholder={t('Facultatif', 'Optional')} value={name} onChange={setName} onKeyDown={e => e.key === 'Enter' && next()} />
       <Choice label={t('Langue', 'Language')} options={[t('Système', 'System'), 'Français', 'English']} value={setup.language} onPick={i => set('language', i, { language: i })} />
     </>,
 
@@ -106,11 +99,11 @@ export default function Welcome() {
                   </span>
                 </span>
                 {state && state !== 'running' && (state.error || state.locked > 0 || state.passwords === 0) ? (
-                  <button className="pill-action" onClick={() => state.error ? run(browser.id, profile.folder) : send({type:'import.csv'})}>{state.error ? t('Réessayer', 'Retry') : t('Importer les mots de passe (CSV)', 'Import passwords (CSV)')}</button>
+                  <Button variant="ghost" size="sm" pressScale={0.96} className="pill-action" onClick={() => state.error ? run(browser.id, profile.folder) : send({type:'import.csv'})}>{state.error ? t('Réessayer', 'Retry') : t('Importer les mots de passe (CSV)', 'Import passwords (CSV)')}</Button>
                 ) : state && state !== 'running' ? (
                   <span className="welcome-done" aria-hidden><Icon d="M3.5 8.5l3 3 6-6.5" size={14} /></span>
                 ) : (
-                  <button className="pill-action" disabled={state === 'running'} onClick={() => run(browser.id, profile.folder)}>{t('Importer', 'Import')}</button>
+                  <Button variant="ghost" size="sm" pressScale={0.96} className="pill-action" disabled={state === 'running'} onClick={() => run(browser.id, profile.folder)}>{t('Importer', 'Import')}</Button>
                 )}
               </div>
             );
@@ -123,7 +116,7 @@ export default function Welcome() {
           : csv > 0
             ? t(`${csv} mot${csv > 1 ? 's' : ''} de passe importé${csv > 1 ? 's' : ''} du fichier.`, `${csv} password${csv === 1 ? '' : 's'} imported from the file.`)
             : csvError ?? t('Aucun mot de passe trouvé dans ce fichier.', 'No password found in this file.')}{' '}
-        <button onClick={() => send({ type: 'import.csv' })}>{csv === null ? t('importez le fichier CSV', 'import the CSV file') : t('Importer un autre fichier', 'Import another file')}</button>
+        <Button variant="ghost" size="sm" pressScale={0.96} onClick={() => send({ type: 'import.csv' })}>{csv === null ? t('importez le fichier CSV', 'import the CSV file') : t('Importer un autre fichier', 'Import another file')}</Button>
       </p>
     </>,
 
@@ -142,7 +135,7 @@ export default function Welcome() {
     </>,
 
     <>
-      <img className="welcome-logo small" src={logo} alt="" draggable={false} />
+      <span className="welcome-ready-mark" aria-hidden>✓</span>
       <h1>{t('Sol est prêt', 'Sol is ready')}</h1>
       <p className="welcome-lead">{t('La configuration est terminée. Vous pouvez commencer à naviguer.', 'Setup is complete. You can start browsing.')}</p>
     </>,
@@ -150,8 +143,9 @@ export default function Welcome() {
 
   return (
     <main className="welcome">
-      <Card size="compact" role="region" className="sol-surface-card welcome-card" aria-label={t('Accueil de Sol', 'Sol welcome')}>
+      <section role="region" className="welcome-card" aria-label={t('Accueil de Sol', 'Sol welcome')}>
         {/* La clé rejoue l'apparition du contenu à chaque étape. */}
+        <div className="welcome-step-count">{t('CONFIGURATION', 'SETUP')}<span>{setup.first ? `0${step + 1} / 05` : t('IMPORTATION', 'IMPORT')}</span></div>
         <div key={step} className="welcome-step">{steps[step]}</div>
         <footer className="welcome-foot">
           {setup.first && (
@@ -160,97 +154,35 @@ export default function Welcome() {
             </div>
           )}
           <span className="welcome-space" />
-          {setup.first && step > 0 && <button className="pill-action" onClick={() => setStep(step - 1)}>{t('Retour', 'Back')}</button>}
-          <button className="pill-action primary welcome-next" onClick={next}>
+          {setup.first && step > 0 && <Button variant="ghost" size="sm" pressScale={0.96} className="pill-action" onClick={() => setStep(step - 1)}>{t('Retour', 'Back')}</Button>}
+          <Button variant="ghost" size="sm" pressScale={0.96} className="pill-action primary welcome-next" onClick={next}>
             {step >= last ? (setup.first ? t('Commencer', 'Get started') : t('Terminer', 'Done')) : t('Continuer', 'Continue')}
-          </button>
+          </Button>
         </footer>
-      </Card>
-      <Preview step={step} />
+      </section>
+      <WelcomeIdentity step={step} />
     </main>
   );
 }
 
-// À droite de la carte : l'animation de Sol pour l'accueil, puis une vraie capture du navigateur à chaque étape,
-// celle de la fonction dont l'étape parle. Chaque capture existe en clair et en sombre : la feuille de style montre
-// celle du thème en cours, donc l'aperçu suit le choix du thème.
-const SHOTS: ([string, string, string] | null)[] = [
-  null, // étape 0 : l'animation
-  [libraryLight, libraryDark, 'library'],   // reprise des favoris et de l'historique
-  [browserLight, browserDark, 'browser'],   // apparence
-  [playerLight, playerDark, 'player'],      // l'essentiel : le lecteur flottant
-  [compareLight, compareDark, 'compare'],   // prêt : les outils pour développeurs
-];
-
-const CAPTIONS: Record<string, () => string> = {
-  library: () => t('Favoris et historique', 'Bookmarks and history'),
-  browser: () => t('Onglets, groupes et raccourcis dans la barre latérale', 'Tabs, groups and shortcuts in the sidebar'),
-  player: () => t('Lecteur flottant', 'Floating player'),
-  compare: () => t('Aperçu sur téléphone, tablette et ordinateur', 'Preview on phone, tablet and desktop'),
-};
-
-function Preview({ step }: { step: number }) {
-  return (
-    <aside className="preview" aria-hidden>
-      <div className="preview-window">
-        <SolScene shown={step === 0} />
-        {SHOTS.map((shot, index) =>
-          shot && (
-            <figure key={shot[2]} className={`preview-shot${index === step ? ' on' : ''}`}>
-              <img className="light" src={shot[0]} alt="" draggable={false} />
-              <img className="dark" src={shot[1]} alt="" draggable={false} />
-              <figcaption>{CAPTIONS[shot[2]]()}</figcaption>
-            </figure>
-          ),
-        )}
-      </div>
-    </aside>
-  );
-}
-
-// L'animation de Sol, dessinée en direct. Elle ne tourne que tant qu'elle est montrée ; si Windows est réglé sans
-// animations, une seule image est dessinée.
-function SolScene({ shown }: { shown: boolean }) {
-  const canvas = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const g = canvas.current?.getContext('2d');
-    if (!g || !shown) return;
-    const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let frame = 0;
-    const start = performance.now();
-    const tick = (now: number) => {
-      drawSol(g, g.canvas.width, g.canvas.height, (now - start) / 1000);
-      if (!still) frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [shown]);
-  return <canvas ref={canvas} className={`preview-scene${shown ? ' on' : ''}`} width={1200} height={675} />;
-}
-
 function Choice({ label, options, value, onPick, grid = false }: { label: string; options: string[]; value: number; onPick: (index: number) => void; grid?: boolean }) {
+  if(grid) return <WelcomeFonts options={options} value={value} onPick={onPick}/>;
   return (
     <div className="welcome-choice">
       <span className="welcome-label">{label}</span>
-      <div className={`popup-segment${grid ? ' grid' : ''}`} role="radiogroup" aria-label={label}>
-        {options.map((option, index) => (
-          <button key={option} role="radio" aria-checked={value === index} className={`popup-seg-btn${value === index ? ' active' : ''}`} onClick={() => onPick(index)}>
-            {option}
-          </button>
-        ))}
-      </div>
+      <SolTabs className={`welcome-options${grid?' grid':''}`} label={label} value={String(value)} change={v=>onPick(Number(v))} items={options.map((option,index)=>({value:String(index),label:option,ariaLabel:option}))}/>
     </div>
   );
 }
 
 function Toggle({ title, sub, on, onPick }: { title: string; sub: string; on: boolean; onPick: (on: boolean) => void }) {
   return (
-    <button className="setting-row welcome-toggle" role="switch" aria-checked={on} onClick={() => onPick(!on)}>
+    <Card size="compact" variant="muted" className="welcome-toggle">
       <span className="setting-text">
         <span className="row-title">{title}</span>
         <span className="row-sub">{sub}</span>
       </span>
-      <span className={`switch${on ? ' on' : ''}`} aria-hidden />
-    </button>
+      <Switch checked={on} onCheckedChange={onPick} ariaLabel={title}/>
+    </Card>
   );
 }

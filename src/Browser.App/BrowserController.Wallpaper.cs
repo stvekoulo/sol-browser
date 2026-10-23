@@ -62,7 +62,7 @@ public sealed partial class BrowserController
                 if (data is not null) _wallpaperLoaded = (wanted.Id, data);
             }
         }
-        var (r, g, b) = wanted is not null && data is not null ? wanted.Tint : ((byte)40, (byte)68, (byte)105);
+        var (r, g, b) = wanted is not null && data is not null ? wanted.Tint : ((byte)5, (byte)5, (byte)5);
         var tint = $"rgb({r}, {g}, {b})";
         if (UiBridge.WallpaperTint != tint) { UiBridge.WallpaperTint = tint; _bridge.BroadcastTheme(); _bridge.RefreshPageColor(); }
         var json = JsonSerializer.Serialize(new

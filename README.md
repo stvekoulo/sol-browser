@@ -6,9 +6,9 @@
 
 *[Version française](README.fr.md)*
 
-![Sol showing a page, with the tab sidebar on the left](docs/images/browser.png)
+![Sol — monochrome identity and default home wallpaper](docs/images/start.png)
 
-![Sol in its dark theme](docs/images/browser-dark.png)
+![First-run setup with beUI components](docs/images/setup.png)
 
 > A personal project, shared as is. Expect rough edges.
 
@@ -32,7 +32,7 @@
 **Appearance**
 - Light, dark, Windows or page-driven theme.
 - The interface colour follows the page, including the video that is playing or the part of the page on screen. Each zone can be turned off.
-- Interface fonts: system, Inter, SF Pro, Geist, Manrope, DM Sans, Plus Jakarta Sans, Outfit, Figtree, Nunito or Lora.
+- Interface fonts: system, Inter, Segoe UI, Geist, Manrope, DM Sans, Plus Jakarta Sans, Outfit, Figtree, Nunito or Lora.
 - New tab background: Sol's image, an Unsplash photo of your choice, or a new one every day.
 
 **Fewer distractions**
