@@ -26,6 +26,7 @@ public sealed partial class PageHost
         var profile = view.CoreWebView2.Profile;
         await (_privateCleanup ??= DeleteAbandonedPrivateProfilesAsync(profile));
         RestoreGitLabSession(profile);
+        WatchGitLabSession(view.CoreWebView2);
         if (_sessionCookies.Remove(profile.ProfileName, out var cookies))
             foreach (var cookie in cookies) profile.CookieManager.AddOrUpdateCookie(cookie);
     }

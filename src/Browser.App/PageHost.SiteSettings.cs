@@ -167,7 +167,8 @@ public sealed partial class PageHost
         _ = core.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "video-cursor.js")));
         // Mémorise la sélection au clic droit pour Sol AI ; sans effet tant que l'utilisateur n'agit pas.
         _ = core.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "ai.js")));
-        _ = core.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "streaming-fix.js")));
+        // Streaming sites own their consent, profile/PIN modals and player gestures.
+        // Never submit forms or remove their overlays from a browser compatibility script.
         s.IsReputationCheckingRequired = true; // SmartScreen
         // Aucun certificat invalide n'est accepté silencieusement, même sur localhost.
         core.ServerCertificateErrorDetected += (_, e) =>
@@ -192,6 +193,8 @@ public sealed partial class PageHost
         {
             await core.Profile.ClearBrowsingDataAsync(CoreWebView2BrowsingDataKinds.Cookies |
                 CoreWebView2BrowsingDataKinds.AllDomStorage | CoreWebView2BrowsingDataKinds.DiskCache);
+            _sessionCookies.Remove(core.Profile.ProfileName);
+            await CheckpointGitLabNowAsync(core.Profile);
             return true;
         }
         catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException)
@@ -224,6 +227,7 @@ public sealed partial class PageHost
                 if (Matches(cookie)) core.Profile.CookieManager.DeleteCookie(cookie);
             // Les cookies gardés en mémoire ne doivent pas revenir au prochain changement de session.
             if (_sessionCookies.TryGetValue(name, out var saved)) _sessionCookies[name] = saved.Where(c => !Matches(c)).ToArray();
+            await CheckpointGitLabNowAsync(core.Profile);
             // ponytail: le moteur ne propose pas de purge HTTP par origine ; seul ce cache est partagé dans la session.
             await core.Profile.ClearBrowsingDataAsync(CoreWebView2BrowsingDataKinds.DiskCache);
             foreach (var page in pages)

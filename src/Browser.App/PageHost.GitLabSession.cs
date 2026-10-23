@@ -23,8 +23,8 @@ public sealed partial class PageHost
         {
             var plain = ProtectedData.Unprotect(File.ReadAllBytes(path), GitLabEntropy(profile.ProfileName), DataProtectionScope.CurrentUser);
             var cookies = JsonSerializer.Deserialize<GitLabCookie[]>(plain) ?? [];
-            // Consommer la sauvegarde avant navigation : une déconnexion ne doit jamais la ressusciter.
-            File.Delete(path);
+            // Keep the encrypted checkpoint until the live jar changes. An interrupted
+            // shutdown after restoration must not silently lose the only recovery copy.
             foreach (var saved in cookies)
             {
                 var cookie = profile.CookieManager.CreateCookie(saved.Name, saved.Value, saved.Domain, saved.Path);
@@ -59,6 +59,7 @@ public sealed partial class PageHost
     public async Task SaveGitLabSessionsAsync()
     {
         if (AppPaths.Private) return;
+        await Task.WhenAll(_gitLabCheckpoints.Values.ToArray());
         await Task.WhenAll(_closingProfiles.Values.ToArray());
         foreach (var (name, cookies) in _sessionCookies.ToArray()) SaveGitLabSession(name, cookies);
         foreach (var profile in Profiles.Where(p => !PrivateBrowsing.IsProfile(p.ProfileName)).ToArray())
