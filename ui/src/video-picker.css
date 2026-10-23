@@ -34,6 +34,16 @@
 .video-status > span { color: var(--accent); }
 .video-footer-hints { padding-top: 12px; border-top: 1px solid var(--border-card); font-size: 11px; line-height: 1.45; color: var(--text-dim); text-align: center; }
 .video-help { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-dim); }
+.video-collection-actions, .video-collection-pages { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.video-collection-pages > span { color: var(--text-dim); font-size: 11px; }
+.video-collection-list { max-height: min(250px, 35vh); overflow-y: auto; display: grid; gap: 6px; padding: 3px; }
+.video-collection-entry { padding: 10px; border-radius: 12px; background: var(--bg-tab-hover); border: 1px solid var(--border-card); min-width: 0; }
+.video-collection-entry > label { width: 100%; align-items: flex-start; }
+.video-collection-entry label { overflow-wrap: anywhere; font-size: 12px; line-height: 1.4; }
+.video-picker [role="checkbox"] { width: 20px; height: 20px; padding: 0; border: 2px solid var(--border-strong); border-radius: 6px; flex-shrink: 0; background: transparent; color: var(--text); }
+.video-picker [role="checkbox"][aria-checked="true"], .video-picker [role="checkbox"][aria-checked="mixed"] { background: var(--accent); border-color: var(--accent); color: white; }
+.video-picker [role="checkbox"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.video-batch-quality { font-size: 13px; font-weight: 600; margin: 0; }
 @media (max-width: 360px) {
   .video-picker { padding: 14px; gap: 12px; }
   .video-header { gap: 8px; }

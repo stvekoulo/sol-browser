@@ -4,7 +4,7 @@ using System.Text.Json;
 namespace Browser.Core;
 
 public sealed partial class VideoDownload(string url, string referer, string title, string directory, string toolsRoot,
-    IReadOnlyList<VideoCookie> cookies, int height = 0, bool direct = false, string? audioUrl = null)
+    IReadOnlyList<VideoCookie> cookies, int height = 0, bool direct = false, string? audioUrl = null, bool adaptQuality = false)
 {
     public event Action? Changed;
     public string State { get; private set; } = "InProgress";
@@ -19,6 +19,7 @@ public sealed partial class VideoDownload(string url, string referer, string tit
     private CancellationTokenSource? _cancel;
     private Task? _running;
     private bool _resuming;
+    private static readonly SemaphoreSlim Slots = new(2);
 
     public void Start() => _running ??= Task.Run(RunAsync);
     public void Pause() { if (State != "InProgress") return; Paused = true; _cancel?.Cancel(); }
@@ -45,8 +46,12 @@ public sealed partial class VideoDownload(string url, string referer, string tit
         var ct = cancellation.Token;
         if (Canceled || Paused) cancellation.Cancel();
         string? jar = null;
+        var entered = false;
         try
         {
+            Phase = "queued"; Changed?.Invoke();
+            await Slots.WaitAsync(ct); entered = true;
+            Phase = "engine.downloader"; Changed?.Invoke();
             if (direct)
             {
                 try { await DownloadDirectAsync(ct); return; }
@@ -64,8 +69,11 @@ public sealed partial class VideoDownload(string url, string referer, string tit
             foreach (var a in new[] { "--ignore-config", "--no-plugin-dirs", "--no-playlist", "--no-color", "--encoding", "utf-8", "--newline", "--windows-filenames",
                 "--no-overwrites", "--continue", "--socket-timeout", "30", "--retries", "3", "--fragment-retries", "3",
                 "--progress", "--progress-template", "download:SOL_PROGRESS:%(progress)j", "--print", "after_move:SOL_FILE:%(filepath)j",
-                "--no-simulate", "--output", prefix + ".%(ext)s", "--format", VideoQualitySelection.Selector(height, tools.Ffmpeg is not null),
+                "--no-simulate", "--output", prefix + ".%(ext)s", "--format", VideoQualitySelection.Selector(adaptQuality ? 0 : height, tools.Ffmpeg is not null),
                 "--referer", referer }) args.Add(a);
+            if (adaptQuality && height > 0) { args.Add("--format-sort"); args.Add($"height:{height}"); }
+            // Never turn an entry into an implicit playlist or record a live stream.
+            args.Add("--match-filters"); args.Add("!is_live & !is_upcoming & !has_drm");
             if (tools.Ffmpeg is not null) { args.Add("--ffmpeg-location"); args.Add(Path.GetDirectoryName(tools.Ffmpeg)!); }
             if (tools.Runtime is not null) { args.Add("--js-runtimes"); args.Add("deno:" + tools.Runtime); }
             if (cookies.Count > 0)
@@ -93,6 +101,7 @@ public sealed partial class VideoDownload(string url, string referer, string tit
         { State = "Interrupted"; Phase = "failed"; }
         finally
         {
+            if (entered) Slots.Release();
             _cancel = null;
             if (jar is not null) { try { File.Delete(jar); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } }
             if (Canceled) RemovePartialFiles();

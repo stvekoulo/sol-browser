@@ -58,6 +58,7 @@ public static class CommandParser
         ["download.cancel"] = ["id"], ["download.pause"]=["id"], ["download.resume"]=["id"], ["download.open"] = ["id"], ["download.reveal"] = ["id"],
         ["downloads.open"] = ["x", "y"],
         ["video.open"] = ["id"], ["video.inspect"] = ["id", "query"], ["video.download"] = ["id", "query", "index"],
+        ["video.collection"] = ["id", "query", "index"], ["video.batch"] = ["id", "query", "input", "index"],
         ["window.minimize"] = [], ["window.maximize"] = [], ["window.close"] = [], ["window.drag"] = [],
         ["zoom.in"] = [], ["zoom.out"] = [], ["zoom.reset"] = [], ["zoom.set"] = ["index"],
         ["permission.answer"] = ["index"], ["permissions.clear"] = [], ["permissions.forget"] = ["id"], ["site-data.clear"] = [],

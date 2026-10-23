@@ -1,6 +1,6 @@
 (() => {
   if (!window.chrome?.webview || !/^https?:$/.test(location.protocol)) return;
-  let seen = new WeakMap(), timer, signature = '', settle = [];
+  let seen = new WeakMap(), timer, signature = '', collection = '', settle = [];
   const post = value => chrome.webview.postMessage({ solVideo: true, page: location.href, ...value });
   const youtube = /(^|\.)youtube(?:-nocookie)?\.com$/.test(location.hostname);
   const metadata = () => {
@@ -37,12 +37,17 @@
     seen.set(video, key);
     post({ src:src.slice(0,16000), height:video.videoHeight, protected:protectedMedia });
   };
-  const scan = () => { document.querySelectorAll('video').forEach(report); metadata(); };
+  const scan = () => {
+    document.querySelectorAll('video').forEach(report); metadata();
+    if (youtube && new URL(location.href).searchParams.has('list') && collection !== location.href) {
+      collection = location.href; post({src:'',protected:false});
+    }
+  };
   const queue = () => { clearTimeout(timer); timer = setTimeout(scan, 80); };
   const ready = () => { settle.forEach(clearTimeout); scan(); settle=[250,750,1500,3000].map(ms=>setTimeout(metadata,ms)); };
   for (const type of ['loadedmetadata', 'play', 'emptied']) document.addEventListener(type, e => { report(e.target); queue(); }, true);
   document.addEventListener('encrypted', () => post({protected:true}), true);
-  for (const type of ['yt-navigate-finish','yt-player-updated']) document.addEventListener(type,()=>{ seen=new WeakMap(); signature=''; ready(); });
+  for (const type of ['yt-navigate-finish','yt-player-updated']) document.addEventListener(type,()=>{ seen=new WeakMap(); signature=''; collection=''; ready(); });
   const start = () => {
     ready();
     new MutationObserver(records=>{if(records.some(r=>r.type==='attributes'||[...r.addedNodes,...r.removedNodes].some(n=>n.nodeType===1&&n.nodeName!=='SOL-FAN')))queue()}).observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['src'] });

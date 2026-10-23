@@ -4,10 +4,12 @@ import {send} from './bridge';
 import {t} from './i18n';
 import AnimatedIcon from './AnimatedIcon';
 import {VideoQualities,qualityLabel} from './VideoQualities';
+import {VideoCollectionPicker,type VideoCollectionContent} from './VideoCollectionPicker';
 import './video-picker.css';
 
 export type VideoContent = {popup:'videos';id:string;title:string;protectedMedia:boolean;
   phase:string;sourceId:string;qualities:number[];preferred:number;selected:number;
+  collection?:VideoCollectionContent;
   items:{id:string;label:string;kind:'page'|'file'|'hls'|'dash';host:string}[]};
 
 export default function VideoPicker({content}:{content:VideoContent}) {
@@ -22,6 +24,7 @@ export default function VideoPicker({content}:{content:VideoContent}) {
   const ready=content.phase==='ready'&&content.qualities.length>0;
   const failed=content.phase==='failed';
   const busy=!!content.phase&&!ready&&!failed;
+  if(content.collection)return <VideoCollectionPicker content={content}/>;
   return <section className="video-picker" aria-label={t('Télécharger une vidéo','Download a video')}>
     <header className="video-header">
       <span className="video-heading-icon"><AnimatedIcon name="download" size={22}/></span>
@@ -29,6 +32,10 @@ export default function VideoPicker({content}:{content:VideoContent}) {
       <Button variant="ghost" size="icon" className="video-close" aria-label={t('Fermer','Close')} onClick={()=>send({type:'popup.close'})}><AnimatedIcon name="close" size={20}/></Button>
     </header>
     <p className="video-page-title">{content.title}</p>
+    {!content.protectedMedia&&<div className="video-collection-actions">
+      <Button variant="secondary" size="sm" onClick={()=>send({type:'video.collection',id:content.id,query:'playlist',index:1})}>{t('Playlist','Playlist')}</Button>
+      <Button variant="ghost" size="sm" onClick={()=>send({type:'video.collection',id:content.id,query:'page',index:1})}>{t('Plusieurs vidéos de la page','Multiple videos on this page')}</Button>
+    </div>}
     {content.protectedMedia?<div className="video-status" role="status">
       <AnimatedIcon name="private" size={24}/><strong>{t('Vidéo protégée','Protected video')}</strong>
       <p>{t('Ce lecteur utilise une protection DRM. Cette vidéo ne peut pas être téléchargée.','This player uses DRM protection. This video cannot be downloaded.')}</p>

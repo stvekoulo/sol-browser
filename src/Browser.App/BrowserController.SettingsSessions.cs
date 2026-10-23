@@ -180,6 +180,7 @@ public sealed partial class BrowserController
     {
         _videoProbeCancel?.Cancel();
         _videoPicker = null; _videoQualities = null;
+        _videoCollection = null;
         if (_aiPopup) { _aiPopup = false; CancelAi(); _aiContext = null; _aiBusy = false; }
         _groupEditing = null;
         _siteReset = null;

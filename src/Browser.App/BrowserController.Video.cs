@@ -46,8 +46,8 @@ public sealed partial class BrowserController
         try
         {
             Publish("inspect");
-            var cookies = await _pages.VideoCookiesAsync(id, source.Url);
-            var heights = await Task.Run(() => VideoProbe.InspectAsync(source.Url, picker.Url, Path.Combine(AppPaths.BaseDir, "tools", "video"), cookies,
+            var cookies = await _pages.VideoCookiesAsync(id, source.Url, source.Referer);
+            var heights = await Task.Run(() => VideoProbe.InspectAsync(source.Url, source.Referer ?? picker.Url, Path.Combine(AppPaths.BaseDir, "tools", "video"), cookies,
                 phase => _window.DispatcherQueue.TryEnqueue(() => Publish(phase)), cancel.Token));
             if (_videoProbeCancel != cancel || _pages.CoreOf(id)?.Source != picker.Url) return;
             _videoQualities = (sourceId, heights.Length == 0 ? [0] : heights);
@@ -78,22 +78,13 @@ public sealed partial class BrowserController
             if (string.IsNullOrEmpty(folder)) folder = core.Profile.DefaultDownloadFolderPath;
             var title = _tabs.Tabs.FirstOrDefault(t => t.Id == id)?.Title ?? "Video";
             var direct = variant is { Kind: "file", NeedsResolver: false };
-            var job = new VideoDownload(url, picker.Url, title, folder, Path.Combine(AppPaths.BaseDir, "tools", "video"), cookies, height,
+            var referer = source?.Referer ?? _pages.VideosOf(id).FirstOrDefault(s => s.Url == url)?.Referer ?? picker.Url;
+            cookies.AddRange(await _pages.VideoCookiesAsync(id, url, referer));
+            if (_closingWindow || _videoPicker != picker || core.Source != picker.Url || _pages.VideoProtected(id)) return;
+            var job = new VideoDownload(url, referer, title, folder, Path.Combine(AppPaths.BaseDir, "tools", "video"), cookies.DistinctBy(c => (c.Domain,c.Path,c.Name)).ToArray(), height,
                 direct, direct ? variant!.AudioUrl : null);
-            _videoJobs.Add(job);
-            var downloadId = "v" + Guid.NewGuid().ToString("N");
-            var operation = new DownloadOperation(job);
-            _downloads.Insert(0, (downloadId, operation, id));
-            job.Changed += () => _window.DispatcherQueue.TryEnqueue(() =>
-            {
-                if (_closingWindow) return;
-                if (operation.State == Microsoft.Web.WebView2.Core.CoreWebView2DownloadState.InProgress) _finishedAt.Remove(downloadId);
-                else if (!DownloadPending(downloadId, operation) && _finishedAt.TryAdd(downloadId, DateTime.UtcNow))
-                    _ = Task.Delay(DockLinger).ContinueWith(_ => _window.DispatcherQueue.TryEnqueue(() => { if (!_closingWindow) UpdateDock(); }));
-                DownloadsChanged(throttle: operation.State == Microsoft.Web.WebView2.Core.CoreWebView2DownloadState.InProgress);
-            });
             HidePopup(); _videoPicker = null;
-            job.Start(); DownloadsChanged(throttle: false);
+            AddVideoDownload(id, job); DownloadsChanged(throttle: false);
         }
         catch (Exception error) when (error is COMException or InvalidOperationException or IOException or UnauthorizedAccessException)
         { Notice(T("Téléchargement vidéo", "Video download"), T("Impossible de démarrer le téléchargement. Réessayez sur cette page.", "Unable to start the download. Try again on this page.")); }

@@ -1,6 +1,6 @@
 namespace Browser.Core;
 
-public sealed record VideoSource(string Id, string Url, string Kind, string Label);
+public sealed record VideoSource(string Id, string Url, string Kind, string Label, string? Referer = null);
 
 public static class VideoSources
 {

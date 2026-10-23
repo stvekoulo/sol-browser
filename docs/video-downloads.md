@@ -12,6 +12,38 @@ Dans Paramètres → Général, la préférence peut être automatique, 480p, 72
 inférieure ; à défaut, la plus basse disponible. Le sélecteur explique ce repli.
 Il ne crée pas de résolution artificielle.
 
+## Playlists et sélection multiple
+
+Dans le sélecteur vidéo, **Playlist** recherche les éléments de la page avec
+l’extracteur, sans les télécharger. Un lien YouTube `watch?...&list=...` est
+converti en URL de playlist uniquement pour cette demande explicite. La lecture
+ordinaire et le bouton de téléchargement d’une seule vidéo gardent `--no-playlist`.
+Les listes sont paginées par 100 éléments, avec Précédentes/Suivantes ; seules les
+cases cochées de la page courante sont ajoutées à Téléchargements. Les vidéos
+supprimées, privées, en direct ou marquées DRM ne sont pas sélectionnables lorsque
+l’extracteur indique leur état. Une entrée dont l’état devient indisponible peut
+échouer sans arrêter les autres téléchargements.
+
+**Plusieurs vidéos de la page** propose les sources déjà détectées, y compris dans
+les lecteurs intégrés. Plusieurs sources peuvent représenter des variantes ou des
+lecteurs alternatifs d’une même vidéo : l’utilisateur choisit celles à conserver.
+Sol n’explore pas automatiquement tous les épisodes d’un catalogue qui ne fournit
+pas de playlist exploitable par l’extracteur.
+
+Chaque élément a sa carte et ses commandes pause/reprise/annulation. Deux vidéos
+sont transférées à la fois ; les autres attendent sans ouvrir de processus vidéo.
+Une qualité commune est appliquée séparément à chaque vidéo avec le tri
+[`height:<préférence>` de yt-dlp](https://github.com/yt-dlp/yt-dlp#sorting-formats) :
+meilleure résolution inférieure ou égale, sinon la plus basse au-dessus. La valeur
+automatique choisit la meilleure disponible. Aucun agrandissement artificiel.
+
+Les lecteurs de sites tiers sont traités par leurs fichiers MP4/WebM ou manifestes
+HLS/DASH, sans liste de domaines autorisés. Sol conserve le Referer du lecteur
+intégré et les cookies applicables à ses origines pour les hébergeurs qui les
+exigent. Cela ne garantit pas la compatibilité de tous les hébergeurs : les
+protections DRM, les vérifications interactives et les restrictions serveur
+restent applicables, indépendamment du nom du site.
+
 ## Architecture
 
 - WebView2 observe les réponses réseau : fichiers MP4/WebM/MOV/MKV/OGV,
@@ -49,7 +81,7 @@ conservés avec la distribution. Aucun binaire IDM ou code de son extension
 n’est repris. Les exécutables ne sont pas inclus dans le dépôt ni l’installeur.
 Les sources et conditions des moteurs restent disponibles chez leurs auteurs.
 
-Seuls les cookies applicables à la page et à la source choisie sont transmis
+Seuls les cookies applicables à la page, au lecteur intégré et à la source choisie sont transmis
 au moteur via un fichier temporaire Netscape, supprimé en fin d’opération.
 Ils ne sont pas journalisés. Aucun export de l’ensemble du profil n’est fait.
 
@@ -115,3 +147,10 @@ vidéos locales. Il teste HLS 720p/1080p, le repli 1440p → 1080p, le choix
 pause/reprise/annulation, navigation, désactivation et blocage DRM.
 Les profils, cookies et téléchargements de test sont effacés après arrêt ;
 le rapport JSON, les captures et le journal natif restent dans `bin/sidebar-check-*`.
+
+`node tools/check-video-collections.mjs <chemin-Sol.exe>` utilise une playlist
+locale de 101 vidéos et les vrais moteurs : pagination 100/1, sélection beUI de
+trois éléments, rejet des identifiants arbitraires/périmés, file de deux transferts,
+pause/reprise d’un élément en attente, repli 720p vers la source 360p, fichiers
+complets et conservation du Referer d’une iframe. Le sélecteur est contrôlé à
+320 px. Ces essais locaux ne certifient aucun catalogue tiers.

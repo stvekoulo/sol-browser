@@ -27,7 +27,7 @@ public sealed partial class BrowserController
             && _videoDiscoveryDone.GetValueOrDefault(id) != _pages.CoreOf(id)?.Source)
             _ = DiscoverVideoAsync(id);
         if (_videoPicker is { } picker && picker.Id == id && _pages.CoreOf(id)?.Source == picker.Url && _popup.IsOpen)
-            PublishVideoCatalog(id, false);
+            if (_videoCollection is null) PublishVideoCatalog(id, false);
     }
 
     private async Task DiscoverVideoAsync(string id)
@@ -41,10 +41,12 @@ public sealed partial class BrowserController
             // Laisser les métadonnées et les réponses déjà en vol arriver avant tout recours à l'extracteur.
             await Task.Delay(750, cancel.Token);
             if (_closingWindow || _pages.CoreOf(id)?.Source != document || _pages.VideoProtected(id) || _pages.VideoVariantsOf(id).Count > 0) return;
+            var uri = new Uri(document);
+            if ((uri.Host == "youtube.com" || uri.Host.EndsWith(".youtube.com")) && uri.AbsolutePath == "/playlist") return;
             var source = _pages.VideosOf(id).OrderBy(s => s.Kind == "page" ? 1 : 0).FirstOrDefault();
             if (source is null) return;
-            var cookies = await _pages.VideoCookiesAsync(id, source.Url);
-            var heights = await Task.Run(() => VideoProbe.InspectAsync(source.Url, document, Path.Combine(AppPaths.BaseDir, "tools", "video"), cookies, _ => { }, cancel.Token));
+            var cookies = await _pages.VideoCookiesAsync(id, source.Url, source.Referer);
+            var heights = await Task.Run(() => VideoProbe.InspectAsync(source.Url, source.Referer ?? document, Path.Combine(AppPaths.BaseDir, "tools", "video"), cookies, _ => { }, cancel.Token));
             if (!_closingWindow && !cancel.IsCancellationRequested) _pages.CacheVideoQualities(id, document, source, heights);
         }
         catch (Exception e) when (e is IOException or InvalidDataException or System.Net.Http.HttpRequestException or JsonException
