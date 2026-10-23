@@ -1,7 +1,8 @@
-# Copie les originaux sans altération ; seules les icônes Windows et le splash sont redimensionnés.
+# Conserve les originaux ; distribue uniquement le logo détouré et le fond fourni.
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$logo = Join-Path $root 'brand\logo-original.png'
+$logo = Join-Path $root 'brand\logo-transparent.png'
+if (-not (Test-Path -LiteralPath $logo)) { throw 'Le logo transparent est requis avant de synchroniser les icônes.' }
 $wallpaper = Join-Path $root 'brand\wallpaper-original.png'
 foreach ($target in 'ui\src\assets\logo.png', 'docs\images\logo.png', 'docs\launch-film\assets\logo.png', 'landing\public\logo.png', 'landing\src\app\icon.png', 'landing\src\app\apple-icon.png') {
     Copy-Item -LiteralPath $logo -Destination (Join-Path $root $target) -Force

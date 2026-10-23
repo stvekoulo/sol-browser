@@ -23,6 +23,10 @@ if (-not $SkipUiBuild) {
 Add-Type -AssemblyName System.Drawing
 $icon = [Drawing.Icon]::new((Join-Path $root 'src\Browser.App\Assets\Sol.ico'), 256, 256)
 $bitmap = $icon.ToBitmap()
+if ($bitmap.GetPixel(0, 0).A -ne 0) {
+    $bitmap.Dispose(); $icon.Dispose()
+    throw 'Le logo Windows doit conserver son fond transparent avant la distribution Store.'
+}
 try {
     foreach ($a in $Arch) {
         $app = Join-Path $Out "app-$a"
