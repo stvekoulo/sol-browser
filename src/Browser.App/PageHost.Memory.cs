@@ -110,7 +110,7 @@ public sealed partial class PageHost
         try
         {
             // Keep live state and embedded sign-in/media frames; suspension retains their browser context.
-            if (TabSessions.IsSignIn(core.Source)) return;
+            if (TabSessions.IsSignIn(core.Source) || _previews.ContainsKey(id)) return;
             var source = core.Source;
             Wake(id, core);
             var safe = await core.ExecuteScriptAsync(@"(() => { try {
@@ -121,7 +121,7 @@ public sealed partial class PageHost
                 } catch { return false; } })()");
             if (safe == "true" && settings.MemorySaver && _hiddenSince.ContainsKey(id)
                 && CoreOf(id) == core && core.Source == source && !_loading.Contains(id) && !KeepAwake(id)
-                && _pip != id && !_sims.ContainsKey(id) && !core.IsDocumentPlayingAudio) Discard(id, core);
+                && _pip != id && !_sims.ContainsKey(id) && !_previews.ContainsKey(id) && !core.IsDocumentPlayingAudio) Discard(id, core);
             else if (settings.MemorySaver && _hiddenSince.ContainsKey(id) && CoreOf(id) == core)
             {
                 if (KeepAwake(id) || _pip == id || _sims.ContainsKey(id) || _loading.Contains(id) || core.IsDocumentPlayingAudio) return;

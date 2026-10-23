@@ -1,9 +1,7 @@
 using Browser.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Markup;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.Web.WebView2.Core;
 using Windows.System;
 using Windows.UI;
@@ -14,18 +12,33 @@ public sealed partial class PageHost
 {
     private sealed record PreviewSurface(string SourceId, Grid Overlay, WebView2 View, TextBlock Status, ProgressBar Progress)
     { public string Url = ""; public bool Loading; }
+    private readonly Dictionary<string, PreviewSurface> _previews = [];
     private PreviewSurface? _preview;
+    private string? _previewTabId;
     private readonly string _previewEscape = "sol.preview.close:" + Guid.NewGuid().ToString("N");
     public string? PreviewSourceId => _preview?.SourceId;
     public event Action<string, string, bool>? PreviewPromoted;
 
-    public void ClosePreview()
+    private bool Retained(PreviewSurface preview) => _previews.GetValueOrDefault(preview.SourceId) == preview;
+    public void SetPreviewTab(string? activeId)
     {
-        if (_preview is not { } preview) return;
-        _preview = null; container.Children.Remove(preview.Overlay);
-        preview.View.Close();
-        try { if (_views.TryGetValue(preview.SourceId, out var owner)) owner.Focus(FocusState.Programmatic); }
+        _previewTabId = activeId;
+        _preview = activeId is null ? null : _previews.GetValueOrDefault(activeId);
+        foreach (var preview in _previews.Values)
+            preview.Overlay.Visibility = preview == _preview ? Visibility.Visible : Visibility.Collapsed;
+    }
+    public void ClosePreview() { if (_preview is { } current) ClosePreviewFor(current.SourceId, focus: true); }
+    public void ClosePreviewFor(string sourceId, bool focus = false)
+    {
+        if (!_previews.Remove(sourceId, out var preview)) return;
+        if (_preview == preview) _preview = null;
+        container.Children.Remove(preview.Overlay); preview.View.Close();
+        try { if (focus && _views.TryGetValue(sourceId, out var owner)) owner.Focus(FocusState.Programmatic); }
         catch (InvalidOperationException) { }
+    }
+    public void CloseAllPreviews()
+    {
+        foreach (var id in _previews.Keys.ToArray()) ClosePreviewFor(id);
     }
     public void PromotePreview(bool split)
     {
@@ -42,16 +55,17 @@ public sealed partial class PageHost
     public async Task OpenPreviewAsync(string sourceId, string url)
     {
         if (!LinkPreview.Allowed(url) || Core(sourceId) is not { } source) return;
-        ClosePreview();
-        var preview = CreatePreview(sourceId); preview.Url = url; _preview = preview;
+        ClosePreviewFor(sourceId);
+        var preview = CreatePreview(sourceId); preview.Url = url; _previews[sourceId] = preview;
+        SetPreviewTab(_previewTabId ?? sourceId);
         container.Children.Add(preview.Overlay);
         try
         {
             await StartEngineAsync(preview.View, source.Profile.ProfileName);
-            if (_preview != preview) return;
+            if (!Retained(preview)) return;
             var core = preview.View.CoreWebView2;
             await Harden(core, withFan: false);
-            if (_preview != preview) return;
+            if (!Retained(preview)) return;
             core.Settings.AreDefaultContextMenusEnabled = true;
             core.Settings.IsStatusBarEnabled = true;
             var signal = System.Text.Json.JsonSerializer.Serialize(_previewEscape);
@@ -85,11 +99,11 @@ public sealed partial class PageHost
                 preview.Status.Text = Language.T("Cet aperçu s’est interrompu. Rechargez la page.", "This preview stopped. Reload the page.");
                 preview.Status.Visibility = Visibility.Visible;
             };
-            core.Navigate(url); preview.View.Focus(FocusState.Programmatic);
+            core.Navigate(url); if (_preview == preview) preview.View.Focus(FocusState.Programmatic);
         }
         catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException or IOException)
         {
-            if (_preview == preview)
+            if (Retained(preview))
             {
                 preview.Progress.Visibility = Visibility.Collapsed;
                 preview.Status.Text = Language.T("Impossible d’ouvrir cet aperçu.", "Unable to open this preview.");
@@ -129,67 +143,14 @@ public sealed partial class PageHost
         var rail = new StackPanel { Spacing = 8, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
         overlay.Children.Add(rail); Canvas.SetZIndex(rail, 2);
 
-        void AnimateProp(DependencyObject target, string prop, double to, int ms = 160)
-        {
-            var anim = new DoubleAnimation { To = to, Duration = TimeSpan.FromMilliseconds(ms), EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
-            Storyboard.SetTarget(anim, target);
-            Storyboard.SetTargetProperty(anim, prop);
-            var sb = new Storyboard();
-            sb.Children.Add(anim);
-            sb.Begin();
-        }
-
-        Button CreateRailButton(string label, string pathData, Action run, Action<TransformGroup, bool> onHover)
-        {
-            var pathIcon = (PathIcon)XamlReader.Load($"<PathIcon xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' Data='{pathData}' />");
-            pathIcon.Foreground = ink;
-            var transforms = new TransformGroup();
-            var scale = new ScaleTransform { ScaleX = 1, ScaleY = 1, CenterX = 10, CenterY = 10 };
-            var rotate = new RotateTransform { Angle = 0, CenterX = 10, CenterY = 10 };
-            var translate = new TranslateTransform { X = 0, Y = 0 };
-            transforms.Children.Add(scale);
-            transforms.Children.Add(rotate);
-            transforms.Children.Add(translate);
-            pathIcon.RenderTransform = transforms;
-
-            var btnScale = new ScaleTransform { ScaleX = 1, ScaleY = 1, CenterX = 19, CenterY = 19 };
-            var button = new Button
-            {
-                Content = pathIcon,
-                Width = 38,
-                Height = 38,
-                CornerRadius = new CornerRadius(12),
-                Padding = new Thickness(0),
-                Background = buttonBg,
-                BorderBrush = borderBrush,
-                BorderThickness = new Thickness(1),
-                Shadow = new ThemeShadow(),
-                Translation = new System.Numerics.Vector3(0, 0, 16),
-                RenderTransform = btnScale
-            };
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, label);
-            ToolTipService.SetToolTip(button, label);
-            button.Click += (_, _) => run();
-            button.PointerEntered += (_, _) => { button.Background = hoverBg; onHover(transforms, true); };
-            button.PointerExited += (_, _) => { button.Background = buttonBg; onHover(transforms, false); };
-            button.PointerPressed += (_, _) => { AnimateProp(btnScale, "ScaleX", 0.92, 80); AnimateProp(btnScale, "ScaleY", 0.92, 80); };
-            button.PointerReleased += (_, _) => { AnimateProp(btnScale, "ScaleX", 1.0, 120); AnimateProp(btnScale, "ScaleY", 1.0, 120); };
-            button.PointerCaptureLost += (_, _) => { AnimateProp(btnScale, "ScaleX", 1.0, 120); AnimateProp(btnScale, "ScaleY", 1.0, 120); };
-            rail.Children.Add(button);
-            return button;
-        }
-
-        CreateRailButton(Language.T("Fermer l’aperçu (Échap)", "Close preview (Escape)"),
-            "M 4 4 L 16 16 M 16 4 L 4 16", ClosePreview,
-            (t, hover) => { AnimateProp(t.Children[1], "Angle", hover ? 90 : 0, 200); AnimateProp(t.Children[0], "ScaleX", hover ? 1.12 : 1, 160); AnimateProp(t.Children[0], "ScaleY", hover ? 1.12 : 1, 160); });
-
-        CreateRailButton(Language.T("Ouvrir dans un nouvel onglet", "Open in a new tab"),
-            "M 9 3 H 4 C 3.4 3 3 3.4 3 4 v 10 c 0 .6 .4 1 1 1 h 10 c .6 0 1 -.4 1 -1 V 9 M 11 3 h 6 v 6 M 17 3 L 8 12", () => PromotePreview(false),
-            (t, hover) => { AnimateProp(t.Children[2], "X", hover ? 1.5 : 0, 160); AnimateProp(t.Children[2], "Y", hover ? -1.5 : 0, 160); AnimateProp(t.Children[0], "ScaleX", hover ? 1.08 : 1, 160); AnimateProp(t.Children[0], "ScaleY", hover ? 1.08 : 1, 160); });
-
-        CreateRailButton(Language.T("Ouvrir à côté", "Open beside"),
-            "M 3 3 h 14 v 14 H 3 Z M 10 3 v 14", () => PromotePreview(true),
-            (t, hover) => { AnimateProp(t.Children[0], "ScaleX", hover ? 1.18 : 1, 160); AnimateProp(t.Children[0], "ScaleY", hover ? 1.05 : 1, 160); });
+        rail.Children.Add(PreviewRailButton(Language.T("Fermer l’aperçu (Échap)", "Close preview (Escape)"),
+            "M4 4 L16 16 M16 4 L4 16", ClosePreview, "close", ink, buttonBg, hoverBg, borderBrush));
+        rail.Children.Add(PreviewRailButton(Language.T("Ouvrir dans un nouvel onglet", "Open in a new tab"),
+            "M9 3 H4 Q3 3 3 4 V16 Q3 17 4 17 H16 Q17 17 17 16 V11 M11 3 H17 V9 M17 3 L9 11",
+            () => PromotePreview(false), "tab", ink, buttonBg, hoverBg, borderBrush));
+        rail.Children.Add(PreviewRailButton(Language.T("Ouvrir à côté", "Open beside"),
+            "M4 3 H16 Q17 3 17 4 V16 Q17 17 16 17 H4 Q3 17 3 16 V4 Q3 3 4 3 M10 3 V17",
+            () => PromotePreview(true), "split", ink, buttonBg, hoverBg, borderBrush));
 
         var view = new CursorWebView { DefaultBackgroundColor = surfaceBg, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch };
         card.Children.Add(view);
@@ -215,20 +176,18 @@ public sealed partial class PageHost
             var w = overlay.ActualWidth;
             var h = overlay.ActualHeight;
             if (w <= 0 || h <= 0) return;
-            var cardW = Math.Clamp(w * 0.84, 600, 1440);
-            if (cardW > w - 100) cardW = Math.Max(320, w - 100);
-            var cardH = Math.Clamp(h * 0.88, 440, 980);
-            if (cardH > h - 60) cardH = Math.Max(260, h - 60);
-
-            card.Width = cardW;
-            card.Height = cardH;
-
-            var cardLeft = (w - cardW) / 2;
-            var cardTop = (h - cardH) / 2;
-
-            var railX = cardLeft + cardW + 12;
-            if (railX + 48 > w) railX = cardLeft + cardW - 50;
-            rail.Margin = new Thickness(railX, cardTop, 0, 0);
+            // Reserve a real rail on wide windows; move it above the page on compact ones.
+            var compact = w < 620;
+            var margin = w < 360 ? 8 : 16;
+            var cardW = Math.Max(1, Math.Min(1440, compact ? w - margin * 2 : Math.Min(w * .84, w - 152)));
+            var cardH = Math.Max(1, Math.Min(980, compact ? h - 84 : Math.Min(h * .88, h - 40)));
+            card.Width = cardW; card.Height = cardH;
+            card.Margin = new Thickness(0, compact ? 44 : 0, compact ? 0 : 44, 0);
+            var cardLeft = (w - cardW - (compact ? 0 : 44)) / 2;
+            var cardTop = (h - cardH + (compact ? 44 : 0)) / 2;
+            rail.Orientation = compact ? Orientation.Horizontal : Orientation.Vertical;
+            rail.Margin = new Thickness(compact ? Math.Max(margin, (w - 152) / 2) : cardLeft + cardW + 12,
+                compact ? Math.Max(4, cardTop - 56) : cardTop, 0, 0);
         }
 
         overlay.SizeChanged += (_, _) => LayoutSurfaces();

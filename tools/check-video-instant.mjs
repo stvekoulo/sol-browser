@@ -51,8 +51,28 @@ try{
   const player=await open('/instant');
   assert.deepEqual(player.view.qualities,[1080,720]);assert.equal(player.view.selected,1080);
   assert.equal(downloadRequest,0,'No transfer before the click');
+  await host.wait(()=>popup.evaluate('document.querySelectorAll(".video-qualities [role=radio]").length===2'),'beUI quality choices');
+  await popup.evaluate('document.querySelector(".video-qualities [aria-checked=true]").focus()');
+  await popup.call('Input.dispatchKeyEvent',{type:'keyDown',key:'ArrowRight',code:'ArrowRight',windowsVirtualKeyCode:39});
+  await host.wait(()=>popup.evaluate('document.querySelector(".video-quality-item.is-selected").textContent.includes("720p")'),'keyboard quality selection');
+  const source=await host.connect(host.origin+'/instant');
+  await source.evaluate(`document.querySelector('#movie_player').getPlayerResponse=()=>({streamingData:{formats:[2160,1080,720].map(height=>({itag:height,url:location.origin+'/clip.mp4',height,mimeType:'video/mp4',audioQuality:'AUDIO_QUALITY_MEDIUM'}))}});document.dispatchEvent(new Event('yt-player-updated'))`);
+  await host.wait(()=>popup.evaluate('document.querySelectorAll(".video-qualities [role=radio]").length===3'),'live quality catalogue');
+  assert.equal(await popup.evaluate('document.querySelector(".video-quality-item.is-selected").textContent.includes("720p")'),true,'Live updates preserve manual selection');
+  assert.equal(await popup.evaluate('Array.from(document.querySelectorAll(".video-qualities [role=radio]")).filter(b=>b.tabIndex===0).length'),1,'One keyboard tab stop');
+  await popup.call('Emulation.setDeviceMetricsOverride',{width:320,height:650,deviceScaleFactor:1,mobile:false});
+  await host.wait(()=>popup.evaluate('innerWidth===320'),'compact picker');
+  assert.equal(await popup.evaluate('document.documentElement.scrollWidth<=innerWidth'),true,'No horizontal overflow at 320px');
+  assert.equal(await popup.evaluate('document.querySelectorAll(".video-picker").length'),1,'Single picker surface');
+  assert.equal(await popup.evaluate('getComputedStyle(document.querySelector(".video-qualities [aria-checked=false]")).borderTopStyle'),'solid','Unselected controls remain visible');
+  const clip=await popup.evaluate('({x:0,y:0,width:innerWidth,height:Math.min(innerHeight,document.querySelector(".video-picker").getBoundingClientRect().height+3),scale:1})');
+  await writeFile(resolve(host.base,'video-picker-compact.png'),Buffer.from((await popup.call('Page.captureScreenshot',{clip})).data,'base64'));
+  await cmd({type:'settings.set',id:'theme',index:2});
+  await host.wait(()=>popup.evaluate('document.documentElement.dataset.theme==="dark"'),'native dark theme');
+  await writeFile(resolve(host.base,'video-picker-dark.png'),Buffer.from((await popup.call('Page.captureScreenshot',{clip})).data,'base64'));
+  await popup.call('Emulation.clearDeviceMetricsOverride');
   const start=performance.now();
-  await cmd({type:'video.download',id:player.id,query:player.view.sourceId,index:720});
+  await popup.evaluate('document.querySelector(".video-download-btn").click()');
   await host.wait(()=>downloadRequest>start,'first HTTP bytes',5000);
   times.downloadRequest=Math.round(downloadRequest-start);
   dock=await host.connect('#dock');
@@ -64,7 +84,7 @@ try{
   await popup.evaluate('window.__video=null');
   const manifest=await open('/manifest');assert.deepEqual(manifest.view.qualities,[1080,720]);
   await writeFile(resolve(host.base,'video-instant.png'),Buffer.from((await popup.call('Page.captureScreenshot')).data,'base64'));
-  await writeFile(resolve(host.base,'video-instant-verification.json'),JSON.stringify({times,checks:['automatic-player-metadata','automatic-HLS-manifest','no-probe-click','cold-engine-direct-download','HttpOnly-cookie','quality-default-fallback','downloaded-bytes']},null,2));
+  await writeFile(resolve(host.base,'video-instant-verification.json'),JSON.stringify({times,checks:['automatic-player-metadata','automatic-HLS-manifest','no-probe-click','cold-engine-direct-download','HttpOnly-cookie','quality-default-fallback','beUI keyboard selection','live updates preserve choice','compact picker without overflow','download button uses manual quality','downloaded-bytes']},null,2));
   console.log(JSON.stringify({report:host.base,times}));
   await host.close(ui);
 }finally{

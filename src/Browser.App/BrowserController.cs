@@ -191,7 +191,7 @@ public sealed partial class BrowserController
         _window.Closed += (_, _) =>
         {
             _closingWindow = true;
-            _pages.ClosePreview();
+            _pages.CloseAllPreviews();
             foreach (var job in _videoJobs) job.Cancel();
             _videoProbeCancel?.Cancel();
             _videoWarmupCancel.Cancel();

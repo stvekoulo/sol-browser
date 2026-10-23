@@ -150,7 +150,7 @@ public sealed partial class PageHost
             core.Settings.IsZoomControlEnabled = IsPdf(tab.Id);
             core.Settings.IsWebMessageEnabled = true; // handler validates origin and permits only dismissal outside internal pages/stores
             Navigating?.Invoke(core);
-            if(PreviewSourceId==tab.Id)ClosePreview();
+            ClosePreviewFor(tab.Id);
             DebugLog.Write($"navigation.start {tab.Id} #{e.NavigationId} redirect={e.IsRedirected}");
             if (_navigation.GetValueOrDefault(tab.Id) != e.NavigationId) _downloading.Remove(tab.Id);
             _navigation[tab.Id] = e.NavigationId;

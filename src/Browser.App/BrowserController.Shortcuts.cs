@@ -267,7 +267,6 @@ public sealed partial class BrowserController
     }
     private void Activate(string id)
     {
-        if(_pages.PreviewSourceId is {} source&&source!=id)_pages.ClosePreview();
         if (_asking is not null && _tabs.ActiveId != id) HidePopup();
         if (!_tabs.Activate(id)) return;
         // Un onglet rangé dans un groupe replié : le groupe se déplie pour le montrer.

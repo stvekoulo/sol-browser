@@ -122,6 +122,7 @@ public sealed partial class BrowserController
             if (_settings.AutoPip && left is not null && !(showSplit && _split.Contains(left)) && _tabs.Tabs.Any(t => t.Id == left))
                 _ = _pages.TryEnterPipAsync(left);
         }
+        _pages.SetPreviewTab(_tabs.ActiveId);
         _pages.ApplyLayout(showSplit ? _split.PrimaryId : _tabs.ActiveId, showSplit ? _split.SecondaryId : null, _split.Ratio);
         var state = JsonSerializer.Serialize(new
         {

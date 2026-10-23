@@ -15,14 +15,14 @@ const cmd=c=>ui.evaluate(`chrome.webview.postMessage(${JSON.stringify(JSON.strin
 const state=()=>ui.evaluate('window.__sidebarState');
 async function waitGone(target){await host.wait(async()=>!(await host.targets()).some(t=>t.id===target.id),'preview target closed')}
 try{
-  ui=await host.launch(850,1200);
+  ui=await host.launch(850,process.argv.includes('--compact')?760:1200);
   const id=(await state()).activeId;
   await cmd({type:'nav.go',id,input:host.origin+'/source'});
   const source=await host.connect(host.origin+'/source');
   await host.wait(()=>source.evaluate('location.pathname==="/source"&&!!document.querySelector("#draft")').catch(()=>false),'source document');
   await host.wait(async()=>(await state()).tabs.find(t=>t.id===id)?.url===host.origin+'/source','source URL');
   await source.evaluate('document.querySelector("#draft").value="Keep my work";scrollTo(0,500)');
-  const scroll=await source.evaluate('scrollY'),count=(await state()).tabs.length;
+  const scroll=await source.evaluate('scrollY');let count=(await state()).tabs.length;
   await cmd({type:'preview.open',id,input:host.origin+'/preview1'});
   const first=await host.connect(host.origin+'/preview1');
   await host.wait(()=>first.evaluate('location.pathname==="/preview1"&&!!document.querySelector("#next")&&document.readyState==="complete"').catch(()=>false),'preview loaded despite frame headers');
@@ -37,6 +37,28 @@ try{
   assert.equal((await state()).tabs.length,count,'target blank stays in preview');
   await second.evaluate('document.querySelector("#draft").focus()');await second.call('Input.insertText',{text:'Interactive preview'});
   assert.equal(await second.evaluate('document.querySelector("#draft").value'),'Interactive preview');
+  // A tab switch must preserve the actual WebView, including drafts, scroll and history.
+  await second.evaluate('scrollTo(0,420);window.previewIdentity="retained"');
+  const previewScroll=await second.evaluate('scrollY');
+  const otherTab=(await state()).tabs.find(t=>t.id!==id&&!t.pinned&&!t.groupId),alternate=otherTab.id;
+  const requestCount=requests.length;
+  await cmd({type:'tab.activate',id:alternate});
+  await host.wait(async()=>(await state()).activeId===alternate,'activate other tab');
+  const otherSource=await host.connect(otherTab.url);
+  await host.wait(()=>otherSource.evaluate('document.readyState==="complete"'),'other source ready');
+  await cmd({type:'preview.close'}); // No active preview on this other tab.
+  assert.equal(await second.evaluate('window.previewIdentity'),'retained');
+  await cmd({type:'preview.open',id:alternate,input:host.origin+'/preview1'});
+  const alternateTarget=await host.wait(async()=>(await host.targets()).find(t=>t.url===host.origin+'/preview1'),'second tab preview');
+  const alternatePreview=await host.connect(alternateTarget.url,alternateTarget.id);
+  await host.wait(()=>alternatePreview.evaluate('!!document.querySelector("#draft")'),'second preview ready');
+  await cmd({type:'tab.activate',id});
+  assert.equal(await second.evaluate('window.previewIdentity'),'retained');
+  assert.equal(await second.evaluate('document.querySelector("#draft").value'),'Interactive preview');
+  assert.equal(await second.evaluate('scrollY'),previewScroll);
+  assert.equal(requests.filter(r=>r.path==='/preview2').length,1,'Tab switch never reloads preview');
+  assert.equal(requests.length,requestCount+1,'Only the other preview adds a request');
+  await cmd({type:'tab.close',id:alternate});await waitGone(alternateTarget);count--;
   await cmd({type:'preview.back'});await host.wait(()=>first.evaluate('location.pathname==="/preview1"'),'back');
   await cmd({type:'preview.forward'});await host.wait(()=>first.evaluate('location.pathname==="/preview2"'),'forward');
   await writeFile(resolve(host.base,'link-preview-content.png'),Buffer.from((await second.call('Page.captureScreenshot')).data,'base64'));
@@ -68,6 +90,6 @@ try{
   const beforeInvalid=(await host.targets()).length;
   await cmd({type:'preview.open',id,input:'javascript:alert(1)'});assert.equal((await host.targets()).length,beforeInvalid);
   assert.equal(await source.evaluate('document.querySelector("#draft").value'),'Keep my work');
-  await writeFile(resolve(host.base,'link-preview-verification.json'),JSON.stringify({checks:['no tab for preview','real navigable WebView','X-Frame-Options DENY works','session cookie retained','source form and scroll preserved','target blank stays inside preview','typing','back forward','promote current URL','split view','Alt click','Escape','invalid protocol blocked']},null,2));
+  await writeFile(resolve(host.base,'link-preview-verification.json'),JSON.stringify({checks:['no tab for preview','real navigable WebView','X-Frame-Options DENY works','session cookie retained','source form and scroll preserved','target blank stays inside preview','typing','tab switches retain WebView, draft, scroll and history','independent previews per tab','closing hidden source disposes preview','back forward','promote current URL','split view','Alt click','Escape','invalid protocol blocked']},null,2));
   await host.close(ui);console.log('Link preview checks passed: '+host.base);
 }finally{await host.dispose()}
