@@ -24,19 +24,16 @@ public sealed partial class PageHost
             await view.EnsureCoreWebView2Async(environment, options);
         }
         var profile = view.CoreWebView2.Profile;
-        await (_privateCleanup ??= DeleteAbandonedPrivateProfilesAsync(profile));
+        await StartupPreparation.OptionalAsync("private-cleanup", async () =>
+        {
+            if (_privateCleanup is null || _privateCleanup.IsFaulted || _privateCleanup.IsCanceled)
+                _privateCleanup = DeleteAbandonedPrivateProfilesAsync(profile);
+            await _privateCleanup;
+        }, (stage, error) => RecordStartupFailure(stage, error, PrivateBrowsing.IsProfile(profile.ProfileName)));
         RestoreGitLabSession(profile);
         WatchGitLabSession(view.CoreWebView2);
         if (_sessionCookies.Remove(profile.ProfileName, out var cookies))
             foreach (var cookie in cookies) profile.CookieManager.AddOrUpdateCookie(cookie);
-    }
-    private async Task PrepareProfileAsync(CoreWebView2Profile profile)
-    {
-        await NativePermissions.SyncAsync(profile);
-        await AdBlock.RemoveBundledAsync(profile);
-        await PageZoom.InstallAsync(profile, settings.PageZoom);
-        await SharedExtensions.SyncAsync(profile);
-        ExtensionsChanged?.Invoke();
     }
     public async Task<bool> DeleteSessionAsync(string sessionId)
     {
@@ -71,13 +68,16 @@ public sealed partial class PageHost
         _views[tab.Id] = view;
         view.GotFocus += (_, _) => { if (_visible.Contains(tab.Id) && _views.GetValueOrDefault(tab.Id) == view) PageFocused?.Invoke(tab.Id); };
         container.Children.Add(view);
+        var startupStage = "engine";
         try
         {
             await StartEngineAsync(view, tab.Private ? PrivateProfileName : tab.SessionId.Length == 0 ? null : "sol-" + tab.SessionId);
+            startupStage = "browser-ui";
             (_bubbles ??= new NativeBubbles(container)).Watch(view.CoreWebView2.BrowserProcessId);
             // Préparer les extensions du profil avant sa première navigation.
+            startupStage = "profile";
             var profile = view.CoreWebView2.Profile;
-            if (!_profileReady.TryGetValue(profile.ProfileName, out var ready))
+            if (!_profileReady.TryGetValue(profile.ProfileName, out var ready) || ready.IsFaulted || ready.IsCanceled)
                 _profileReady[profile.ProfileName] = ready = PrepareProfileAsync(profile);
             await ready;
         }
@@ -85,6 +85,7 @@ public sealed partial class PageHost
             && _views.GetValueOrDefault(tab.Id) != view) { return null; } // fermé pendant le démarrage
         catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException)
         {
+            RecordStartupFailure(startupStage, e, tab.Private);
             DebugLog.Write($"session.start.failed {e.GetType().Name} {e.HResult}");
             Remove(tab.Id); AddAsleep(tab); SessionFailed?.Invoke(tab.Id); return null;
         }
