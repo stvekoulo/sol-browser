@@ -61,6 +61,8 @@ Un assistant facultatif qui utilise **votre propre forfait ChatGPT Plus ou Pro**
 - **Votre accord avant d'agir.** Cliquer, remplir un champ ou ouvrir une adresse attend *Autoriser*. Les champs de mot de passe, de carte et de code unique ne sont jamais lus ni remplis.
 - **Actions en un clic.** *Résumer* dans la barre d'adresse ; clic droit sur une sélection pour l'expliquer ou la traduire (six langues), ou dans un champ pour corriger, reformuler ou traduire, puis remplacer le texte.
 - **Panneau de discussion** à droite pour les questions rapides, capable de consulter l'onglet ouvert.
+- **Agent navigateur** : remplir des formulaires, choisir des options, utiliser le clavier, ouvrir et regrouper les onglets, préparer un espace avec une note. Les modifications sur les sites et les fermetures d'onglets demandent un accord.
+- **Voix Windows** : dicter une demande, écouter la réponse et autoriser une action à voix haute, avec le Voice Orb officiel de beUI. Nécessite un moteur de reconnaissance et une voix de la langue de l'interface ; ChatGPT reçoit du texte plutôt que de l'audio.
 - **Notes** : chercher, résumer, ou créer une note à partir d'une consigne.
 - **Sujets sur la page d'accueil** : favoris et historique classés par catégorie une fois par jour. Désactivé par défaut ; seuls les titres et domaines sont envoyés.
 

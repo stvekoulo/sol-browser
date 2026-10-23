@@ -61,6 +61,8 @@ An optional assistant that runs on **your own ChatGPT Plus or Pro plan** through
 - **Your approval before acting.** Clicking, typing into a field or opening an address waits for *Allow*. Password, card and one-time-code fields are never read or filled.
 - **One-click actions.** *Summarize* in the address bar; right-click a selection to explain or translate it (six languages), or a text field to fix, rephrase or translate it, then replace the text.
 - **Chat panel** on the right for quick questions, able to look at the open tab.
+- **Browser agent:** fill forms, select options, use the keyboard, open and group tabs, and prepare a workspace with a note. Site changes and tab closures ask for approval.
+- **Windows voice:** dictate a request, hear the response and approve an action aloud, with the official beUI Voice Orb. Requires an installed speech recognizer and voice in the interface language; ChatGPT receives text rather than audio.
 - **Notes:** search, summarize, or create a note from an instruction.
 - **Topics on the start page:** bookmarks and history sorted into categories once a day. Off by default; only titles and domains are sent.
 

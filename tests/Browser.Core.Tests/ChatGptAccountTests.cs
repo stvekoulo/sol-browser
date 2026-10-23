@@ -94,6 +94,41 @@ public sealed class ChatGptAccountTests : IDisposable
         Assert.True(ChatGptOAuth.HasPlan(Load().Scopes));
     }
 
+    [Fact]
+    public async Task RunsBrowserWorkspaceToolsThroughTheResponsesLoop()
+    {
+        Save(Tokens());
+        var browser = new BrowserController();
+        var round = 0;
+        const string arguments = """{"title":"Travail","urls":["https://www.youtube.com/","https://example.org/article"],"note_title":"Notes","note_text":"","layout":"side_by_side"}""";
+        using var server = new Server(request =>
+        {
+            if (request.RequestUri!.AbsolutePath == "/v1/models") return """{"models":[{"slug":"test-model","visibility":"list"}]}""";
+            Assert.Equal("/v1/responses", request.RequestUri.AbsolutePath);
+            using var payload = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            Assert.Contains(payload.RootElement.GetProperty("tools").EnumerateArray(), tool => tool.GetProperty("name").GetString() == "prepare_workspace");
+            Assert.Contains(payload.RootElement.GetProperty("tools").EnumerateArray(), tool => tool.GetProperty("name").GetString() == "fill_form");
+            if (round++ == 0)
+                return "data: " + JsonSerializer.Serialize(new { type = "response.output_item.done", item = new
+                { id = "fc_test", type = "function_call", call_id = "workspace", name = "prepare_workspace", arguments } })
+                    + "\n\ndata: {\"type\":\"response.completed\"}\n\n";
+            var output = payload.RootElement.GetProperty("input").EnumerateArray().Single(item => item.TryGetProperty("type", out var type) && type.GetString() == "function_call_output");
+            Assert.Equal("workspace", output.GetProperty("call_id").GetString());
+            using var result = JsonDocument.Parse(output.GetProperty("output").GetString()!);
+            Assert.True(result.RootElement.GetProperty("ok").GetBoolean());
+            Assert.Equal(3, result.RootElement.GetProperty("tabs").GetArrayLength());
+            return "data: {\"type\":\"response.output_text.delta\",\"delta\":\"Espace prêt.\"}\n\ndata: {\"type\":\"response.completed\"}\n\n";
+        });
+        using var http = new HttpClient(server);
+        var account = new ChatGptAccount(_directory, http);
+        var answer = new StringBuilder();
+        await account.RunAsync("instruction", [new { role = "user", content = "Prépare mon espace de travail" }],
+            [.. SolAiAgent.PageTools, .. SolAiAgent.NoteTools, .. SolAiBrowserTools.Tools], call => browser.Tool(call.Name, call.Arguments), delta => answer.Append(delta), default);
+        Assert.Equal("Espace prêt.", answer.ToString());
+        Assert.Single(browser.Tabs.Groups); Assert.Single(browser.Notes.Items);
+        Assert.True(browser.Layout.IsSplit); Assert.Equal(2, round);
+    }
+
     private static string Response(HttpRequestMessage request, bool completed)
     {
         Assert.Equal("new-access", request.Headers.Authorization?.Parameter);

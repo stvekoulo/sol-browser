@@ -42,6 +42,7 @@ public static class CommandParser
         ["ai.open"] = ["id"], ["ai.run"] = ["query", "title"],
         ["ai.apply"] = [], ["ai.copy"] = [], ["ai.note"] = [],
         ["chat.toggle"] = [], ["tabs.ai"] = [], ["tabs.ai.apply"] = [], ["tabs.ai.dismiss"] = [], ["group.ai"] = ["id"], ["chat.ready"] = [], ["chat.send"] = ["input"], ["chat.copy"] = ["id"], ["chat.note"] = ["id"], ["chat.ask"] = ["input"], ["chat.cancel"] = [], ["chat.clear"] = [],
+        ["voice.open"] = [], ["voice.listen"] = [], ["voice.stop"] = [], ["voice.close"] = [], ["voice.settings"] = [],
         ["notes.open"] = [], ["notes.draft"] = ["id", "title", "input"],
         ["notes.save"] = [], ["notes.delete"] = ["id"], ["notes.edit"] = ["id"], ["notes.export"] = [],
         ["notes.select"] = ["id"],

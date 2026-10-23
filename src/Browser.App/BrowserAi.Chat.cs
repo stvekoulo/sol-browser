@@ -13,11 +13,12 @@ public sealed partial class BrowserController
     private CancellationTokenSource? _chatCancel;
     private AgentTrace? _chatTrace;
     private string _chatFocus = ""; // « notes » quand le panneau est ouvert depuis les notes
-    private static readonly object[] ChatTools = [.. SolAiAgent.PageTools, .. SolAiAgent.NoteTools];
+    private static readonly object[] ChatTools = [.. SolAiAgent.PageTools, .. SolAiAgent.NoteTools, .. SolAiBrowserTools.Tools];
     private const int ChatLimit = 40, ChatTextLimit = 20_000;
 
     private bool ChatCommand(Command c)
     {
+        if (VoiceCommand(c)) return true;
         switch (c.Type)
         {
             case "chat.toggle":
@@ -25,7 +26,7 @@ public sealed partial class BrowserController
                 if (PrivateActive) return true;
                 // Sans compte connecté, le panneau propose la connexion.
                 if (c.Id == "notes") { _chatFocus = "notes"; _ = Chat.ShowAsync(); PublishChat(); }
-                else if (Chat.IsOpen) Chat.Hide(); else { _chatFocus = ""; _ = Chat.ShowAsync(); }
+                else if (Chat.IsOpen) { CloseVoice(); Chat.Hide(); } else { _chatFocus = ""; _ = Chat.ShowAsync(); }
                 Refresh(); return true;
             case "chat.ready": _bridge.BroadcastTheme(); PublishChat(); return true;
             case "chat.send": _ = SendChatAsync(c.Input ?? ""); return true;
@@ -50,10 +51,10 @@ public sealed partial class BrowserController
                     OpenNotes(450, 60); PublishNotes();
                 }
                 return true;
-            case "chat.cancel": try { _chatCancel?.Cancel(); } catch (ObjectDisposedException) { } return true;
+            case "chat.cancel": _voiceTurn = false; _voice?.Stop(); try { _chatCancel?.Cancel(); } catch (ObjectDisposedException) { } return true;
             case "chat.clear":
                 if (_chatBusy) return true;
-                _chat.Clear(); _chatError = null; PublishChat(); return true;
+                _voiceTurn = false; _voice?.Stop(); _chat.Clear(); _chatError = null; PublishChat(); return true;
             default: return false;
         }
     }
@@ -67,6 +68,7 @@ public sealed partial class BrowserController
             account = PrivateActive ? "" : _chatGpt.Tokens?.Email ?? "", busy = _chatBusy, error = _chatError ?? _chatGpt.Error,
             messages = _chat.Where(_ => !PrivateActive).Select(m => new { from = m.Role, text = m.Text.ToString() }),
             agent = PrivateActive ? null : _chatTrace?.Json(), focus = _chatFocus,
+            voice = VoiceState(),
         }));
     }
 
@@ -75,6 +77,8 @@ public sealed partial class BrowserController
         question = question.Trim();
         if (_chatBusy || question.Length is 0 or > ChatTextLimit) return;
         if (!AiReady) { _chatError = "signed-out"; PublishChat(); return; }
+        _voiceTurn = _voiceOpen;
+        _voice?.Stop();
         // Les plus anciens échanges sortent de la discussion pour garder des requêtes raisonnables.
         while (_chat.Count >= ChatLimit || _chat.Count > 1 && _chat.Sum(m => m.Text.Length) + question.Length > 80_000) _chat.RemoveRange(0, 2);
         _chat.Add(("user", new StringBuilder(question)));
@@ -89,8 +93,9 @@ public sealed partial class BrowserController
             // Questions libres ; l'onglet actif et les notes sont consultés seulement quand la question les concerne.
             var trace = _chatTrace = new AgentTrace(PublishChat);
             await _chatGpt.RunAsync("You are Sol AI, the assistant built into the Sol web browser. Answer the user's questions helpfully and concisely, in the language they use, with Markdown when it helps. "
-                + "You can read and act on the tab the user has open (read_page, find_in_page, read_link, show_element, click, fill, navigate) and use their Sol notes (search_notes, read_note, create_note: summarize, find or write notes on request). "
-                + SolAiAgent.Rules, history.Select(m => (object)new { role = m.Role, content = m.Item2 }).ToList(), ChatTools, AgentTools(trace, () => _tabs.ActiveId, cancel.Token), output.Append, cancel.Token);
+                + "You can operate browser tabs, prepare workspaces, read and navigate sites, fill forms, use the keyboard and manage Sol notes with the tools provided. "
+                + (_voiceTurn ? "Voice mode is active. Windows handles speech locally and provides the user's text. Keep your final answer concise for spoken playback. " : "")
+                + SolAiAgent.Rules + SolAiBrowserTools.Rules, history.Select(m => (object)new { role = m.Role, content = m.Item2 }).ToList(), ChatTools, AgentTools(trace, () => _tabs.ActiveId, cancel.Token), output.Append, cancel.Token);
         }
         catch (ChatGptException e) { _chatError = e.Code; }
         catch (OperationCanceledException) { _chatError = cancel.IsCancellationRequested ? "cancelled" : "network"; }
@@ -103,6 +108,7 @@ public sealed partial class BrowserController
             // Une réponse vide n'a pas sa place dans l'historique renvoyé ensuite.
             if (answer.Length == 0 && _chat.Count > 0 && _chat[^1].Text == answer) _chat.RemoveAt(_chat.Count - 1);
             _chatBusy = false; PublishChat();
+            FinishVoiceTurn(answer.ToString(), _chatError is null);
         });
     }
 
@@ -110,7 +116,7 @@ public sealed partial class BrowserController
     private void ProtectPrivateAi()
     {
         if (!PrivateActive) return;
-        CancelAi(); CancelChat(); CancelCategories();
+        CloseVoice(); CancelAi(); CancelChat(); CancelCategories();
         if (_aiPopup) HidePopup();
         if (Chat?.IsOpen == true) { Chat.Hide(); PublishChat(); }
     }

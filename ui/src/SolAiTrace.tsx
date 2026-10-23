@@ -15,7 +15,7 @@ export default function SolAiTrace({ agent, busy }: { agent: AgentState; busy: b
     : { id: s.id, type: 'trace', kind: s.kind, label: s.status === 'denied' ? `${s.label} · ${t('refusé', 'declined')}` : s.status === 'failed' ? `${s.label} · ${t('échec', 'failed')}` : s.label, detail: s.detail || undefined });
   return <div className="ai-trace">
     {!!items.length && <AgentActivity items={items} contentType="mixed" status={busy ? 'working' : 'complete'} collapseOnComplete maxHeight={180}
-      activeLabel={t('Sol AI consulte le site…', 'Sol AI is checking the site…')} summary={t(`${items.length} étape${items.length > 1 ? 's' : ''}`, `${items.length} step${items.length > 1 ? 's' : ''}`)} />}
+      activeLabel={t('Sol AI agit dans le navigateur…', 'Sol AI is working in the browser…')} summary={t(`${items.length} étape${items.length > 1 ? 's' : ''}`, `${items.length} step${items.length > 1 ? 's' : ''}`)} />}
     {agent.approval && <ApprovalCard key={agent.approval.id} title={agent.approval.label} description={agent.approval.detail || t('Sol AI veut agir sur la page.', 'Sol AI wants to act on the page.')}
       approveLabel={t('Autoriser', 'Allow')} rejectLabel={t('Refuser', 'Decline')} pendingLabel={t('Votre accord', 'Your approval')}
       onApprove={() => send({ type: 'ai.approve', id: agent.approval!.id, index: 1 })} onReject={() => send({ type: 'ai.approve', id: agent.approval!.id, index: 0 })} />}

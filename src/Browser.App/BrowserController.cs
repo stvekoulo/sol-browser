@@ -78,6 +78,7 @@ public sealed partial class BrowserController
         _chatGpt.Changed += () => _window.DispatcherQueue.TryEnqueue(() =>
         {
             if (_closingWindow) return;
+            if (!AiReady && _voice is not null) CloseVoice();
             if (AiReady && !_chatGpt.SigningIn && !_settings.SolAiWelcomeShown)
             {
                 _settings.SolAiWelcomeShown = true; JsonFileStore.Save(AppPaths.Settings, _settings);
@@ -198,7 +199,7 @@ public sealed partial class BrowserController
             foreach (var discovery in _videoDiscovery.Values) discovery.Cancel.Cancel();
             _noteMaintenance.Stop();
             CancelAi();
-            CancelChat(); CancelCategories(); _chatGpt.CancelSignIn();
+            CloseVoice(); CancelChat(); CancelCategories(); _chatGpt.CancelSignIn();
             _categoriesTimer.Stop();
             _pages.StopSpelling();
             _capture.Cancel();
