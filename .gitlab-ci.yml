@@ -27,16 +27,6 @@ release:
   stage: release
   rules:
     - if: $CI_COMMIT_TAG =~ /^v\d/
+    - if: '$CI_PIPELINE_SOURCE == "api" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $SOL_RELEASE_VERSION'
   script:
-    - $version = ([xml](Get-Content src/Browser.App/Browser.App.csproj)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
-    - if ("v$version" -ne $env:CI_COMMIT_TAG) { throw "Tag $env:CI_COMMIT_TAG does not match project version $version" }
-    - dotnet tool install -g vpk --version 1.2.161
-    - pwsh -NoProfile -File tools/publish.ps1 -Arch x64,arm64,x86 -Out release; if ($LASTEXITCODE -ne 0) { throw 'publish failed' }
-    # Installers, archives, checksums, and what the updater needs (packages and their release index).
-    - $files = @(Get-ChildItem release/*.zip, release/*-Setup.exe, release/SHA256SUMS.txt, release/installer/*.nupkg, release/installer/releases.*.json)
-    - $headers = @{ 'JOB-TOKEN' = $env:CI_JOB_TOKEN }
-    - $base = "$env:CI_API_V4_URL/projects/$env:CI_PROJECT_ID/packages/generic/sol/$version"
-    - ./tools/ci-upload.ps1 -Files $files -BaseUri $base -Headers $headers
-    - $links = @($files | ForEach-Object { @{ name = $_.Name; url = "$base/$($_.Name)"; link_type = 'package' } })
-    - $body = @{ tag_name = $env:CI_COMMIT_TAG; name = $env:CI_COMMIT_TAG; description = "Sol $version"; assets = @{ links = $links } } | ConvertTo-Json -Depth 5
-    - Invoke-RestMethod -Method Post -Headers $headers -ContentType 'application/json' -Body $body -Uri "$env:CI_API_V4_URL/projects/$env:CI_PROJECT_ID/releases" | Out-Null
+    - ./tools/ci-release.ps1

@@ -13,7 +13,7 @@ public sealed partial class BrowserController
     private CancellationTokenSource? _chatCancel;
     private AgentTrace? _chatTrace;
     private string _chatFocus = ""; // « notes » quand le panneau est ouvert depuis les notes
-    private static readonly object[] ChatTools = [.. SolAiAgent.PageTools, .. SolAiAgent.NoteTools, .. SolAiBrowserTools.Tools];
+    private static readonly object[] ChatTools = [.. SolAiAgent.PageTools, .. SolAiAgent.NoteTools, .. SolAiBrowserTools.Tools, .. SolAiDeveloperTools.Tools];
     private const int ChatLimit = 40, ChatTextLimit = 20_000;
 
     private bool ChatCommand(Command c)
@@ -25,7 +25,7 @@ public sealed partial class BrowserController
                 if (Chat is null) return true;
                 if (PrivateActive) return true;
                 // Sans compte connecté, le panneau propose la connexion.
-                if (c.Id == "notes") { _chatFocus = "notes"; _ = Chat.ShowAsync(); PublishChat(); }
+                if (c.Id is "notes" or "developer") { _chatFocus = c.Id; _ = Chat.ShowAsync(); PublishChat(); }
                 else if (Chat.IsOpen) { CloseVoice(); Chat.Hide(); } else { _chatFocus = ""; _ = Chat.ShowAsync(); }
                 Refresh(); return true;
             case "chat.ready": _bridge.BroadcastTheme(); PublishChat(); return true;
@@ -33,7 +33,7 @@ public sealed partial class BrowserController
             // Depuis une note ou un sujet : le panneau s'ouvre et la question part tout de suite.
             case "chat.ask":
                 if (Chat is null || PrivateActive) return true;
-                if (c.Id == "notes") _chatFocus = "notes";
+                if (c.Id is "notes" or "developer") _chatFocus = c.Id;
                 _ = Chat.ShowAsync(); Refresh(); _ = SendChatAsync(c.Input ?? ""); return true;
             // Éventail d'une réponse : la copier, ou en faire une note.
             case "chat.copy" or "chat.note":
@@ -69,6 +69,7 @@ public sealed partial class BrowserController
             messages = _chat.Where(_ => !PrivateActive).Select(m => new { from = m.Role, text = m.Text.ToString() }),
             agent = PrivateActive ? null : _chatTrace?.Json(), focus = _chatFocus,
             voice = VoiceState(),
+            autoApproveActions = !PrivateActive && _settings.SolAiAutoApproveActions,
         }));
     }
 
@@ -95,7 +96,7 @@ public sealed partial class BrowserController
             await _chatGpt.RunAsync("You are Sol AI, the assistant built into the Sol web browser. Answer the user's questions helpfully and concisely, in the language they use, with Markdown when it helps. "
                 + "You can operate browser tabs, prepare workspaces, read and navigate sites, fill forms, use the keyboard and manage Sol notes with the tools provided. "
                 + (_voiceTurn ? "Voice mode is active. Windows handles speech locally and provides the user's text. Keep your final answer concise for spoken playback. " : "")
-                + SolAiAgent.Rules + SolAiBrowserTools.Rules, history.Select(m => (object)new { role = m.Role, content = m.Item2 }).ToList(), ChatTools, AgentTools(trace, () => _tabs.ActiveId, cancel.Token), output.Append, cancel.Token);
+                + SolAiAgent.Rules + SolAiBrowserTools.Rules + SolAiDeveloperTools.Rules, history.Select(m => (object)new { role = m.Role, content = m.Item2 }).ToList(), ChatTools, AgentTools(trace, () => _tabs.ActiveId, cancel.Token), output.Append, cancel.Token);
         }
         catch (ChatGptException e) { _chatError = e.Code; }
         catch (OperationCanceledException) { _chatError = cancel.IsCancellationRequested ? "cancelled" : "network"; }

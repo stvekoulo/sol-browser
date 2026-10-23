@@ -22,6 +22,7 @@ public sealed partial class BrowserController
             case "ai.disconnect": CancelAi(); CancelChat(); CancelCategories(); _chat.Clear(); PublishChat(); _ = _chatGpt.SignOutAsync(); return true;
             case "ai.cancel": CancelAi(); return true;
             case "ai.approve": AnswerApproval(c); return true;
+            case "ai.approve.always": AlwaysApprove(c); return true;
             case "ai.categorize": _ = CategorizeAsync(true); return true;
             case "ai.open": _ = OpenPageAiAsync(id, null, "summary"); return true; // bouton Résumer : réponse immédiate
             case "ai.run": _ = RunTextAiAsync(c); return true;

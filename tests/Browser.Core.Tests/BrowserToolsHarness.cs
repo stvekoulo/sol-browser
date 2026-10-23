@@ -33,7 +33,10 @@ public sealed partial class BrowserController
     private Task<string> PageToolAsync(string id, AgentCall call, CancellationToken ct) => Task.FromResult("{}");
     private sealed class FakePages
     {
-        public FakeCore? CoreOf(string id) => null;
+        public readonly Dictionary<string, FakeCore> Cores = new();
+        public string? EmulatedDevice;
+        public FakeCore? CoreOf(string id) => Cores.GetValueOrDefault(id);
+        public void SetDevice(string id, string? name) => EmulatedDevice = name;
         public bool IsAsleep(string id) => false;
         public bool IsLoading(string id) => false;
         public void Add(Tab tab) { }
@@ -43,9 +46,13 @@ public sealed partial class BrowserController
     }
     private sealed class FakeCore
     {
-        public string Source => "";
+        public string Source { get; set; } = "";
+        public FakeDevSettings Settings { get; } = new();
+        public bool DevToolsOpened;
+        public void OpenDevToolsWindow() => DevToolsOpened = true;
         public bool CanGoBack => false;
         public bool CanGoForward => false;
         public Task<string> ExecuteScriptAsync(string script) => Task.FromResult("\"complete\"");
     }
+    private sealed class FakeDevSettings { public bool AreDevToolsEnabled { get; set; } }
 }

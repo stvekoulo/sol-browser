@@ -38,7 +38,7 @@ public static class CommandParser
         ["reader.listen"] = ["id"], ["reader.stop"] = ["id"], ["bookmark.toggle"] = ["id"],
         ["palette.open"] = [], ["palette.pick"] = ["id"],
         ["spelling.languages"] = [],
-        ["ai.connect"] = [], ["ai.approve"] = ["id", "index"], ["ai.connect.cancel"] = [], ["ai.disconnect"] = [], ["ai.categorize"] = [], ["ai.cancel"] = [],
+        ["ai.connect"] = [], ["ai.approve"] = ["id", "index"], ["ai.approve.always"] = ["id"], ["ai.connect.cancel"] = [], ["ai.disconnect"] = [], ["ai.categorize"] = [], ["ai.cancel"] = [],
         ["ai.open"] = ["id"], ["ai.run"] = ["query", "title"],
         ["ai.apply"] = [], ["ai.copy"] = [], ["ai.note"] = [],
         ["chat.toggle"] = [], ["tabs.ai"] = [], ["tabs.ai.apply"] = [], ["tabs.ai.dismiss"] = [], ["group.ai"] = ["id"], ["chat.ready"] = [], ["chat.send"] = ["input"], ["chat.copy"] = ["id"], ["chat.note"] = ["id"], ["chat.ask"] = ["input"], ["chat.cancel"] = [], ["chat.clear"] = [],

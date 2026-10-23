@@ -5,7 +5,7 @@ import SolSelect from './SolSelect';
 import { aiError, usagePage } from './solAiMessages';
 import { ThinkingShimmer } from '@/components/agents/loading-states/thinking-shimmer';
 
-export type SolAiState = { connected:boolean; ready:boolean; email:string; signingIn:boolean; error:string|null; isPrivate:boolean; tone:number; length:number; categories:boolean; categorizing:boolean; categoriesError:string|null; categoriesUpdated:number|null; categoriesClassified:number; categoriesPending:number; categoriesBudget:number; models:{slug:string;name:string}[]; model:string };
+export type SolAiState = { connected:boolean; ready:boolean; email:string; signingIn:boolean; error:string|null; isPrivate:boolean; tone:number; length:number; categories:boolean; categorizing:boolean; categoriesError:string|null; categoriesUpdated:number|null; categoriesClassified:number; categoriesPending:number; categoriesBudget:number; models:{slug:string;name:string}[]; model:string; autoApproveActions?:boolean };
 
 // Compte ChatGPT de Sol AI, suivant les règles d’interface d’OpenAI : bouton « Continuer avec ChatGPT », badge « Connecté »,
 // mention du forfait utilisé et lien « Gérer l’usage ».
@@ -26,6 +26,11 @@ export default function SolAiAccount({ ai }: { ai: SolAiState }) {
     </div>
     {ai.error && <p className="row-hint" role="alert">{aiError(ai.error)}</p>}
     {!ai.isPrivate && <p className="row-hint">{t('Le texte choisi part chez OpenAI uniquement quand vous lancez une action. Sol n’envoie ni mots de passe ni, sauf classement activé ci-dessous, historique et favoris ; il garde les jetons chiffrés sur cet ordinateur. Avec Plus, la limite de 5 heures est partagée avec vos autres applications ChatGPT.','The chosen text goes to OpenAI only when you start an action. Sol never sends passwords, nor history and bookmarks unless sorting is turned on below, and keeps tokens encrypted on this computer. With Plus, the 5-hour limit is shared with your other ChatGPT apps.')}</p>}
+    {!ai.isPrivate && <button className="setting-row" role="switch" aria-checked={!!ai.autoApproveActions} onClick={()=>send({type:'settings.set',id:'aiAutoApproveActions',index:ai.autoApproveActions?0:1})}>
+        <span className="setting-text"><span className="row-title">{t('Toujours autoriser les actions de Sol AI','Always allow Sol AI actions')}</span>
+          <span className="row-sub">{t('Sol exécute vos demandes sur tous les sites sans redemander votre accord. Inclut les diagnostics demandés : erreurs console et détails réseau envoyés à ChatGPT, avec masquage des secrets connus. Des données privées peuvent subsister. Ce choix reste dans ce profil et peut être désactivé ici.','Sol carries out your requests across sites without asking again. Includes requested diagnostics: console errors and network details sent to ChatGPT with known secrets masked. Private data may remain. Saved in this profile; turn it off here.')}</span></span>
+        <span className={`switch${ai.autoApproveActions?' on':''}`} aria-hidden="true"/>
+      </button>}
     {ai.ready && <>
       <button className="setting-row" role="switch" aria-checked={ai.categories} onClick={()=>send({type:'settings.set',id:'aiCategories',index:ai.categories?0:1})}>
         <span className="setting-text"><span className="row-title">{t('Classer mes favoris et mon historique','Sort my bookmarks and history')}</span>

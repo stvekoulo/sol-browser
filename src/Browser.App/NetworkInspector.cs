@@ -145,7 +145,7 @@ public sealed partial class NetworkInspector(Action<string> post)
         application = "Sol", exportedAt = DateTimeOffset.UtcNow,
         requests = _log.GetValueOrDefault(tabId, []).Select(e => new
         {
-            e.Method, e.Url, e.Type, e.Status, e.Mime, e.Size, durationMs = e.Ms, e.Failed,
+            e.Id, e.Method, e.Url, e.Type, e.Status, e.Mime, e.Size, durationMs = e.Ms, e.Failed,
             e.RequestHeaders, e.ResponseHeaders, e.PostData,
         }),
         console = _console.GetValueOrDefault(tabId, []),

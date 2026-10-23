@@ -42,6 +42,7 @@ public sealed partial class BrowserController
                     JsonFileStore.Save(AppPaths.Settings, _settings); PublishAiSettings(); return true;
                 }
                 if (id == "aiCategories") { if (c.Index is 0 or 1) SetAiCategories(c.Index == 1); return true; }
+                if (id == "aiAutoApproveActions") { if (c.Index is 0 or 1) SetAiAutoApproveActions(c.Index == 1); return true; }
                 if (id is "aiTone" or "aiLength")
                 {
                     if (c.Index is not (0 or 1 or 2)) return true;

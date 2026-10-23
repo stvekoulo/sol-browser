@@ -5,7 +5,7 @@ import { onMessage, send } from './bridge';
 import { t } from './i18n';
 import './voice.css';
 
-export type VoiceState = { open: boolean; provider: 'windows'; mode: 'idle' | 'listening' | 'thinking' | 'speaking' | 'approval' | 'error'; level: number; text: string; error: string | null };
+export type VoiceState = { available?: boolean; open: boolean; provider: 'windows'; mode: 'idle' | 'listening' | 'thinking' | 'speaking' | 'approval' | 'error'; level: number; text: string; error: string | null };
 
 function voiceError(code: string) {
   switch (code) {

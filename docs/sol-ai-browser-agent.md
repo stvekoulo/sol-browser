@@ -1,46 +1,58 @@
-# Agent navigateur et voix Windows
+# Agent navigateur Sol AI
 
-Sol AI utilise les outils du navigateur pour exécuter les demandes de l'utilisateur. La connexion ChatGPT existante fournit le raisonnement ; les opérations restent exécutées dans Sol.
+Sol AI exécute les demandes dans le navigateur avec le raisonnement du compte ChatGPT connecté.
 
-## Actions prises en charge
+## Actions disponibles
 
-- Lire une page, chercher un passage, consulter un lien, afficher un élément.
-- Cliquer, remplir un champ ou un formulaire entier, choisir une option, modifier une case à cocher.
-- Utiliser le clavier et le survol, faire défiler la page.
-- Ouvrir des URL dans de nouveaux onglets, changer d'onglet, lire un autre onglet, regrouper les ressources.
-- Afficher deux pages côte à côte, revenir à une seule page, naviguer en arrière/avant, recharger, fermer et rouvrir des onglets, régler le zoom.
-- Chercher, lire et créer des notes ; préparer un groupe de ressources avec une note ouverte pour travailler.
+- Lire et rechercher dans les pages et notes, consulter les liens réels d’un site.
+- Examiner les champs d’un formulaire : libellés, contraintes, options et états de validation, sans lire les valeurs déjà saisies. Une recherche par libellé permet d’examiner un grand formulaire par parties.
+- Remplir plusieurs champs, choisir des options, cocher, cliquer, utiliser le clavier et le survol, faire défiler la page.
+- Extraire les tableaux HTML et grilles ARIA en lignes et cellules structurées ; collecter et dédupliquer les liens visibles par texte ou adresse.
+- Attendre jusqu’à cinq secondes un texte visible après une action asynchrone. Un délai dépassé reste un échec à examiner.
+- Rechercher des onglets existants, les ouvrir, activer, dupliquer, épingler, regrouper, fermer ou rouvrir ; changer le zoom et naviguer en arrière/avant.
+- Afficher deux pages côte à côte, préparer un groupe de ressources et une note de travail.
 
-Les actions sur les sites et les fermetures d'onglets affichent une demande d'accord. Le remplissage groupé ne soumet jamais le formulaire. L'agent doit relire la page pour vérifier le résultat d'une action. Les onglets existants et les brouillons de notes sont préservés lors de la préparation d'un espace.
+Les références d’éléments sont renouvelées à chaque lecture ou inspection de formulaire. L’agent doit relire la page après un changement et vérifier le résultat avant d’annoncer une réussite. Il ne doit pas répéter aveuglément un envoi après une erreur ou un délai dépassé. Les sorties volumineuses restent bornées et signalent leur troncature.
 
-## Mode vocal
+## Autorisation permanente
 
-Dans le panneau Sol AI, cliquer sur le micro, puis sur **Parler**. Après une pause, Windows termine la reconnaissance, libère le micro et transmet le texte à Sol AI. Les réponses sont lues avec une voix Windows de la langue de l'interface. Une phrase reconnue avec une confiance insuffisante reste disponible pour correction, sans être envoyée automatiquement.
+Par défaut, les modifications de site et fermetures demandent un accord. Dans **Paramètres → Sol → Sol AI**, activer **Toujours autoriser les actions de Sol AI** pour accorder une fois l’autorisation aux demandes exécutées dans ce profil, sur tous les sites. La carte d’accord de la discussion propose également **Toujours autoriser**.
 
-Lorsqu'une action attend une autorisation, le bouton **Répondre oui ou non** utilise une grammaire restreinte. L'accord ne vaut que pour l'action affichée au début de cette écoute. Les boutons habituels restent utilisables.
+Le choix est enregistré avant de libérer les actions en attente et reste actif au redémarrage. Le désactiver rétablit les demandes d’accord pour les prochaines actions. Une carte périmée ne peut pas activer ce droit ; un échec d’enregistrement conserve le réglage précédent et ne libère aucune demande. La navigation privée ne peut pas changer ce choix.
 
-Le bouton **Arrêter** coupe l'écoute ou la lecture. **Arrêter la tâche** annule la réponse et les actions encore en attente. Quitter le mode vocal, fermer la discussion, se déconnecter ou passer en navigation privée libère le service vocal. Il faut cliquer sur **Parler** pour une nouvelle écoute.
+L’autorisation supprime les demandes répétées ; l’agent continue à suivre les demandes de l’utilisateur et traite le contenu des sites comme des données, pas comme des instructions.
 
-Le composant visuel est le `VoiceOrb` officiel de [beUI](https://beui.dev/components/agents/voice-orb), installé depuis son registre, sans modification de ses sources. Son activité suit le niveau du microphone ou les événements de lecture Windows. Il respecte la préférence de réduction des animations.
+## Développement web et diagnostics
 
-L'implémentation de bureau utilise `System.Speech` (SAPI), compatible avec Sol non empaqueté. Elle nécessite un moteur de reconnaissance et une voix de la langue choisie, ainsi qu'un microphone autorisé par Windows. Un lien vers les paramètres vocaux est proposé si ces éléments manquent. Aucun fichier audio n'est enregistré ; OpenAI reçoit le texte, pas le son.
+Le bouton **Sol AI** de l’inspecteur ouvre une discussion dédiée, sans envoyer de journal à lui seul. **Expliquer avec ChatGPT** est disponible sur chaque message console et dans le détail d’une requête réseau.
 
-La connexion [Sign in with ChatGPT exclut actuellement l'entrée audio et la transcription](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations). Le mode Windows ne nécessite pas de clé API audio OpenAI.
+Lorsqu’un diagnostic est demandé, les outils permettent de lire les erreurs JavaScript, métadonnées réseau et détails ciblés de requête. Le résumé exclut les en-têtes et corps ; leur lecture exige un appel distinct. Les détails limitent la réponse textuelle à un extrait, excluent le binaire et masquent les secrets connus. Ce masquage ne garantit pas l’absence de données privées. L’accord ponctuel indique la destination ChatGPT ; l’option d’autorisation permanente inclut explicitement ces diagnostics demandés.
+
+L’agent doit distinguer les faits des hypothèses, s’appuyer sur les statuts, traces et réponses effectivement capturés, puis proposer un correctif et sa vérification. Il ne dispose pas d’un accès au projet local : il peut proposer du code, pas annoncer une modification de fichiers.
+
+Les commandes comprennent l’ouverture des DevTools, le contrôle de la capture (pause, reprise, effacement, conservation), la simulation d’une réponse Fetch/XHR pour une URL et méthode exactes (statut HTTP, délai, timeout, JSON invalide ou réponse vide), ainsi que la simulation d’appareils pour tester le responsive. Une seule règle réseau est active par onglet ; une simulation temporaire doit être retirée après le test. Le serveur n’est pas modifié.
+
+La capture commence à l’ouverture de l’inspecteur ; les requêtes antérieures ne sont pas récupérables. Sans preuve capturée, Sol doit expliquer cette limite. Un statut 0 ou une requête encore en attente ne prouve pas un échec.
+
+## Vocal masqué
+
+Le vocal Windows est temporairement masqué à la suite du retour utilisateur sur sa qualité. Les commandes natives vocales sont également bloquées : aucun microphone n’est lancé par Sol AI. Le composant officiel [beUI Voice Orb](https://beui.dev/components/agents/voice-orb) reste intact et son module n’est chargé que si le vocal redevient disponible.
+
+Options examinées le 23 octobre 2026 : [Vosk](https://alphacephei.com/vosk/models) propose un petit modèle français de 41 Mo ; les petits modèles utilisent environ 300 Mo de RAM. [whisper.cpp](https://github.com/ggml-org/whisper.cpp) documente 75 Mio et environ 273 Mo de RAM pour tiny, avant éventuelle quantification. Ces options ne répondent pas au critère de poids quasi nul ; aucune amélioration sur la voix réelle de l’utilisateur n’a été établie. Aucun moteur supplémentaire n’est installé.
 
 ## Limites
 
-- Deux pages simultanées en vue scindée ; les autres restent dans le groupe.
-- Aucun accès aux onglets privés.
-- Les mots de passe, paiements, codes OTP, fichiers à téléverser et CAPTCHA doivent être traités par l'utilisateur.
-- Les iframes d'un autre domaine et les shadow roots fermés ne sont pas lisibles par ces outils.
-- Certains contrôles propriétaires ou sites peuvent refuser une action. Le modèle doit signaler l'échec et ne pas annoncer une réussite sans preuve.
-- Le moteur de reconnaissance Windows dépend de la langue installée, du microphone et de la qualité du signal. La fluidité reste à évaluer avec la voix réelle de l'utilisateur.
+- Deux pages visibles en vue scindée ; les autres restent accessibles dans les onglets.
+- Aucun accès aux onglets privés. La duplication exclut aussi les sessions isolées pour préserver leur session.
+- Les champs de mot de passe, paiement, OTP, fichier et les CAPTCHA restent traités par l’utilisateur.
+- Les iframes d’un autre domaine et les shadow roots fermés ne sont pas accessibles.
+- Les contrôles propriétaires et permissions des sites peuvent empêcher certaines actions. Sol doit signaler précisément ces échecs.
 
 ## Vérification
 
-- `dotnet test tests/Browser.Core.Tests/Browser.Core.Tests.csproj -c Release`
-- `node tools/check-agent-actions.mjs` : formulaire réel dans WebView2, événements, iframe, shadow DOM, clavier, survol, défilement et références périmées.
-- `dotnet run --project tools/voice-check/VoiceCheck.csproj -c Release` : synthèse et reconnaissance françaises réelles sur des flux WAV en mémoire, annulation et rejet des callbacks périmés, sans microphone ni réseau.
-- `node tools/check-voice-ui.mjs` : entrée/sortie du mode vocal, orbe WebGL, thèmes clair/sombre, largeurs 220/380/520 px et isolation privée, avec un compte synthétique sans inférence.
+- `dotnet test tests/Browser.Core.Tests/Browser.Core.Tests.csproj -c Release` : politiques, enregistrement, révocation, demandes périmées, exécuteur réel des autorisations et outils d’onglets.
+- `node tools/check-agent-actions.mjs` : WebView2 réel, formulaire, contraintes, validation, références périmées, tableaux, liens et résultats différés.
+- `node tools/check-ai-permissions.mjs` : vocal masqué et bloqué, module vocal non chargé, réglage réel, redémarrage, révocation, carte d’accord responsive et isolation privée avec compte synthétique.
+- `node tools/check-ai-developer.mjs` : erreurs console et HTTP réelles, masquage, simulations de réponse et timeout, restauration du serveur et accès à l’aide développeur sans envoi automatique.
 
-Ces tests ne remplacent pas une session complète avec le microphone et un compte ChatGPT réel.
+Ces vérifications ne constituent pas une session d’inférence avec un compte ChatGPT réel.

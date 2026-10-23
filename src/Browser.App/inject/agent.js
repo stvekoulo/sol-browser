@@ -13,7 +13,7 @@
   const labelText = node => { const copy = node.cloneNode(true); copy.querySelectorAll('input,select,textarea,button,[contenteditable]').forEach(n => n.remove()); return copy.textContent; };
   const label = el => clip(el.getAttribute('aria-label') || (el.getAttribute('aria-labelledby') || '').split(/\s+/).map(id => el.getRootNode().getElementById?.(id)?.textContent || '').join(' ').trim()
     || [...(el.labels || [])].map(labelText).join(' ')
-    || el.innerText || el.placeholder || el.title || el.alt || el.name || el.id || '', 120);
+    || (el.matches('input,textarea,select,[contenteditable]') ? '' : el.innerText) || el.placeholder || el.title || el.alt || el.name || el.id || '', 120);
   const roots = () => {
     const found = [document];
     for (let i = 0; i < found.length && i < 80; i++)
@@ -151,5 +151,68 @@
     return { ok: response.ok, url: url.href, title: doc.title, text: text.slice(0, 15000), truncated: text.length > 15000 };
   };
   const links = () => refs.filter(el => el.href).map(el => el.href);
-  return { snapshot, find, show, click, fill, select, check, fillForm, focus, hoverPoint, scroll, readLink, links };
+  const inspectForm = (query = '') => {
+    refs = state.refs = []; state.epoch = crypto.randomUUID().slice(0, 8);
+    const candidates = roots().flatMap(root => [...root.querySelectorAll('input,textarea,select,[contenteditable=true]')])
+      .filter(el => visible(el) && !sensitive(el) && !['file', 'hidden', 'submit', 'button', 'reset'].includes(el.type)
+        && label(el).toLocaleLowerCase().includes(String(query).toLocaleLowerCase()));
+    const fields = candidates.slice(0, 30).map(el => ({
+      ref: ref(el), label: label(el), kind: el.tagName.toLowerCase(), type: el.type || 'text',
+      required: !!el.required, disabled: !!el.disabled, readonly: !!el.readOnly,
+      constraints: { min: clip(el.min, 80), max: clip(el.max, 80), step: clip(el.step, 40),
+        maxLength: el.maxLength >= 0 ? el.maxLength : null, pattern: clip(el.pattern, 120) },
+      validity: el.validity ? { valid: el.validity.valid, missing: el.validity.valueMissing, typeMismatch: el.validity.typeMismatch,
+        patternMismatch: el.validity.patternMismatch, tooLong: el.validity.tooLong, rangeUnderflow: el.validity.rangeUnderflow,
+        rangeOverflow: el.validity.rangeOverflow, stepMismatch: el.validity.stepMismatch, customError: el.validity.customError } : null,
+      invalid: el.getAttribute('aria-invalid') === 'true',
+      options: el.tagName === 'SELECT' ? [...el.options].slice(0, 12).map(o => ({ label: clip(o.label, 80), value: clip(o.value, 120), disabled: o.disabled })) : undefined,
+      optionsTruncated: el.tagName === 'SELECT' && el.options.length > 12,
+    }));
+    while (JSON.stringify(fields).length > 30000) fields.pop();
+    return { ok: true, url: location.href, fields, truncated: candidates.length > fields.length,
+      note: 'Existing field values are excluded. Refs from earlier snapshots are now stale. A valid form is not proof of submission.' };
+  };
+  const tables = () => {
+    const candidates = roots().flatMap(root => [...root.querySelectorAll('table,[role=table],[role=grid]')]).filter(visible);
+    let budget = 18000, truncated = candidates.length > 3;
+    const text = el => {
+      if (el.matches('[contenteditable]')) return '';
+      const copy = el.cloneNode(true);
+      copy.querySelectorAll('input,textarea,select,[contenteditable],script,style,[hidden],[aria-hidden=true]').forEach(n => n.remove());
+      const value = clip(copy.textContent, Math.max(0, Math.min(160, budget)));
+      budget -= value.length; return value;
+    };
+    const result = [];
+    for (const table of candidates.slice(0, 3)) {
+      const candidatesRows = [...table.querySelectorAll('tr,[role=row]')].filter(row => visible(row) && row.closest('table,[role=table],[role=grid]') === table);
+      const rows = [];
+      for (const row of candidatesRows.slice(0, 20)) {
+        if (budget <= 0) { truncated = true; break; }
+        const cells = [...row.querySelectorAll('th,td,[role=cell],[role=columnheader],[role=rowheader]')].filter(visible);
+        rows.push(cells.slice(0, 10).map(cell => ({ text: text(cell), header: cell.tagName === 'TH' || /header$/.test(cell.getAttribute('role') || '') })));
+        if (cells.length > 10) truncated = true;
+      }
+      if (candidatesRows.length > rows.length) truncated = true;
+      result.push({ caption: clip(table.querySelector('caption')?.textContent || table.getAttribute('aria-label'), 160), rows });
+    }
+    return { ok: true, url: location.href, tables: result, truncated };
+  };
+  const collectLinks = query => {
+    const needle = String(query || '').trim().toLocaleLowerCase(), seen = new Set(), found = [];
+    let budget = 20000, truncated = false;
+    for (const root of roots()) for (const el of root.querySelectorAll('a[href]')) {
+      if (!visible(el)) continue;
+      let url; try { url = new URL(el.href); } catch { continue; }
+      if (!/^https?:$/.test(url.protocol) || url.username || url.password || url.href.length > 2048 || seen.has(url.href)) continue;
+      const title = label(el);
+      if (needle && !`${title} ${url.href}`.toLocaleLowerCase().includes(needle)) continue;
+      seen.add(url.href);
+      if (found.length >= 80 || budget < title.length + url.href.length) { truncated = true; continue; }
+      budget -= title.length + url.href.length;
+      found.push({ ref: ref(el), text: title, url: url.href });
+    }
+    return { ok: true, url: location.href, links: found, truncated };
+  };
+  const hasText = text => ({ ok: true, found: (document.body?.innerText || '').toLocaleLowerCase().includes(String(text).toLocaleLowerCase()), url: location.href });
+  return { snapshot, find, show, click, fill, select, check, fillForm, focus, hoverPoint, scroll, readLink, links, inspectForm, tables, collectLinks, hasText };
 })()

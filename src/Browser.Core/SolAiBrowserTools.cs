@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace Browser.Core;
 
-// Commandes locales du navigateur. Aucun accès aux onglets privés ni fermeture d'onglet.
+// Commandes locales du navigateur. Les onglets privés restent exclus.
 public static class SolAiBrowserTools
 {
     private static readonly object Text = new { type = "string" };
@@ -15,11 +15,14 @@ public static class SolAiBrowserTools
     public static readonly object[] Tools =
     [
         Tool("list_tabs", "List non-private tabs, their ids, addresses, groups and the active split view. Use these ids for other tab tools.", new { }),
+        Tool("find_tabs", "Find existing non-private tabs by title or URL before opening duplicates. Empty query lists all matches.", new { query = Text }, "query"),
+        Tool("duplicate_tabs", "Open copies of 1 to 8 existing web tabs by id, preserving originals. Copies use the normal profile session; private and isolated-session tabs are excluded.", new { ids = Strings(1, 8) }, "ids"),
+        Tool("pin_tabs", "Pin or unpin 1 to 16 existing tabs. Grouped and split tabs must be ungrouped or unsplit before pinning. Only act when requested.", new { ids = Strings(1, 16), pinned = new { type = "boolean" } }, "ids", "pinned"),
         Tool("open_tabs", "Open 1 to 8 http/https addresses in new tabs, preserving existing tabs. The first new tab becomes active.", new { urls = Strings(1, 8) }, "urls"),
         Tool("activate_tab", "Switch to an existing non-private tab using its id from list_tabs or open_tabs.", new { id = Text }, "id"),
         Tool("read_tab", "Read a non-private web tab by id. Waits for it to load. Activate a sleeping tab first.", new { id = Text }, "id"),
-        Tool("browser_history", "Go back, forward or reload a tab by id. This may discard unsaved site changes, so the user must approve it.", new { id = Text, action = new { type = "string", @enum = new[] { "back", "forward", "reload" } } }, "id", "action"),
-        Tool("close_tabs", "Close tabs by id after user approval. Like Sol's close button, grouped or pinned tabs may be suspended instead of removed. Never close tabs unless explicitly requested.", new { ids = Strings(1, 16) }, "ids"),
+        Tool("browser_history", "Go back, forward or reload a tab by id. This may discard unsaved site changes, so Sol manages approval, including standing permission.", new { id = Text, action = new { type = "string", @enum = new[] { "back", "forward", "reload" } } }, "id", "action"),
+        Tool("close_tabs", "Close tabs by id with approval managed by Sol. Like Sol's close button, grouped or pinned tabs may be suspended instead of removed. Never close tabs unless explicitly requested.", new { ids = Strings(1, 16) }, "ids"),
         Tool("reopen_tab", "Restore the most recently closed non-private tab, on the user's request.", new { }),
         Tool("zoom_tab", "Change a tab's page zoom: in, out, reset.", new { id = Text, direction = new { type = "string", @enum = new[] { "in", "out", "reset" } } }, "id", "direction"),
         Tool("group_tabs", "Group existing unpinned tabs under a title. Existing split pairs must stay together.", new { ids = Strings(1, 16), title = Text }, "ids", "title"),
@@ -32,10 +35,11 @@ public static class SolAiBrowserTools
     ];
     public static bool Handles(string name) => name is "list_tabs" or "open_tabs" or "activate_tab" or "read_tab"
         or "group_tabs" or "split_tabs" or "close_split" or "open_notes" or "prepare_workspace" or "browser_history"
-        or "close_tabs" or "reopen_tab" or "zoom_tab";
+        or "close_tabs" or "reopen_tab" or "zoom_tab" or "find_tabs" or "duplicate_tabs" or "pin_tabs";
 
     public const string Rules = " For browser setup requests, use prepare_workspace to open resources, group them and optionally create a note in one call. "
         + "For other tab operations, list_tabs first and use the returned ids. Only change the browser when the user's request calls for it. "
+        + "Before opening resources, find_tabs to reuse existing pages when appropriate. Group related resources and compare pages using read_tab and structured data. "
         + "You may open known service homepages or a search URL using the user's exact search query, but never invent article or video URLs. "
         + "When a particular resource is ambiguous, ask for its link or open a search; never claim a search result is the requested article. "
         + "Use read_tab before summarizing a resource. Opening a URL is not evidence you read it. "

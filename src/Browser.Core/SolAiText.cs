@@ -24,7 +24,7 @@ public static class SolAiText
         var action = request.Action switch
         {
             "summary" => "Summarize the supplied text. Use short bullet points with only the key facts. Do not add facts.",
-            "explain" => "Explain the supplied passage simply: define its terms and, for code, what it does. Do not invent facts.",
+            "explain" => "Explain the supplied passage simply: define its terms and, for code, what it does. For software errors, distinguish evidence from likely causes, propose a minimal corrected code snippet and concrete verification steps. Do not invent project file paths or claim to edit files. Do not invent facts.",
             "ask" => "Answer the user's question using only the supplied text. Quote the short passages you rely on. If the text does not contain the answer, say so instead of guessing.",
             "write" => "Write a short draft following the user's writing request. The supplied text is optional context. Do not add dates, places, names or facts that were not provided.",
             "rephrase" => "Rephrase the supplied text, preserving its meaning, facts and tone.",

@@ -5,7 +5,7 @@ using System.Text.Json.Nodes;
 namespace Browser.App;
 
 // Outils de Sol AI : lecture et actions sur l'onglet ouvert, notes. Chaque appel apparaît dans la trace de la vue ;
-// cliquer, saisir ou ouvrir une adresse attend l'accord de l'utilisateur.
+// cliquer, saisir ou ouvrir une adresse attend un accord ponctuel ou permanent de l'utilisateur.
 public sealed partial class BrowserController
 {
     private sealed record AgentStep(string Id, string Kind, string Label, string Detail, string Status);
@@ -43,13 +43,13 @@ public sealed partial class BrowserController
             var targetUrl = targetId is null ? null : _pages.CoreOf(targetId)?.Source;
             ct.ThrowIfCancellationRequested();
             if (!AiReady || _closingWindow) throw new InvalidOperationException("Sol AI unavailable");
-            if (SolAiAgent.NeedsApproval(call.Name) && !await ApproveAsync(trace, call.CallId, label, detail, ct))
+            if (SolAiPermissions.RequiresApproval(call.Name, _settings) && !await ApproveAsync(trace, call.CallId, label, detail, ct))
             { status = "denied"; output = """{"ok":false,"error":"The user declined this action."}"""; }
             else
             {
                 ct.ThrowIfCancellationRequested();
                 if (!AiReady || _closingWindow) throw new InvalidOperationException("Sol AI unavailable");
-                if (SolAiAgent.NeedsApproval(call.Name) && !SolAiBrowserTools.Handles(call.Name)
+                if (SolAiAgent.NeedsApproval(call.Name) && !SolAiBrowserTools.Handles(call.Name) && !SolAiDeveloperTools.Handles(call.Name)
                     && (targetId is null || _pages.CoreOf(targetId)?.Source != targetUrl))
                     throw new InvalidOperationException("The page changed while waiting for approval; read it again");
                 output = call.Name switch
@@ -61,15 +61,17 @@ public sealed partial class BrowserController
                     : """{"ok":false,"error":"unknown note"}""",
                 "create_note" => CreateNoteTool(call),
                 _ when SolAiBrowserTools.Handles(call.Name) => await BrowserToolAsync(call, ct),
+                _ when SolAiDeveloperTools.Handles(call.Name) => await DeveloperToolAsync(call, targetId, ct),
                 _ => await PageToolAsync(targetId, call, ct),
                 };
+                if (output.Length > 40_000) output = ToolError("Result too large. Narrow the query or inspect fewer items; no complete result is available.");
                 if (JsonNode.Parse(output) is JsonObject result && result["ok"]?.GetValue<bool>() == false) status = "failed";
             }
         }
         catch (Exception e) when (e is System.Runtime.InteropServices.COMException or InvalidOperationException or JsonException or HttpRequestException or OperationCanceledException or ArgumentException)
         { status = "failed"; output = JsonSerializer.Serialize(new { ok = false, error = e is ArgumentException or InvalidOperationException ? e.Message : "tool failed: " + e.GetType().Name }); }
         trace.Steps[trace.Steps.IndexOf(step)] = step with { Status = status }; trace.Publish();
-        return output.Length > 40_000 ? output[..40_000] : output;
+        return output;
     };
 
     private async Task<bool> ApproveAsync(AgentTrace trace, string id, string label, string detail, CancellationToken ct)
@@ -109,11 +111,31 @@ public sealed partial class BrowserController
         }
         if (_pages.CoreOf(tabId) is not { } core || !IsWebAddress(core.Source) || core.Source.StartsWith("https://start.sol/"))
             return ToolError("no readable web page is open");
+        if (call.Name == "wait_for_page")
+        {
+            var expected = SolAiAgent.Argument(call.Arguments, "text").Trim();
+            if (expected.Length is 0 or > 200) return ToolError("expected text must contain 1 to 200 characters");
+            for (var attempt = 0; attempt < 20; attempt++)
+            {
+                ct.ThrowIfCancellationRequested();
+                if (!AiReady || _pages.CoreOf(tabId) != core) return ToolError("tab or account changed while waiting");
+                if (!_pages.IsLoading(tabId))
+                {
+                    var found = await EvaluateAsync(core, $"A.hasText({JsonSerializer.Serialize(expected)})");
+                    if (JsonNode.Parse(found)?["found"]?.GetValue<bool>() == true) return found;
+                }
+                await Task.Delay(250, ct);
+            }
+            return ToolError("Timed out waiting for visible text. Inspect the page before retrying; do not repeat a submission blindly.");
+        }
         if (_pages.IsLoading(tabId)) return ToolError("page is still loading; use read_tab with this tab id to wait for it");
         if (call.Name is "press_key" or "hover") return await PageInputToolAsync(core, call, ct);
         var expression = call.Name switch
         {
             "read_page" => "A.snapshot()",
+            "inspect_form" => $"A.inspectForm({Arg("query")})",
+            "extract_tables" => "A.tables()",
+            "collect_links" => $"A.collectLinks({Arg("query")})",
             "find_in_page" => $"A.find({Arg("query")})",
             "show_element" => $"A.show({Arg("ref")})",
             "click" => $"A.click({Arg("ref")})",
@@ -160,6 +182,23 @@ public sealed partial class BrowserController
         return call.Name switch
         {
             "read_page" => ("read", T("Lecture de la page", "Reading the page"), ""),
+            "inspect_form" => ("read", T("Vérification du formulaire", "Inspecting the form"), ""),
+            "extract_tables" => ("read", T("Extraction des tableaux", "Extracting tables"), ""),
+            "collect_links" => ("search", T("Recherche de liens", "Finding links"), A("query")),
+            "wait_for_page" => ("read", T("Attente du résultat sur la page", "Waiting for the page result"), A("text")),
+            "find_tabs" => ("search", T("Recherche d’onglets existants", "Finding existing tabs"), A("query")),
+            "duplicate_tabs" => ("run", T("Duplication des onglets", "Duplicating tabs"), ""),
+            "pin_tabs" => ("run", T("Modification des onglets épinglés", "Changing pinned tabs"), ""),
+            "start_diagnostics" => ("run", T("Ouverture de l’inspecteur réseau", "Opening network inspector"), ""),
+            "configure_diagnostics" => ("run", T("Réglage de la capture locale", "Configuring local capture"), A("action")),
+            "mock_network" => ("run", T("Simulation d’une réponse réseau", "Mocking a network response"), A("mode")),
+            "open_devtools" => ("run", T("Ouverture des outils développeur", "Opening developer tools"), ""),
+            "list_devices" => ("read", T("Appareils de simulation disponibles", "Available simulation devices"), ""),
+            "emulate_device" => ("run", T("Simulation d’un appareil", "Emulating a device"), A("device")),
+            "read_diagnostics" => ("read", T("Analyser les diagnostics avec ChatGPT", "Analyze diagnostics with ChatGPT"),
+                T("Envoi des erreurs console et métadonnées réseau utiles à votre demande. Les secrets connus sont masqués ; des données privées peuvent subsister.", "Send console errors and network metadata relevant to your request. Known secrets are masked; private data may remain.")),
+            "read_network_request" => ("read", T("Analyser cette requête avec ChatGPT", "Analyze this request with ChatGPT"),
+                T("Envoi des en-têtes et d’un extrait de réponse. Les secrets connus sont masqués ; des données privées peuvent subsister.", "Send headers and a response excerpt. Known secrets are masked; private data may remain.")),
             "find_in_page" => ("search", T("Recherche dans la page", "Searching the page"), A("query")),
             "read_link" => ("read", T("Lecture d’un lien", "Reading a link"), A("target")),
             "show_element" => ("run", T("Affichage dans la page", "Showing on the page"), A("ref")),

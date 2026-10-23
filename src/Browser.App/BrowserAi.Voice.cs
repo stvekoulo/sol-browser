@@ -11,7 +11,8 @@ public sealed partial class BrowserController
 
     private object VoiceState() => new
     {
-        open = _voiceOpen && AiReady, provider = "windows",
+        available = SolAiPermissions.VoiceAvailable,
+        open = SolAiPermissions.VoiceAvailable && _voiceOpen && AiReady, provider = "windows",
         mode = _voice?.Mode is "listening" or "speaking" ? _voice.Mode : _voiceTurn && _chatBusy ? _chatTrace?.Pending is not null ? "approval" : "thinking" : _voice?.Mode ?? "idle",
         level = _voice?.Level ?? 0, text = _voice?.Text ?? "", error = _voice?.Error,
     };
@@ -23,6 +24,7 @@ public sealed partial class BrowserController
     {
         if (!c.Type.StartsWith("voice.", StringComparison.Ordinal)) return false;
         if (c.Type == "voice.close") { CloseVoice(); return true; }
+        if (!SolAiPermissions.VoiceAvailable) { CloseVoice(); return true; }
         if (!AiReady || Chat?.IsOpen != true) return true;
         if (c.Type == "voice.settings")
         {

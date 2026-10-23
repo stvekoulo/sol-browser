@@ -58,11 +58,12 @@ Un assistant facultatif qui utilise **votre propre forfait ChatGPT Plus ou Pro**
 <p align="center"><img src="docs/images/sol-ai.svg" width="100%" alt="Votre question part vers ChatGPT, qui demande à Sol de lire, chercher et suivre les liens de l'onglet ouvert, puis rédige la réponse ; cliquer, saisir et naviguer attendent votre accord"></p>
 
 - **Interroger le site, pas un extrait.** Sol AI lit l'onglet ouvert de façon structurée (titres, texte, liens, boutons, champs), y cherche, suit les liens vers les autres pages d'une documentation et met en évidence le passage utilisé. Chaque étape s'affiche en direct.
-- **Votre accord avant d'agir.** Cliquer, remplir un champ ou ouvrir une adresse attend *Autoriser*. Les champs de mot de passe, de carte et de code unique ne sont jamais lus ni remplis.
+- **Votre accord avant d'agir.** Autorisez chaque action ou choisissez *Toujours autoriser* dans la discussion ou les paramètres Sol AI. Cet accord s’applique aux sites de ce profil, reste au redémarrage et peut être retiré dans les paramètres. Les champs de mot de passe, de carte et de code unique ne sont jamais lus ni remplis.
 - **Actions en un clic.** *Résumer* dans la barre d'adresse ; clic droit sur une sélection pour l'expliquer ou la traduire (six langues), ou dans un champ pour corriger, reformuler ou traduire, puis remplacer le texte.
 - **Panneau de discussion** à droite pour les questions rapides, capable de consulter l'onglet ouvert.
-- **Agent navigateur** : remplir des formulaires, choisir des options, utiliser le clavier, ouvrir et regrouper les onglets, préparer un espace avec une note. Les modifications sur les sites et les fermetures d'onglets demandent un accord.
-- **Voix Windows** : dicter une demande, écouter la réponse et autoriser une action à voix haute, avec le Voice Orb officiel de beUI. Nécessite un moteur de reconnaissance et une voix de la langue de l'interface ; ChatGPT reçoit du texte plutôt que de l'audio.
+- **Agent navigateur** : examiner les contraintes et erreurs des formulaires, remplir les champs, utiliser le clavier, extraire des tableaux et liens réels, attendre un résultat, rechercher, dupliquer et épingler les onglets, préparer un espace avec une note. L’agent vérifie les résultats et renouvelle les références périmées avant de réessayer.
+- **Vocal temporairement masqué** : la transcription Windows était insuffisante en usage réel. Le Voice Orb officiel de beUI est conservé pour un futur moteur vocal ; Sol AI ne lance aucun microphone.
+- **Aide au développement web** : expliquer une erreur console ou réseau avec ChatGPT, proposer un correctif, piloter la capture et les simulations HTTP, ouvrir les DevTools et tester le responsive. Les diagnostics sont transmis uniquement pour l’analyse demandée, avec masquage des secrets connus.
 - **Notes** : chercher, résumer, ou créer une note à partir d'une consigne.
 - **Sujets sur la page d'accueil** : favoris et historique classés par catégorie une fois par jour. Désactivé par défaut ; seuls les titres et domaines sont envoyés.
 

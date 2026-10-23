@@ -9,6 +9,7 @@ namespace Browser.App;
 // Sol AI : actions sur la page ou la sélection, calculées par ChatGPT avec le forfait de l'utilisateur.
 public sealed partial class BrowserController
 {
+    private string AiPermissionsPath => AppPaths.Settings;
     private sealed record AiContext(string Id, CoreWebView2 Core, string Url, string Token, string Text, string Title, string Language, bool Editable, bool Truncated, string Scope);
     private readonly ChatGptAccount _chatGpt = new();
     private AiContext? _aiContext;
@@ -146,6 +147,7 @@ public sealed partial class BrowserController
         connected = !PrivateActive && _chatGpt.Tokens != null, ready = AiReady, email = PrivateActive ? "" : _chatGpt.Tokens?.Email ?? "",
         signingIn = !PrivateActive && _chatGpt.SigningIn, error = PrivateActive ? null : _chatGpt.Error, isPrivate = PrivateActive,
         tone = _settings.SolAiTone, length = _settings.SolAiLength,
+        autoApproveActions = !PrivateActive && _settings.SolAiAutoApproveActions,
         models = _chatGpt.Models.Select(m => new { slug = m.Slug, name = m.Name }), model = _settings.SolAiChatModel,
         categories = _settings.SolAiCategories, categorizing = _categorizing, categoriesError = _categoriesError,
         categoriesUpdated = _categories.Names.Length > 0 ? _categories.UpdatedAt.ToUnixTimeMilliseconds() : (long?)null,

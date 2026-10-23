@@ -58,11 +58,12 @@ An optional assistant that runs on **your own ChatGPT Plus or Pro plan** through
 <p align="center"><img src="docs/images/sol-ai.svg" width="100%" alt="Your question goes to ChatGPT, which asks Sol to read, search and follow links on the open tab, then writes the answer; clicking, typing and navigating wait for your approval"></p>
 
 - **Ask the site, not a snippet.** Sol AI reads the open tab as structure (headings, text, links, buttons, fields), searches it, follows links to other pages of a documentation and highlights the passage it used. Each step is shown as it happens.
-- **Your approval before acting.** Clicking, typing into a field or opening an address waits for *Allow*. Password, card and one-time-code fields are never read or filled.
+- **Your approval before acting.** Allow each action, or choose *Always allow* in the chat or Sol AI settings. Standing permission applies across sites in this profile, survives restart and can be revoked in settings. Password, card and one-time-code fields are never read or filled.
 - **One-click actions.** *Summarize* in the address bar; right-click a selection to explain or translate it (six languages), or a text field to fix, rephrase or translate it, then replace the text.
 - **Chat panel** on the right for quick questions, able to look at the open tab.
-- **Browser agent:** fill forms, select options, use the keyboard, open and group tabs, and prepare a workspace with a note. Site changes and tab closures ask for approval.
-- **Windows voice:** dictate a request, hear the response and approve an action aloud, with the official beUI Voice Orb. Requires an installed speech recognizer and voice in the interface language; ChatGPT receives text rather than audio.
+- **Browser agent:** inspect form constraints and errors, fill fields, use the keyboard, extract tables and real links, wait for page results, find, duplicate and pin tabs, and prepare a workspace with a note. The agent verifies results and refreshes stale references before retrying.
+- **Voice temporarily hidden:** Windows transcription was insufficient in real use. The official beUI Voice Orb is preserved for a future voice engine; no microphone is started by Sol AI.
+- **Web development help:** explain console or network errors with ChatGPT, suggest code fixes, control capture and HTTP mocks, open DevTools and test responsive layouts. Diagnostics are sent only for requested analysis, with known secrets masked.
 - **Notes:** search, summarize, or create a note from an instruction.
 - **Topics on the start page:** bookmarks and history sorted into categories once a day. Off by default; only titles and domains are sent.
 

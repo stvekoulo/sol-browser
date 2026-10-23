@@ -15,7 +15,11 @@ const fixture=`<!doctype html><html lang="fr"><title>Actions Sol AI</title><styl
 <label>Code OTP <input name="otp" value="private-otp"></label><input type="file" name="attachment">
 <label>Champ désactivé <input disabled name="disabled"></label><label>Lecture seule <input readonly name="readonly"></label>
 <button id="submit">Envoyer</button></form><button id="menu">Menu</button><div id="status"></div><div id="shadow"></div>
-<iframe title="Formulaire intégré" src="/frame"></iframe><div id="filler"></div><p>Fin de la page</p></main>
+<iframe title="Formulaire intégré" src="/frame"></iframe>
+<table><caption>Offres</caption><tr><th>Service</th><th>Prix</th></tr><tr><td>Sol<input value="table-private-input"></td><td>Gratuit</td></tr></table>
+<a href="/resource">Documentation Sol</a><a href="/resource">Documentation en double</a><a href="javascript:alert(1)">Action</a>
+<a href="https://user:password@example.org/">Lien sensible</a><p hidden>Résultat invisible</p>
+<div id="filler"></div><p>Fin de la page</p></main>
 <script>window.events=[];for(const type of ['input','change'])document.addEventListener(type,e=>events.push(type+':'+e.target.name));
 window.submissions=0;form.addEventListener('submit',e=>{e.preventDefault();submissions++;status.textContent='Formulaire reçu'});
 menu.addEventListener('mouseenter',()=>menu.textContent='Menu ouvert');shadow.attachShadow({mode:'open'}).innerHTML='<label>Ville<input name="city"></label>';</script></html>`;
@@ -65,6 +69,31 @@ try {
   await action(`A.scroll('top')`);assert.equal(await page.evaluate('scrollY'),0);
   await action('A.snapshot()');assert.equal((await action(`A.fill(${JSON.stringify(ref('Nom complet'))},'stale')`)).ok,false,'snapshot invalidates old references');
   results.push('scrolling and rejection of stale snapshot references');
+  await page.evaluate(`form.elements.email.value='invalid-email-private';form.elements.email.required=true;form.elements.name.required=true`);
+  const inspection=await action('A.inspectForm()');
+  assert.equal(inspection.ok,true);
+  assert(!JSON.stringify(inspection).includes('invalid-email-private'),'inspection excludes current values and value-bearing browser messages');
+  assert(!JSON.stringify(inspection).includes('Steven Test'),'filled names remain excluded');
+  const email=inspection.fields.find(field=>field.label==='Courriel');
+  assert.equal(email.required,true);assert.equal(email.validity.typeMismatch,true);
+  assert(!inspection.fields.some(field=>/otp|password|attachment/i.test(field.type+' '+field.label)));
+  assert.equal(inspection.fields.find(field=>field.label==='Nom complet').constraints.maxLength,60);
+  const narrow=await action(`A.inspectForm('Organisation')`);
+  assert.equal(narrow.fields.length,1,'large forms can be inspected by label');
+  assert.equal((await action(`A.fill(${JSON.stringify(email.ref)},'new@example.invalid')`)).ok,false,'inspection invalidates earlier refs');
+  const table=await action('A.tables()');
+  assert.equal(table.tables[0].caption,'Offres');assert.equal(table.tables[0].rows[1][0].text,'Sol');
+  assert.equal(table.tables[0].rows[0][0].header,true);
+  assert(!JSON.stringify(table).includes('table-private-input'));
+  const collected=await action(`A.collectLinks('Documentation')`);
+  assert.equal(collected.links.length,1,'duplicate addresses are collapsed');
+  assert.equal(collected.links[0].url,host.origin+'/resource');
+  assert.equal((await action(`A.collectLinks('en double')`)).links.length,1,'filter considers later labels of a duplicate URL');
+  assert.equal((await action(`A.collectLinks('sensible')`)).links.length,0,'credential-bearing links excluded');
+  assert.equal((await action(`A.hasText('Résultat invisible')`)).found,false,'hidden text is not success');
+  await page.evaluate(`setTimeout(()=>document.querySelector('#status').textContent='Résultat différé reçu',180)`);
+  await host.wait(async()=>(await action(`A.hasText('Résultat différé reçu')`)).found,'delayed page status');
+  results.push('form constraints and validation without current values, filtered form refs, structured tables, deduplicated real links, delayed visible status');
   await writeFile(resolve(host.base,'agent-actions.png'),Buffer.from((await page.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
   await writeFile(resolve(host.base,'agent-actions.json'),JSON.stringify({results,realChatGptInference:false},null,2));
   await host.close(ui);

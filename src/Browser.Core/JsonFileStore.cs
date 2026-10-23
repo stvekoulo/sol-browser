@@ -21,6 +21,7 @@ public sealed class Settings
     public int NotesArchiveDays { get; set; }
     // Classement quotidien des favoris et de l'historique par Sol AI : envoi à OpenAI, donc désactivé par défaut.
     public bool SolAiCategories { get; set; }
+    public bool SolAiAutoApproveActions { get; set; }
     // Modèle ChatGPT choisi pour Sol AI ; vide : le premier modèle proposé au compte.
     private string _solAiChatModel = "";
     public string SolAiChatModel { get => _solAiChatModel; set => _solAiChatModel = value is { Length: <= 100 } ? value : ""; }

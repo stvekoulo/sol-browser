@@ -19,6 +19,31 @@ public sealed partial class BrowserController
         }
         switch (call.Name)
         {
+            case "find_tabs":
+                var query = A("query");
+                return JsonSerializer.Serialize(new { ok = true, tabs = _tabs.Tabs.Where(t => !t.Private &&
+                    (t.Title.Contains(query, StringComparison.OrdinalIgnoreCase) || t.Url.Contains(query, StringComparison.OrdinalIgnoreCase)))
+                    .Take(100).Select(t => new { t.Id, t.Title, t.Url, t.Pinned, t.GroupId }) });
+            case "duplicate_tabs":
+                var originals = Ids(1, 8).Select(id => TabOf(id)!).ToArray();
+                if (originals.Any(t => t.SessionId.Length > 0)) return ToolError("isolated-session tabs cannot be duplicated into the default session");
+                var copies = SolAiBrowserTools.Urls(JsonSerializer.Serialize(new { urls = originals.Select(t => t.Url) }))
+                    .Select(url => Open(url, activate: false, isPrivate: false)).ToArray();
+                Activate(copies[0].Id); Refresh();
+                return JsonSerializer.Serialize(new { ok = true, tabs = copies.Select(t => new { t.Id, t.Url }), loading = true });
+            case "pin_tabs":
+                var pinIds = Ids(1, 16);
+                using (var args = JsonDocument.Parse(call.Arguments))
+                {
+                    if (!args.RootElement.TryGetProperty("pinned", out var value) || value.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                        return ToolError("pinned must be a boolean");
+                    var pinned = value.GetBoolean();
+                    if (pinned && pinIds.Any(id => TabOf(id)!.GroupId is not null || _split.Contains(id)))
+                        return ToolError("ungroup or close_split before pinning these tabs");
+                    foreach (var id in pinIds) _tabs.SetPinned(id, pinned);
+                    Refresh();
+                    return JsonSerializer.Serialize(new { ok = true, tabs = pinIds.Select(id => new { id, pinned = TabOf(id)!.Pinned }) });
+                }
             case "list_tabs":
                 return JsonSerializer.Serialize(new { ok = true, activeId = _tabs.ActiveId,
                     tabs = _tabs.Tabs.Where(t => !t.Private).Select(t => new { t.Id, t.Title, t.Url, t.GroupId, t.Pinned, asleep = _pages.IsAsleep(t.Id) }),
