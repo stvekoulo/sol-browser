@@ -1,0 +1,41 @@
+name: Windows release on local runner
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing version tag to publish
+        required: true
+        default: '1.1.1'
+      source_commit:
+        description: Exact GitLab source commit
+        required: true
+        default: edad9bfd3657c2305bfce1cbdf8020ab41fc3a58
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-release-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.repository == 'stvekoulo/sol-browser' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Windows, X64, sol-release]
+    timeout-minutes: 120
+    permissions:
+      contents: write
+    env:
+      CI: 'true'
+      GH_TOKEN: ${{ github.token }}
+      SOL_RELEASE_VERSION: ${{ inputs.version }}
+      SOL_SOURCE_COMMIT: ${{ inputs.source_commit }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Build, verify and publish all Windows architectures
+        shell: pwsh
+        run: ./tools/github-release.ps1
