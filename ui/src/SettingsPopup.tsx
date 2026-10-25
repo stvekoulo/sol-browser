@@ -31,6 +31,13 @@ const root=rootRef;
     <div className="shortcuts-list">{content.shortcuts.map(s=><div key={s.action} className="shortcut-setting"><span>{s.title}</span><kbd>{s.keys}</kbd></div>)}</div>
   </details>
 </div>
+<div className="theme-row" hidden={settingsSection !== 'general'}>
+  <span className="row-title">{t('Qualité vidéo par défaut','Default video quality')}</span>
+  <SolSelect id="video-quality" label={t('Qualité vidéo par défaut','Default video quality')} value={[0,480,720,1080,1440,2160,4320].indexOf(content.videoQuality)}
+    options={[t('Meilleure disponible','Best available'),'480p','720p','1080p','1440p','4K · 2160p','8K · 4320p']}
+    onChange={index=>send({type:'settings.set',id:'videoQuality',index:[0,480,720,1080,1440,2160,4320][index]})}/>
+  <p className="row-hint">{t('Si elle manque : meilleure qualité inférieure, sinon la plus basse disponible. Vous pouvez changer ce choix avant de télécharger.','If unavailable: best lower quality, otherwise the lowest available. You can change this before downloading.')}</p>
+</div>
 <div className="theme-row settings-scale" hidden={settingsSection !== 'appearance'}>
 <div className="settings-scale-heading"><span className="row-title">{t('Taille de l’interface', 'Interface size')}</span>
 <Button variant="ghost" size="sm" pressScale={0.97} className="pill-action" aria-label={t('Réinitialiser la taille de l’interface à 100 %','Reset interface size to 100%')} onClick={()=>send({type:'settings.set',id:'uiScale',index:0})}>{Math.round(content.uiScale*100)} %</Button></div>
@@ -129,6 +136,7 @@ const root=rootRef;
                     : content.check === 'current' ? t('Sol est à jour.', 'Sol is up to date.')
                     : content.check === 'failed' ? t('La vérification a échoué. Vérifiez votre connexion et réessayez.', 'The check failed. Check your connection and try again.')
                     : content.check === 'portable' ? t('Cette copie n’est pas installée : elle ne se met pas à jour toute seule.', 'This copy is not installed: it does not update itself.')
+                    : content.check === 'store' ? t('Les mises à jour sont gérées par le Microsoft Store.', 'Updates are managed by the Microsoft Store.')
                     : t('Les mises à jour se téléchargent automatiquement.', 'Updates are downloaded automatically.')
                   : content.update.ready
                     ? t(`La version ${content.update.version} est prête. Redémarrez Sol pour l’installer.`, `Version ${content.update.version} is ready. Restart Sol to install it.`)
@@ -136,7 +144,7 @@ const root=rootRef;
               </span>
             </span>
             {content.update?.ready && <Button variant="ghost" size="sm" pressScale={0.97} className="pill-action primary" onClick={() => send({ type: 'update.restart' })}>{t('Redémarrer', 'Restart')}</Button>}
-            {!content.update && content.check !== 'portable' && (
+            {!content.update && content.check !== 'portable' && content.check !== 'store' && (
               <Button variant="ghost" size="sm" pressScale={0.97} className="pill-action" disabled={content.check === 'checking'} onClick={() => send({ type: 'update.check' })}>{t('Vérifier', 'Check')}</Button>
             )}
           </div>

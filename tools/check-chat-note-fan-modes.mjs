@@ -13,6 +13,8 @@ try {
   const notes=await host.connect('https://start.sol/index.html#notes');
   await host.wait(()=>notes.evaluate('!!document.querySelector(".note-card")'),'note');
   await command({type:'chat.toggle'});const chat=await host.connect('#chat');
+  await host.wait(()=>chat.evaluate('!!document.querySelector(".sol-chat")'),'chat mounted');
+  await chat.evaluate(`new Promise(resolve=>{const ready=e=>{if(e.data.chat){chrome.webview.removeEventListener('message',ready);resolve(true)}};chrome.webview.addEventListener('message',ready);chrome.webview.postMessage(JSON.stringify({type:'chat.ready'}))})`);
   const seed=()=>chat.evaluate(`chrome.webview.dispatchEvent(new MessageEvent('message',{data:{chat:true,ready:true,account:'test',busy:false,error:null,messages:[{from:'assistant',text:'Une réponse de test avec un lien très long https://example.invalid/'+ 'long'.repeat(40)}]}}))`);
   const enabled=async index=>{
     await command({type:'settings.set',id:'fanEnabled',index});

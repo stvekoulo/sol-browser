@@ -17,7 +17,12 @@
   <ItemGroup>
     <Compile Include="../../src/Browser.App/ChatGptAccount.cs" Link="ChatGptAccount.cs" />
     <Compile Include="../../src/Browser.App/ChatGptAccount.Storage.cs" Link="ChatGptAccount.Storage.cs" />
+    <Compile Include="../../src/Browser.App/BrowserAi.BrowserTools.cs" Link="BrowserAi.BrowserTools.cs" />
+    <Compile Include="../../src/Browser.App/BrowserAi.Permissions.cs" Link="BrowserAi.Permissions.cs" />
+    <Compile Include="../../src/Browser.App/BrowserAi.DeveloperTools.cs" Link="BrowserAi.DeveloperTools.cs" />
     <Compile Include="../../src/Browser.App/DebugLog.cs" Link="DebugLog.cs" />
+    <Compile Include="../../src/Browser.App/StartupTask.cs" Link="StartupTask.cs" />
+    <Compile Include="../../src/Browser.App/StartupPreparation.cs" Link="StartupPreparation.cs" />
     <Using Include="Xunit" />
   </ItemGroup>
 

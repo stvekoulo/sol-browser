@@ -4,7 +4,7 @@ using Browser.Core;
 
 namespace Browser.App;
 
-// À largeur réduite, la discussion recouvre la page et garde toute la place disponible.
+// À largeur réduite, la discussion recouvre la page tout en gardant sa largeur plafonnée.
 public sealed class ChatHost
 {
     private readonly Grid _area;
@@ -17,7 +17,7 @@ public sealed class ChatHost
     private Task? _initializing;
     public bool IsOpen { get; private set; }
 
-    public const double DefaultWidth = 380;
+    public const double DefaultWidth = SidePanelLayout.ChatDefault;
     public ChatHost(Grid area, ColumnDefinition column, WebView2 view, DividerGrip grip, UiBridge bridge, Func<Task> init, Settings settings)
     {
         (_area, _column, _view, _bridge, _init) = (area, column, view, bridge, init);
@@ -38,8 +38,10 @@ public sealed class ChatHost
         Grid.SetColumn(_view, overlay ? 0 : 1);
         Grid.SetColumnSpan(_view, overlay ? 2 : 1);
         // Garder une page utilisable et restaurer la préférence quand la fenêtre retrouve assez de place.
-        var maximum = Math.Min(760 * scale, Math.Max(0, available - 260 * scale));
-        _column.Width = new GridLength(overlay ? 0 : Math.Clamp(_settings.ChatWidth * scale, Math.Min(280 * scale, maximum), maximum));
+        var width = SidePanelLayout.Chat(_settings.ChatWidth * scale, available, scale, overlay);
+        _column.Width = new GridLength(overlay ? 0 : width);
+        _view.Width = overlay ? width : double.NaN;
+        _view.HorizontalAlignment = overlay ? HorizontalAlignment.Right : HorizontalAlignment.Stretch;
         _grip.Visibility = overlay ? Visibility.Collapsed : Visibility.Visible;
     }
     public async Task ShowAsync()

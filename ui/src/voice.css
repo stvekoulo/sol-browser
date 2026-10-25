@@ -1,0 +1,10 @@
+.sol-voice { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; flex-shrink: 0; min-width: 0; padding: 8px 12px 12px; border: 1px solid var(--border-card); border-radius: 18px; background: var(--bg-tab-hover); }
+.sol-voice-orb { width: clamp(80px, 24vh, 150px); max-width: 100%; }
+.sol-voice-close { position: absolute; right: 8px; top: 8px; z-index: 1; }
+.sol-voice-label { margin: 0; font-size: 13px; font-weight: 600; }
+.sol-voice-transcript { margin: 0; width: 100%; max-height: 72px; overflow: auto; overflow-wrap: anywhere; font-size: 12px; line-height: 1.5; text-align: center; }
+.sol-voice-help, .sol-voice-error { margin: 0; font-size: 11px; color: var(--text-dim); text-align: center; line-height: 1.5; }
+.sol-voice-actions { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+.sol-voice-actions .pill-action { display: inline-flex; gap: 5px; align-items: center; white-space: normal; }
+.sol-voice-error { color: var(--text); }
+@media (max-height: 650px) { .sol-voice-orb { width: 76px; } .sol-voice { gap: 4px; padding: 6px; } }

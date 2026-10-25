@@ -234,7 +234,7 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
     }
 
     /// <summary>Couleur de l'interface autour d'une page d'accueil à fond d'image : celle de l'image affichée.</summary>
-    public static string WallpaperTint { get; set; } = "rgb(40, 68, 105)";
+    public static string WallpaperTint { get; set; } = "rgb(5, 5, 5)";
     /// <summary>La couleur de la page affichée a changé sans navigation (nouveau fond d'accueil) : elle est relue.</summary>
     public void RefreshPageColor() => _ = SampleOnceAsync();
 

@@ -146,10 +146,11 @@ public sealed partial class PageHost
     }
 
     // Une page web est non fiable : aucun objet hôte, aucune permission ; seuls les messages filtrés sont acceptés.
-    private async Task Harden(CoreWebView2 core)
+    private async Task Harden(CoreWebView2 core,bool withFan=true)
     {
         var s = core.Settings;
         s.AreHostObjectsAllowed = false;
+        await core.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "web-host-compat.js")));
         NativeDownloadUi.Suppress(core, () => NativeDownloadsRequested?.Invoke(), disableAccelerators: false);
         var downloadSignal = System.Text.Json.JsonSerializer.Serialize("sol.downloads:" + FanKey);
         await core.AddScriptToExecuteOnDocumentCreatedAsync("(() => { const post=chrome.webview.postMessage.bind(chrome.webview); addEventListener('keydown',e=>{if(e.isTrusted&&e.ctrlKey&&!e.altKey&&!e.shiftKey&&e.code==='KeyJ'){e.preventDefault();e.stopImmediatePropagation();post(" + downloadSignal + ");}},true); })()");
@@ -162,12 +163,13 @@ public sealed partial class PageHost
         s.IsGeneralAutofillEnabled = false;
         s.HiddenPdfToolbarItems = CoreWebView2PdfToolbarItems.None; // recherche, pages, rotation, impression et enregistrement natifs
         _ = core.AddScriptToExecuteOnDocumentCreatedAsync(SidewaysScript);
-        _ = core.AddScriptToExecuteOnDocumentCreatedAsync("document.addEventListener('pointerdown',e=>{if(e.isTrusted)window.chrome.webview.postMessage('sol.page.pointer')},true)");
-        await ConfigureFanAsync(core);
-        core.DOMContentLoaded += (_, _) => PostFanSettings(core);
+        _ = core.AddScriptToExecuteOnDocumentCreatedAsync("document.addEventListener('pointerdown',e=>{if(e.isTrusted&&window.chrome?.webview)window.chrome.webview.postMessage('sol.page.pointer')},true)");
+        if(withFan){await ConfigureFanAsync(core);core.DOMContentLoaded += (_, _) => PostFanSettings(core);}
         _ = core.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "video-cursor.js")));
         // Mémorise la sélection au clic droit pour Sol AI ; sans effet tant que l'utilisateur n'agit pas.
         _ = core.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "ai.js")));
+        // Streaming sites own their consent, profile/PIN modals and player gestures.
+        // Never submit forms or remove their overlays from a browser compatibility script.
         s.IsReputationCheckingRequired = true; // SmartScreen
         // Aucun certificat invalide n'est accepté silencieusement, même sur localhost.
         core.ServerCertificateErrorDetected += (_, e) =>
@@ -192,6 +194,8 @@ public sealed partial class PageHost
         {
             await core.Profile.ClearBrowsingDataAsync(CoreWebView2BrowsingDataKinds.Cookies |
                 CoreWebView2BrowsingDataKinds.AllDomStorage | CoreWebView2BrowsingDataKinds.DiskCache);
+            _sessionCookies.Remove(core.Profile.ProfileName);
+            await CheckpointGitLabNowAsync(core.Profile);
             return true;
         }
         catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException)
@@ -224,6 +228,7 @@ public sealed partial class PageHost
                 if (Matches(cookie)) core.Profile.CookieManager.DeleteCookie(cookie);
             // Les cookies gardés en mémoire ne doivent pas revenir au prochain changement de session.
             if (_sessionCookies.TryGetValue(name, out var saved)) _sessionCookies[name] = saved.Where(c => !Matches(c)).ToArray();
+            await CheckpointGitLabNowAsync(core.Profile);
             // ponytail: le moteur ne propose pas de purge HTTP par origine ; seul ce cache est partagé dans la session.
             await core.Profile.ClearBrowsingDataAsync(CoreWebView2BrowsingDataKinds.DiskCache);
             foreach (var page in pages)

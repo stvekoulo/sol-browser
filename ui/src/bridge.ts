@@ -22,6 +22,8 @@ export type Tab = {
   storeDetail?: boolean;
   translated?: boolean;
   reader?: boolean;
+  videos?: number; videoProtected?: boolean;
+  webApp?: { Name: string; StartUrl: string; ManifestUrl: string } | null;
   ai?: boolean;
   storeInstalled?: boolean; // fiche du store d'une extension déjà installée
 };
@@ -32,6 +34,7 @@ export type State = {
   tabs: Tab[];
   groups: TabGroup[];
   activeId: string | null;
+  selectedTabIds?: string[]; // sélection temporaire pour créer un groupe avec Ctrl+clic
   privateMode: boolean; // onglet actif en navigation privée
   aiAvailable?: boolean; chatOpen?: boolean; // panneau de discussion Sol AI
   aiTabs?: import('./SidebarAiGroups').AiTabsState; // proposition de groupes d'onglets par Sol AI
@@ -202,4 +205,4 @@ export function displayAddress(url: string): string {
 
 // Polices de l'interface, dans l'ordre du réglage (voir Fonts dans BrowserController.cs).
 export const fontLabels = (fallback: string, system: string) =>
-  [fallback, system, 'Inter', 'Inter Bold', 'SF Pro', 'SF Pro Bold', 'Geist', 'Manrope', 'DM Sans', 'Plus Jakarta Sans', 'Outfit', 'Figtree', 'Nunito', 'Lora'];
+  [fallback, system, 'Inter', 'Inter Bold', 'Segoe UI', 'Segoe UI Bold', 'Geist', 'Manrope', 'DM Sans', 'Plus Jakarta Sans', 'Outfit', 'Figtree', 'Nunito', 'Lora'];

@@ -12,7 +12,9 @@ public static class Program
     {
         // Installation, mise à jour, désinstallation : l'installateur relance Sol avec ses propres arguments, traités
         // ici avant toute fenêtre. Une mise à jour déjà téléchargée est aussi appliquée à ce moment.
+#if !SOL_STORE
         VelopackApp.Build().OnBeforeUninstallFastCallback(_ => WindowsBrowser.Unregister()).Run();
+#endif
 
         WinRT.ComWrappersSupport.InitializeComWrappers();
         Application.Start(p =>
@@ -59,7 +61,7 @@ public static class Program
         while (true)
         {
             await CheckForUpdateAsync();
-            if (Update is { Ready: true } || Check == "portable") return;
+            if (Update is { Ready: true } || Check is "portable" or "store") return;
             await Task.Delay(TimeSpan.FromHours(6));
         }
     }
@@ -70,6 +72,7 @@ public static class Program
     /// zip, poste de développement) ne se met pas à jour.</summary>
     public static async Task CheckForUpdateAsync()
     {
+        if (StoreDistribution.Enabled) { SetCheck("store"); return; }
         if (Update is { Ready: true } || !await s_checking.WaitAsync(0)) return; // déjà prête, ou une recherche est en cours
         try
         {

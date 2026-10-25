@@ -9,7 +9,7 @@ public sealed partial class PageHost
     private sealed class FanRegistration { public string Id = "", Config = ""; public readonly SemaphoreSlim Gate = new(1, 1); }
     private readonly ConditionalWeakTable<CoreWebView2, FanRegistration> _fanRegistrations = new();
     private static readonly string FanSource = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "fan.js"));
-    private string FanConfig() => JsonSerializer.Serialize(new { enabled = settings.FanEnabled, trigger = settings.FanTrigger });
+    private string FanConfig() => JsonSerializer.Serialize(new { enabled = settings.FanEnabled, trigger = settings.FanTrigger, video = settings.VideoDownloads });
 
     private async Task ConfigureFanAsync(CoreWebView2 core)
     {

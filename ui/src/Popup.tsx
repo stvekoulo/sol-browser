@@ -38,7 +38,7 @@ export default function Popup() {
     const focused = () => window.clearTimeout(leaving);
     const blurred = () => {
       window.clearTimeout(leaving);
-      leaving = window.setTimeout(() => current.current?.popup !== 'ai-action' && !document.hasFocus() && close(), 150);
+      leaving = window.setTimeout(() => current.current?.popup !== 'ai-action' && current.current?.popup !== 'videos' && !document.hasFocus() && close(), 150);
     };
     window.addEventListener('blur', blurred);
     window.addEventListener('focus', focused);

@@ -3,19 +3,21 @@ import { send, type Command } from './bridge';
 import { t } from './i18n';
 
 type Drop = { el: HTMLElement; style: string; commands: Command[]; label: string };
-type Drag = { el: HTMLElement; pointer: number; x: number; y: number; startX: number; startY: number; origin?: DOMRect; ghost?: HTMLElement; drop?: Drop };
+type Drag = { el: HTMLElement; capture: Element; pointer: number; x: number; y: number; startX: number; startY: number; origin?: DOMRect; ghost?: HTMLElement; drop?: Drop };
 let drag: Drag | null = null;
-const slots = (kind: string) => [...document.querySelectorAll<HTMLElement>(`.sidebar-scroll [data-kind="${kind}"]`)];
+const slots = (kind: string) => [...document.querySelectorAll<HTMLElement>(`.sidebar-card [data-kind="${kind}"]`)];
 const position = (el: HTMLElement, last = false) => Number(last ? el.dataset.last : el.dataset.first);
 
 export function startSlotDrag(el: HTMLElement | null, event: PointerEvent) {
-  if (!el || event.button !== 0 || event.target instanceof HTMLInputElement) return;
-  drag = { el, pointer: event.pointerId, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY };
-  el.setPointerCapture(event.pointerId);
+  if (!el || event.button !== 0 || event.ctrlKey || event.metaKey || event.target instanceof HTMLInputElement) return;
+  // Garder le clic sur le bouton pressé : capturer son bloc parent détourne le clic du groupe.
+  const capture = event.currentTarget;
+  drag = { el, capture, pointer: event.pointerId, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY };
+  capture.setPointerCapture(event.pointerId);
 }
 
 function targetAt(d: Drag): Drop | undefined {
-  const hit = document.elementFromPoint(d.x, d.y)?.closest<HTMLElement>('.sidebar-scroll');
+  const hit = document.elementFromPoint(d.x, d.y)?.closest<HTMLElement>('.sidebar-card');
   if (!hit || !d.el.isConnected) return;
   const kind = d.el.dataset.kind!, id = d.el.dataset.id!, from = position(d.el);
   const element = document.elementFromPoint(d.x, d.y) as HTMLElement | null;
@@ -43,7 +45,7 @@ function targetAt(d: Drag): Drop | undefined {
   const end = element?.closest<HTMLElement>('.sidebar-new-tab');
   if (end && kind === 'tab') return {el: end, style: 'drop-into', commands: [
     ...(d.el.dataset.pinned ? [{type: 'tab.pin', id, index: 0}] : []),
-    {type: 'tab.move', id, index: Number(hit.dataset.tabCount) - 1}, {type: 'group.remove', id}],
+    {type: 'tab.move', id, index: Number(hit.querySelector<HTMLElement>('.sidebar-scroll')?.dataset.tabCount) - 1}, {type: 'group.remove', id}],
     label: t('Ranger hors des groupes', 'Move outside groups')};
   const candidates = kind === 'group'
     ? [...hit.querySelectorAll<HTMLElement>('.sidebar-tabs [data-kind]')].filter(el=>!el.closest('.tab-group-tabs'))
@@ -91,7 +93,7 @@ export function useSidebarDrag() {
         if (commit) drag.drop?.commands.forEach(send);
       }
       drag?.ghost?.remove(); drag?.el.classList.remove('drag-source');
-      if (drag?.el.hasPointerCapture(drag.pointer)) drag.el.releasePointerCapture(drag.pointer);
+      if (drag?.capture.hasPointerCapture(drag.pointer)) drag.capture.releasePointerCapture(drag.pointer);
       document.documentElement.classList.remove('sidebar-dragging'); drag = null;
     };
     const update = () => {

@@ -23,6 +23,7 @@ public sealed partial class BrowserController
             items.Add(new { id = key, title, hint, shortcut = shortcut.Length > 0 ? shortcut : BrowserShortcuts.TextFor(command.Type, Language.Current == "en"), group, keywords });
         }
         Add(T("Nouvel onglet", "New tab"), new("tab.open"), keywords: "onglet tab new nouveau");
+        Add(T("Espaces de travail enregistrés", "Saved workspaces"), new("workspace.open"), keywords: "workspace snapshot disposition maquettes projet");
         Add(T("Rouvrir l’onglet fermé", "Reopen closed tab"), new("tab.reopen"), keywords: "reopen rouvrir fermer onglet");
         Add(T("Navigation privée", "Private browsing"), new("window.private"), keywords: "private incognito privee");
         Add(T("Ouvrir les notes", "Open notes"), new("notes.manage"), keywords: "notes scratchpad");

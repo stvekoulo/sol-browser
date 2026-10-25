@@ -9,9 +9,9 @@ public class JsonFileStoreTests : IDisposable
         File.WriteAllText(path, "{}");
         var settings = JsonFileStore.Load<Settings>(path);
         Assert.Equal(380, settings.ChatWidth);
-        settings.ChatWidth = 640;
+        settings.ChatWidth = 420;
         Assert.True(JsonFileStore.Save(path, settings));
-        Assert.Equal(640, JsonFileStore.Load<Settings>(path).ChatWidth);
+        Assert.Equal(420, JsonFileStore.Load<Settings>(path).ChatWidth);
     }
 
     [Fact]

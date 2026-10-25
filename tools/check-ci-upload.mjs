@@ -35,7 +35,10 @@ const server=createServer(async(req,res)=>{
 await once(server,'listening');
 const origin=`http://127.0.0.1:${server.address().port}`;
 const yaml=await readFile('.gitlab-ci.yml','utf8');
-const command=yaml.split('\n').find(line=>line.trim().startsWith('- ./tools/ci-upload.ps1')).trim().slice(2);
+assert.match(yaml,/^\s+- \.\/tools\/ci-release\.ps1\s*$/m,'CI invokes the release script');
+const releaseScript=await readFile('tools/ci-release.ps1','utf8');
+const command=releaseScript.split('\n').map(line=>line.trim()).find(line=>line.startsWith('./tools/ci-upload.ps1 '));
+assert.ok(command,'release script invokes the actual upload command');
 const quote=value=>"'"+value.replaceAll("'","''")+"'";
 const run=async(mode,delay=0)=>{
   const app=spawn('pwsh',['-NoProfile','-Command',

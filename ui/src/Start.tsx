@@ -3,6 +3,7 @@ import { useIconLook } from './useIconLook';
 import { formatDomain, onMessage, send } from './bridge';
 import { useFavoriteWindow } from './useFavoriteWindow';
 import { setLang, t, useLang } from './i18n';
+import logo from './assets/logo.png';
 
 import './Start.css';
 import './Start-responsive.css';
@@ -30,17 +31,8 @@ const empty: StartData = {
   groups: [],
 };
 
-// Palette inspirée des tuiles Safari pour les monogrammes sans favicon.
-const TILE_COLORS = [
-  'linear-gradient(180deg, #fbbf24 0%, #f59e0b 100%)',
-  'linear-gradient(180deg, #fb7185 0%, #e11d48 100%)',
-  'linear-gradient(180deg, #38bdf8 0%, #0284c7 100%)',
-  'linear-gradient(180deg, #fb923c 0%, #ea580c 100%)',
-  'linear-gradient(180deg, #94a3b8 0%, #64748b 100%)',
-  'linear-gradient(180deg, #6366f1 0%, #4338ca 100%)',
-  'linear-gradient(180deg, #34d399 0%, #059669 100%)',
-  'linear-gradient(180deg, #a78bfa 0%, #7c3aed 100%)',
-];
+// Monogrammes monochromes ; les favicons des sites gardent leur identité.
+const TILE_COLORS = ['linear-gradient(180deg,#555,#333)','linear-gradient(180deg,#777,#4a4a4a)','linear-gradient(180deg,#343434,#151515)','linear-gradient(180deg,#999,#666)'];
 
 function tileBackground(seed: string): string {
   let hash = 0;
@@ -144,6 +136,7 @@ export default function Start() {
   return (
     <main className="start-page">
       <div className="start-content">
+        {!data.privateMode && <header className="start-brand"><img src={logo} alt="" draggable={false}/><span>sol</span><small>{t('Votre espace commence ici.', 'Your space starts here.')}</small></header>}
         {data.privateMode && (
           <header className="start-heading">
             <h1>{t('Navigation privée', 'Private browsing')}</h1>

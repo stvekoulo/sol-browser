@@ -14,7 +14,7 @@ export function SidebarPinned({ state, icons }: { state: State; icons: Record<st
   useEffect(() => {
     const el = strip.current;
     if (!el) return;
-    const observer = new ResizeObserver(() => setRoom(el.clientWidth)); observer.observe(el);
+    const observer = new ResizeObserver(([entry]) => setRoom(entry.contentRect.width)); observer.observe(el);
     return () => observer.disconnect();
   }, []);
   const named = (count: number) => count > 0 && (room - 12 * (count - 1)) / count >= 104;

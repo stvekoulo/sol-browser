@@ -7,7 +7,7 @@ import { send } from './bridge';
 import { ColorPicker, ColorPickerArea, ColorPickerHexInput, ColorPickerHue, ColorPickerPreset, ColorPickerPresets, ColorPickerSwatch } from '@/components/motion/color-picker';
 import { t } from './i18n';
 
-type Group = { create: boolean; id: string; name: string; color: string; icon: string; presets: string[]; ai?: boolean; suggesting?: boolean; suggestion?: { name: string; color: string; icon: string } | null };
+type Group = { create: boolean; id: string; name: string; color: string; icon: string; presets: string[]; count?: number; ai?: boolean; suggesting?: boolean; suggestion?: { name: string; color: string; icon: string } | null };
 
 // Icônes proposées ; le champ libre accepte n'importe quel autre emoji.
 const ICONS = ['💼', '📚', '💻', '🛠️', '🧪', '📝', '📰', '💬', '🎬', '🎵', '🎮', '🎨', '📷', '🛒', '💰', '✈️', '🏠', '🍔', '⚽', '🎓', '🏥', '🔒', '💡', '⭐', '❤️', '🔥', '🌍', '📅'];
@@ -36,7 +36,7 @@ export default function GroupEditor({ rootRef, group }: { rootRef: RefObject<HTM
           if (name.trim()) send({ type: group.create ? 'group.create' : 'group.update', id: group.id, title: name.trim(), query: color, input: icon });
         }}
       >
-        <span className="name-form-title">{group.create ? t('Nouveau groupe', 'New group') : t('Modifier le groupe', 'Edit group')}</span>
+        <span className="name-form-title">{group.create ? t('Nouveau groupe', 'New group') : t('Modifier le groupe', 'Edit group')}{group.create && (group.count ?? 0) > 1 ? t(` · ${group.count} onglets`, ` · ${group.count} tabs`) : ''}</span>
 
         <div className="group-preview" aria-hidden>
           {icon ? <span className="group-preview-icon">{icon}</span> : <span className="group-preview-dot" />}

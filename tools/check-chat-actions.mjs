@@ -13,6 +13,9 @@ try {
   await command({type:'chat.toggle'});
   const chat=await host.connect('#chat');
   await host.wait(()=>chat.evaluate('!!document.querySelector(".sol-chat")'),'chat ready');
+  // Attendre la réponse native avant de remplacer le compte par le jeu de données de test.
+  await chat.evaluate(`new Promise(resolve=>{const ready=e=>{if(e.data.chat){chrome.webview.removeEventListener('message',ready);resolve(true)}};chrome.webview.addEventListener('message',ready);chrome.webview.postMessage(JSON.stringify({type:'chat.ready'}))})`);
+  await command({type:'settings.set',id:'fanTrigger',index:0});
   const fixture={chat:true,ready:true,account:'test@example.invalid',busy:false,error:null,messages:[
     {from:'user',text:"Ma limite s’est réinitialisée ou pas encore ?"},
     {from:'assistant',text:'D’après la page GitLab, elle affiche **430 utilisés sur 400**, soit un dépassement de 30.\n\nLe quota mensuel se réinitialise normalement le premier du mois suivant.\n\nLien : https://example.invalid/'+('a'.repeat(160))+'\n\n```js\nconst message = "'+('x'.repeat(200))+'";\n```\n\n| Élément | Détail |\n| --- | --- |\n| Quota | '+('mot'.repeat(60))+' |'},
@@ -56,7 +59,9 @@ try {
     assert.deepEqual(await chat.evaluate('__commands.splice(0)'),[{type:'chat.copy',id:'1'}],'real pointer reaches copy action');
     await chat.evaluate(`chrome.webview.dispatchEvent(new MessageEvent('message',{data:${JSON.stringify({...fixture,busy:true})}}))`);
     await host.wait(()=>chat.evaluate('document.querySelectorAll(".nod-act").length===0'),'streaming has no premature actions');
-    await inject();await host.wait(()=>chat.evaluate('document.querySelectorAll(".nod-act").length===2'),'completed reply actions restored');
+    await inject();
+    await chat.evaluate(`document.querySelector('.nod')?.dispatchEvent(new PointerEvent('pointerover',{bubbles:true}))`);
+    await host.wait(()=>chat.evaluate('document.querySelectorAll(".nod-act").length===2'),'completed reply actions restored');
   }
   await writeFile(resolve(host.base,'chat-actions.json'),JSON.stringify({baseline,results},null,2));
   console.log(JSON.stringify({base:host.base,baseline,results},null,2));

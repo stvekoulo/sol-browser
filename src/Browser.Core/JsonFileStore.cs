@@ -21,6 +21,7 @@ public sealed class Settings
     public int NotesArchiveDays { get; set; }
     // Classement quotidien des favoris et de l'historique par Sol AI : envoi à OpenAI, donc désactivé par défaut.
     public bool SolAiCategories { get; set; }
+    public bool SolAiAutoApproveActions { get; set; }
     // Modèle ChatGPT choisi pour Sol AI ; vide : le premier modèle proposé au compte.
     private string _solAiChatModel = "";
     public string SolAiChatModel { get => _solAiChatModel; set => _solAiChatModel = value is { Length: <= 100 } ? value : ""; }
@@ -52,6 +53,9 @@ public sealed class Settings
     public bool HideScrollbars { get; set; } = true;
     /// <summary>Affiche les téléchargements en cours dans un encart en bas à droite. Désactivé : seulement le panneau de la barre.</summary>
     public bool FloatingDownloads { get; set; } = true;
+    public bool VideoDownloads { get; set; } = true;
+    private int _videoQuality;
+    public int VideoQuality { get => _videoQuality; set => _videoQuality = VideoQualitySelection.Preferences.Contains(value) ? value : 0; }
     /// <summary>
     /// Thème de l'interface : "page" (suit la page visitée, clair ou sombre comme elle), "light", "dark",
     /// ou "system" (suit Windows). La couleur du site s'applique dans tous les cas.
@@ -78,7 +82,7 @@ public sealed class Settings
         set => _homePage = string.IsNullOrWhiteSpace(value) || value is "https://www.google.com" or "https://www.google.com/" ? DefaultHomePage : value;
     }
     /// <summary>Affiche l'image d'arrière-plan sur la page d'accueil d'un nouvel onglet.</summary>
-    public bool StartWallpaper { get; set; }
+    public bool StartWallpaper { get; set; } = true;
     /// <summary>Photo choisie pour ce fond (voir StartWallpapers) ; 0 : l'image livrée avec Sol.</summary>
     public int StartWallpaperPhoto { get; set; }
     /// <summary>Une photo différente chaque jour, à la place de la photo choisie.</summary>
@@ -101,10 +105,11 @@ public sealed class Settings
     /// <summary>Quitter un onglet où une vidéo joue la garde à l'écran dans un lecteur flottant.</summary>
     public bool AutoPip { get; set; } = true;
     /// <summary>Largeur de la carte latérale, réglée en tirant son bord droit.</summary>
-    public double SidebarWidth { get; set; } = 296;
+    private double _sidebarWidth = SidePanelLayout.SidebarDefault;
+    public double SidebarWidth { get => _sidebarWidth; set => _sidebarWidth = double.IsFinite(value) ? Math.Clamp(value, SidePanelLayout.SidebarMinimum, SidePanelLayout.SidebarMaximum) : SidePanelLayout.SidebarDefault; }
     /// <summary>Largeur préférée du chat Sol AI, conservée même quand une petite fenêtre le réduit.</summary>
     private double _chatWidth = 380;
-    public double ChatWidth { get => _chatWidth; set => _chatWidth = double.IsFinite(value) ? Math.Clamp(value, 280, 760) : 380; }
+    public double ChatWidth { get => _chatWidth; set => _chatWidth = double.IsFinite(value) ? Math.Clamp(value, SidePanelLayout.ChatMinimum, SidePanelLayout.ChatMaximum) : SidePanelLayout.ChatDefault; }
     /// <summary>Hauteur du panneau des outils de développement, réglée en tirant son bord haut.</summary>
     public double PanelHeight { get; set; } = 300;
     /// <summary>Écrans affichés côte à côte par la comparaison d'écrans ; vide : le choix par défaut.</summary>

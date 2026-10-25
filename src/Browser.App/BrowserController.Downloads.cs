@@ -5,13 +5,13 @@ namespace Browser.App;
 public sealed partial class BrowserController
 {
     // Téléchargements de la session, du plus récent au plus ancien.
-    private readonly List<(string Id, Microsoft.Web.WebView2.Core.CoreWebView2DownloadOperation Op, string TabId)> _downloads = new();
+    private readonly List<(string Id, DownloadOperation Op, string TabId)> _downloads = new();
     private bool _downloadsOpen;
     private DateTime _downloadsPosted;
     private readonly HashSet<string> _pausedDownloads=new(),_canceledDownloads=new();
     private readonly List<DispatcherQueueTimer> _downloadTimers=new();
 
-    private Microsoft.Web.WebView2.Core.CoreWebView2DownloadOperation? FindDownload(string id) =>
+    private DownloadOperation? FindDownload(string id) =>
         _downloads.FirstOrDefault(d => d.Id == id).Op;
 
     private void OnDownloadStarting(string tabId, Microsoft.Web.WebView2.Core.CoreWebView2DownloadStartingEventArgs e)
@@ -23,11 +23,12 @@ public sealed partial class BrowserController
             // Vérification dans un profil jetable : les fichiers de test restent avec ses données.
             if (Environment.GetEnvironmentVariable("NAVIGATEUR_TEST_DOWNLOAD_DIR") is { Length: > 0 } dir && Directory.Exists(dir))
                 e.ResultFilePath = Path.Combine(dir, Path.GetFileName(e.ResultFilePath));
-            var op = e.DownloadOperation;
+            var native = e.DownloadOperation;
+            var op = new DownloadOperation(native);
             _downloads.Insert(0, ($"d{_downloads.Count + 1}", op, tabId));
             var id = _downloads[0].Id;
-            op.BytesReceivedChanged += (_, _) => DownloadsChanged(throttle: true);
-            op.StateChanged += (_, _) => Changed();
+            native.BytesReceivedChanged += (_, _) => DownloadsChanged(throttle: true);
+            native.StateChanged += (_, _) => Changed();
             void Changed()
             {
                 DebugLog.Write($"download.state {id} {op.State} {op.InterruptReason} resume={op.CanResume}");
@@ -62,8 +63,8 @@ public sealed partial class BrowserController
         }
         finally {deferral.Complete();}
     }
-    private bool DownloadPaused(string id,CoreWebView2DownloadOperation op)=>!_canceledDownloads.Contains(id)&&op.State!=CoreWebView2DownloadState.Completed&&(_pausedDownloads.Contains(id)||op.InterruptReason==CoreWebView2DownloadInterruptReason.UserPaused);
-    private bool DownloadPending(string id,CoreWebView2DownloadOperation op)=>!_canceledDownloads.Contains(id)&&(op.State==CoreWebView2DownloadState.InProgress||DownloadPaused(id,op)||op.State==CoreWebView2DownloadState.Interrupted&&op.CanResume);
+    private bool DownloadPaused(string id,DownloadOperation op)=>!_canceledDownloads.Contains(id)&&op.State!=CoreWebView2DownloadState.Completed&&(_pausedDownloads.Contains(id)||op.InterruptReason==CoreWebView2DownloadInterruptReason.UserPaused);
+    private bool DownloadPending(string id,DownloadOperation op)=>!_canceledDownloads.Contains(id)&&(op.State==CoreWebView2DownloadState.InProgress||DownloadPaused(id,op)||op.State==CoreWebView2DownloadState.Interrupted&&op.CanResume);
     private void ControlDownload(string id,string action)
     {
         if(FindDownload(id) is not { } op||op.State==CoreWebView2DownloadState.Completed||_canceledDownloads.Contains(id))return;

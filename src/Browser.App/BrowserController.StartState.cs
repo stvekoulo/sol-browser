@@ -12,10 +12,15 @@ public sealed partial class BrowserController
     private void SaveSession()
     {
         if (AppPaths.Private) return; // navigation privée : la fenêtre ne laisse pas d'onglets derrière elle
+        JsonFileStore.Save(AppPaths.Session, CaptureWorkspace());
+    }
+
+    private Session CaptureWorkspace()
+    {
         var tabs = _tabs.Tabs.Where(t => !t.Private).ToList();
         var groups = _tabs.Groups.Where(g => tabs.Any(t => t.GroupId == g.Id)).ToList();
         int? IndexOf(string? id) => tabs.FindIndex(t => t.Id == id) is >= 0 and var i ? i : null;
-        JsonFileStore.Save(AppPaths.Session, new Session
+        return new Session
         {
             Urls = tabs.Select(t => t.Url).ToList(),
             SessionIds = tabs.Select(t => t.SessionId).ToList(),
@@ -31,7 +36,7 @@ public sealed partial class BrowserController
             PrimaryIndex = IndexOf(_split.PrimaryId),
             SecondaryIndex = IndexOf(_split.SecondaryId),
             Ratio = _split.Ratio,
-        });
+        };
     }
 
     private string? _lastActive;
@@ -117,6 +122,7 @@ public sealed partial class BrowserController
             if (_settings.AutoPip && left is not null && !(showSplit && _split.Contains(left)) && _tabs.Tabs.Any(t => t.Id == left))
                 _ = _pages.TryEnterPipAsync(left);
         }
+        _pages.SetPreviewTab(_tabs.ActiveId);
         _pages.ApplyLayout(showSplit ? _split.PrimaryId : _tabs.ActiveId, showSplit ? _split.SecondaryId : null, _split.Ratio);
         var state = JsonSerializer.Serialize(new
         {
@@ -137,10 +143,13 @@ public sealed partial class BrowserController
                 storeInstalled = _pages.CoreOf(t.Id) is { } storeShown && StoreExtension(storeShown.Source) is { } storeId && _installedExtensions.Contains(storeId),
                 translated = _translationOriginals.ContainsKey(t.Id) && PageTranslation.IsGooglePage(t.Url),
                 reader = _reading.Contains(t.Id),
+                webApp = _pages.WebAppOf(t.Id),
+                videos = _pages.VideosOf(t.Id).Count, videoProtected = _pages.VideoProtected(t.Id),
                 ai = AiReady,
             }),
             groups = _tabs.Groups.Select(g => new { id = g.Id, name = g.Name, color = g.Color, icon = g.Icon, collapsed = g.Collapsed }),
             activeId = _tabs.ActiveId,
+            selectedTabIds = SelectedTabs().Select(t => t.Id),
             privateMode = PrivateActive,
             aiAvailable = !PrivateActive, chatOpen = Chat?.IsOpen == true, aiTabs = TabGroupAiState(),
             shield = false,

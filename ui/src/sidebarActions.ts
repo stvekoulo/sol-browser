@@ -1,12 +1,12 @@
 import type { MouseEvent, KeyboardEvent } from 'react';
 import { send } from './bridge';
 
-export function sidebarMenu(type: string, id: string, event: MouseEvent<HTMLElement>) {
+export function sidebarMenu(type: string, id: string, event: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>) {
   event.preventDefault(); event.stopPropagation();
   const box = event.currentTarget.getBoundingClientRect();
   send({ type, ...(type === 'shortcut.menu' ? { index: Number(id) } : { id }),
-    x: event.type === 'contextmenu' ? event.clientX : box.left,
-    y: (event.type === 'contextmenu' ? event.clientY : box.bottom + 4) });
+    x: 'clientX' in event && event.type === 'contextmenu' ? event.clientX : box.left,
+    y: 'clientY' in event && event.type === 'contextmenu' ? event.clientY : box.bottom + 4 });
 }
 
 export function middleClose(event: MouseEvent, id: string | null) {
@@ -17,7 +17,8 @@ export function middleClose(event: MouseEvent, id: string | null) {
 
 export function focusTab(event: KeyboardEvent<HTMLElement>) {
   if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
-  const tabs = [...document.querySelectorAll<HTMLElement>('.sidebar-scroll [role="tab"]')];
+  if (event.target !== event.currentTarget) return;
+  const tabs = [...document.querySelectorAll<HTMLElement>('.sidebar-card [role="tab"]')];
   const current = tabs.indexOf(event.currentTarget);
   const index = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
     : (current + (event.key === 'ArrowDown' ? 1 : -1) + tabs.length) % tabs.length;

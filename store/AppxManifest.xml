@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+ xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+ xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+ xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+ IgnorableNamespaces="uap uap3 rescap">
+  <Identity Name="StevenKOULO.SolNavigateur" Publisher="CN=7ACA79C7-6DB7-4E57-B74D-CA9D96852079"
+    Version="1.1.1.0" ProcessorArchitecture="ARCHITECTURE" />
+  <Properties>
+    <DisplayName>Sol Navigateur</DisplayName>
+    <PublisherDisplayName>Steven KOULO</PublisherDisplayName>
+    <Logo>StoreAssets\StoreLogo.png</Logo>
+    <Description>Navigateur web avec espaces de travail et assistant IA.</Description>
+  </Properties>
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+  <Resources><Resource Language="fr-fr" /><Resource Language="en-us" /></Resources>
+  <Applications>
+    <Application Id="Sol" Executable="Sol.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements DisplayName="Sol Navigateur" Description="Navigateur Sol"
+        BackgroundColor="transparent" Square150x150Logo="StoreAssets\Square150x150Logo.png"
+        Square44x44Logo="StoreAssets\Square44x44Logo.png" />
+      <Extensions>
+        <uap3:Extension Category="windows.protocol">
+          <uap3:Protocol Name="http" Parameters="&quot;%1&quot;" />
+        </uap3:Extension>
+        <uap3:Extension Category="windows.protocol">
+          <uap3:Protocol Name="https" Parameters="&quot;%1&quot;" />
+        </uap3:Extension>
+        <uap3:Extension Category="windows.fileTypeAssociation">
+          <uap3:FileTypeAssociation Name="solweb" Parameters="&quot;%1&quot;">
+            <uap:DisplayName>Document web Sol</uap:DisplayName>
+            <uap:SupportedFileTypes>
+              <uap:FileType>.htm</uap:FileType><uap:FileType>.html</uap:FileType>
+              <uap:FileType>.shtml</uap:FileType><uap:FileType>.xhtml</uap:FileType>
+              <uap:FileType>.pdf</uap:FileType><uap:FileType>.svg</uap:FileType>
+              <uap:FileType>.webp</uap:FileType>
+            </uap:SupportedFileTypes>
+          </uap3:FileTypeAssociation>
+        </uap3:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+  <Capabilities><rescap:Capability Name="runFullTrust" /></Capabilities>
+</Package>

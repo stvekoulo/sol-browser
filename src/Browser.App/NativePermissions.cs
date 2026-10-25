@@ -9,16 +9,17 @@ internal static class NativePermissions
     {
         if (PrivateBrowsing.IsProfile(profile.ProfileName)) return;
         var store = new PermissionStore(PermissionStore.FileForProfile(AppPaths.DataDir, profile.ProfileName));
-        // Sol's saved consent is authoritative, including when its file is missing or corrupt.
+        // Sol's saved consent is authoritative for websites. Extensions also appear
+        // here, but their manifest grants cannot be reset through the website API.
         var currentPermissions = await profile.GetNonDefaultPermissionSettingsAsync();
         foreach (var current in currentPermissions)
         {
-            var answer = PermissionStore.OriginOf(current.PermissionOrigin) is { } origin
-                ? store.Get(origin, current.PermissionKind.ToString()) : null;
+            if (PermissionStore.OriginOf(current.PermissionOrigin) is not { } origin) continue;
+            var answer = store.Get(origin, current.PermissionKind.ToString());
             var expected = answer is null ? CoreWebView2PermissionState.Default
                 : answer.Value ? CoreWebView2PermissionState.Allow : CoreWebView2PermissionState.Deny;
             if (current.PermissionState != expected)
-                await profile.SetPermissionStateAsync(current.PermissionKind, current.PermissionOrigin, expected);
+                await profile.SetPermissionStateAsync(current.PermissionKind, origin, expected);
         }
         foreach (var answer in store.All)
             if (Enum.TryParse<CoreWebView2PermissionKind>(answer.Kind, out var kind)
@@ -32,8 +33,9 @@ internal static class NativePermissions
     {
         foreach (var current in await profile.GetNonDefaultPermissionSettingsAsync())
         {
-            if (origin is null || PermissionStore.OriginOf(current.PermissionOrigin) == origin)
-                await profile.SetPermissionStateAsync(current.PermissionKind, current.PermissionOrigin, CoreWebView2PermissionState.Default);
+            if (PermissionStore.OriginOf(current.PermissionOrigin) is not { } website) continue;
+            if (origin is null || website == origin)
+                await profile.SetPermissionStateAsync(current.PermissionKind, website, CoreWebView2PermissionState.Default);
         }
     }
 }

@@ -44,8 +44,8 @@ export default function Sidebar() {
         onClick={e=>{const box=e.currentTarget.getBoundingClientRect();send({type:'session.menu',id:activeTab.id,x:box.left,y:box.bottom+6})}}>
         <span className="sidebar-session-symbol"><Icon name={activeTab.privateMode?'private':'session'} size={15}/></span><span className="sidebar-session-name">{activeTab.sessionName}</span>{!activeTab.privateMode&&<Icon d="M5 6.5l3 3 3-3" size={12}/>}
       </Button>}
+      <SidebarPinned state={state} icons={icons} />
       <div className="sidebar-scroll" data-tab-count={tabs.length}>
-        <SidebarPinned state={state} icons={icons} />
         <SidebarTabs state={state} icons={icons} />
       </div>
       <div className="sidebar-drag-hint" aria-live="polite" />

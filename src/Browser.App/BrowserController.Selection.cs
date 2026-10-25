@@ -15,6 +15,23 @@ public sealed partial class BrowserController
         var text = value.Text;
         switch (action)
         {
+            case "preview" when kind=="link"&&IsWeb(text): _=ShowLinkPreviewAsync(tabId,text);break;
+            case "more" when kind == "code": ShowSelectionMenu(tabId,value,x,y); break;
+            case "more" when kind is "link" or "image" && IsWeb(text):
+                ShowMenu(x,y,[
+                    (T("Aperçu du lien","Preview link"),()=>_afterMenu=()=>_=ShowLinkPreviewAsync(tabId,text)),
+                    (T("Ouvrir dans un nouvel onglet","Open in a new tab"),()=>{Open(text,activate:false);Refresh();}),
+                    (T("Ouvrir en vue scindée","Open in split view"),()=>{Split(Open(text,activate:false).Id);Refresh();}),
+                    (T("Copier le lien","Copy link"),()=>Copy(text)),
+                    (T("Ajouter à une note…","Add to a note…"),()=>_afterMenu=()=>AskNoteForSelection(tabId,kind=="image"?$"![]({text})":text,x,y))]); break;
+            case "download" when kind == "video" && _settings.VideoDownloads: OpenVideos(tabId); break;
+            case "more" when kind == "video":
+                ShowMenu(x, y, [
+                    (T("Télécharger la vidéo…", "Download video…"), () => _afterMenu = () => OpenVideos(tabId)),
+                    (T("Copier le lien vidéo", "Copy video link"), () => Copy(text)),
+                    (T("Ouvrir dans un nouvel onglet", "Open in a new tab"), () => { if (IsWeb(text)) { Open(text, activate: false); Refresh(); } })
+                ]);
+                break;
             case "tab" when IsWeb(text): Open(text, activate: false); Refresh(); break;
             case "split" when IsWeb(text) && _tabs.ActiveId == tabId: Split(Open(text, activate: false).Id); Refresh(); break;
             case "link" when IsWeb(text):

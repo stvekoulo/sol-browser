@@ -36,6 +36,11 @@ public sealed partial class BrowserController
                 ])),
         ];
         if (simulated) items.Add((T("Pivoter l'appareil", "Rotate device"), () => _afterMenu = () => _pages.RotateDevice(tabId)));
+        if(_pages.DeviceOf(tabId)==PageHost.Comparison) {
+            items.Add((_pages.DeviceSyncEnabled(tabId)?T("Désactiver les interactions synchronisées","Disable synchronized interactions"):T("Synchroniser clics, saisie et défilement","Sync clicks, typing and scrolling"),()=>_pages.ToggleDeviceSync(tabId)));
+            items.Add((T("Basculer le thème des maquettes","Toggle mockup color scheme"),()=>_pages.ToggleDeviceDark(tabId)));
+        }
+        items.Add((T("Espaces de travail…","Workspaces…"),()=>_afterMenu=()=>ShowWorkspaces()));
         if (simulated) items.Add((T("Revenir à la vue ordinateur", "Back to desktop view"), () => _afterMenu = () => _pages.SetDevice(tabId, null)));
         return items;
     }
@@ -92,6 +97,7 @@ public sealed partial class BrowserController
             }
             if (link is not null && IsWeb(link))
             {
+                items.Add((T("Aperçu du lien","Preview link"),()=>_afterMenu=()=>_=ShowLinkPreviewAsync(tabId,link)));
                 items.Add((T("Ouvrir le lien dans un nouvel onglet", "Open link in a new tab"), () => OpenLink(tabId, link)));
                 items.Add((T("Ouvrir le lien en vue scindée", "Open link in split view"), () => Split(OpenLink(tabId, link, activate: false).Id)));
                 items.Add(("", null));
@@ -210,12 +216,12 @@ public sealed partial class BrowserController
     }
 
     // Les onglets rouverts restent endormis : seul celui qu'on affiche charge sa page (voir PageHost.AddAsleep).
-    private void RestoreSession()
+    private void RestoreSession(Session? saved = null, bool restoreLayout = false)
     {
         _restoringSession = true;
         try
         {
-        var session = JsonFileStore.Load<Session>(AppPaths.Session);
+        var session = saved ?? JsonFileStore.Load<Session>(AppPaths.Session);
         var tabs = session.Urls.Select((url, i) => Open(url, activate: false, pinned: i < session.PinnedCount, asleep: true,
             sessionId: i < session.SessionIds.Count ? session.SessionIds[i] : "")).ToList();
         if (tabs.Count == 0) { Open(_settings.HomePage); return; }
@@ -250,7 +256,9 @@ public sealed partial class BrowserController
 
         if (session.ActiveIndex >= 0 && session.ActiveIndex < tabs.Count) Activate(tabs[session.ActiveIndex].Id);
         else Open(_settings.HomePage);
-        // Les anciennes vues scindées ne chargent pas une seconde page inactive au redémarrage.
+        if (restoreLayout && session.PrimaryIndex is { } p && session.SecondaryIndex is { } s
+            && p >= 0 && s >= 0 && p < tabs.Count && s < tabs.Count && p != s)
+        { _split.Open(tabs[p].Id, tabs[s].Id); _split.Resize(session.Ratio); Activate(tabs[p].Id); Refresh(); }
         }
         finally { _restoringSession = false; }
     }

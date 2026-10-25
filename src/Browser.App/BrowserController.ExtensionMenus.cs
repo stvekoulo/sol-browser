@@ -128,22 +128,38 @@ public sealed partial class BrowserController
     private static async Task<ExtensionInfo> DownloadStoreExtensionAsync(string id, string staging)
     {
         var version = (await AdBlock.EnvironmentAsync()).BrowserVersionString.Split(' ')[0];
-        using var client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(60) };
+        using var client = new System.Net.Http.HttpClient { Timeout = System.Threading.Timeout.InfiniteTimeSpan };
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
         using var response = await client.GetAsync(ExtensionPackage.DownloadUri(id, version), System.Net.Http.HttpCompletionOption.ResponseHeadersRead, timeout.Token);
         // Extension retirée du store, payante, ou réservée à un autre navigateur : le store répond sans paquet.
         if (response.StatusCode == System.Net.HttpStatusCode.NoContent)
             throw new InvalidDataException(T("Le Chrome Web Store ne fournit pas cette extension (retirée, payante ou réservée à Chrome).", "The Chrome Web Store does not provide this extension (removed, paid or Chrome-only)."));
         response.EnsureSuccessStatusCode();
-        using var stream = await response.Content.ReadAsStreamAsync();
-        using var package = new MemoryStream();
-        var buffer = new byte[65536]; int count;
-        while ((count = await stream.ReadAsync(buffer, timeout.Token)) != 0)
+        Directory.CreateDirectory(Path.GetDirectoryName(staging)!);
+        // A sibling file cannot be mistaken for part of the unpacked extension.
+        var packagePath = staging + ".crx";
+        try
         {
-            if (package.Length + count > 32 * 1024 * 1024) throw new InvalidDataException(T("Extension trop volumineuse (maximum 32 Mo).", "Extension too large (32 MB at most)."));
-            package.Write(buffer, 0, count);
+            await using (var package = new FileStream(packagePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, useAsync: true))
+            {
+                await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token);
+                var buffer = new byte[65536];
+                while (true)
+                {
+                    // Abort a stalled transfer, not a large download that keeps progressing.
+                    timeout.CancelAfter(TimeSpan.FromSeconds(60));
+                    var count = await stream.ReadAsync(buffer, timeout.Token);
+                    if (count == 0) break;
+                    await package.WriteAsync(buffer.AsMemory(0, count), timeout.Token);
+                }
+            }
+            await Task.Run(() =>
+            {
+                using var package = File.OpenRead(packagePath);
+                ExtensionPackage.Extract(package, id, staging);
+            });
         }
-        ExtensionPackage.Extract(package.ToArray(), id, staging);
+        finally { if (File.Exists(packagePath)) File.Delete(packagePath); }
         return ExtensionCatalog.Read(staging, id)!;
     }
 

@@ -56,22 +56,40 @@ public static class ExtensionPackage
 
     public static void Extract(byte[] package, string id, string destination)
     {
-        if (!ExtensionCatalog.IsId(id) || package.Length is < 12 or > 32 * 1024 * 1024
-            || !package.AsSpan(0, 4).SequenceEqual("Cr24"u8) || BinaryPrimitives.ReadUInt32LittleEndian(package.AsSpan(4)) != 3)
+        using var stream = new MemoryStream(package, writable: false);
+        Extract(stream, id, destination);
+    }
+
+    /// <summary>Vérifie et extrait sur disque, sans plafond de taille ni copie du paquet en mémoire.</summary>
+    public static void Extract(Stream package, string id, string destination)
+    {
+        if (!ExtensionCatalog.IsId(id) || !package.CanRead || !package.CanSeek || package.Length < 12)
             throw new InvalidDataException("Paquet CRX3 invalide.");
-        var headerSize = BinaryPrimitives.ReadUInt32LittleEndian(package.AsSpan(8));
+        package.Position = 0;
+        Span<byte> prefix = stackalloc byte[12];
+        package.ReadExactly(prefix);
+        if (!prefix[..4].SequenceEqual("Cr24"u8) || BinaryPrimitives.ReadUInt32LittleEndian(prefix[4..]) != 3)
+            throw new InvalidDataException("Paquet CRX3 invalide.");
+        var headerSize = BinaryPrimitives.ReadUInt32LittleEndian(prefix[8..]);
+        // Only the small protobuf envelope is bounded, never the signed archive.
         if (headerSize > 1024 * 1024 || headerSize >= package.Length - 12) throw new InvalidDataException("En-tête CRX3 invalide.");
-        var header = Fields(package.AsSpan(12, (int)headerSize).ToArray());
+        var envelope = new byte[(int)headerSize];
+        package.ReadExactly(envelope);
+        var header = Fields(envelope);
         var signed = header.SingleOrDefault(f => f.Tag == 10000).Data ?? throw new InvalidDataException("Signature absente.");
         var expected = Fields(signed).SingleOrDefault(f => f.Tag == 1).Data;
         if (expected is not { Length: 16 } || Id(expected) != id) throw new InvalidDataException("Le paquet ne correspond pas à cette extension.");
         var archiveOffset = 12 + (int)headerSize;
-        using var payload = new MemoryStream();
-        payload.Write("CRX3 SignedData\0"u8);
-        var size = new byte[4];
+        using var payload = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        payload.AppendData("CRX3 SignedData\0"u8);
+        Span<byte> size = stackalloc byte[4];
         BinaryPrimitives.WriteInt32LittleEndian(size, signed.Length);
-        payload.Write(size); payload.Write(signed); payload.Write(package.AsSpan(archiveOffset));
-        var hash = SHA256.HashData(payload.ToArray());
+        payload.AppendData(size);
+        payload.AppendData(signed);
+        var buffer = new byte[65536];
+        int count;
+        while ((count = package.Read(buffer)) != 0) payload.AppendData(buffer.AsSpan(0, count));
+        var hash = payload.GetHashAndReset();
         byte[]? key = null;
         foreach (var proof in header.Where(f => f.Tag is 2 or 3))
         {
@@ -93,16 +111,16 @@ public static class ExtensionPackage
             if (valid) { key = publicKey; break; }
         }
         if (key is null) throw new InvalidDataException("Signature de l’extension invalide.");
-        using var zip = new ZipArchive(new MemoryStream(package, archiveOffset, package.Length - archiveOffset));
+        using var archive = new ExtensionArchiveStream(package, archiveOffset);
+        using var zip = new ZipArchive(archive, ZipArchiveMode.Read);
         var root = Path.GetFullPath(destination) + Path.DirectorySeparatorChar;
-        long total = 0;
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (zip.Entries.Count > 20000) throw new InvalidDataException("Trop de fichiers dans l’extension.");
         foreach (var entry in zip.Entries)
         {
             var target = Path.GetFullPath(Path.Combine(destination, entry.FullName));
             if (!target.StartsWith(root, StringComparison.OrdinalIgnoreCase) || entry.FullName.Contains(':')
-                || !names.Add(target) || (total += entry.Length) > 128 * 1024 * 1024)
+                || !names.Add(target))
                 throw new InvalidDataException("Archive d’extension non sûre.");
             if (entry.FullName.EndsWith('/')) { Directory.CreateDirectory(target); continue; }
             if (entry.FullName.StartsWith("_metadata/", StringComparison.Ordinal)) continue;

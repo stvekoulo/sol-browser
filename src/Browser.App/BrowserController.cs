@@ -65,6 +65,8 @@ public sealed partial class BrowserController
         _welcome = welcome;
         (_window, _pages, _bridge, _popup, _dock, _tools, _settings) = (window, pages, bridge, popup, dock, panel, settings);
         _pages.PagePressed += DismissAiPopup;
+        _pages.PreviewPromoted+=PromoteLinkPreview;
+        _pages.LinkPreviewRequested+=(id,url)=>_=ShowLinkPreviewAsync(id,url);
         WireSelection();
         _network = new NetworkInspector(panel.Post);
         _sessionSave.Tick += (_, _) => { _sessionSave.Stop(); SaveSession(); };
@@ -76,6 +78,7 @@ public sealed partial class BrowserController
         _chatGpt.Changed += () => _window.DispatcherQueue.TryEnqueue(() =>
         {
             if (_closingWindow) return;
+            if (!AiReady && _voice is not null) CloseVoice();
             if (AiReady && !_chatGpt.SigningIn && !_settings.SolAiWelcomeShown)
             {
                 _settings.SolAiWelcomeShown = true; JsonFileStore.Save(AppPaths.Settings, _settings);
@@ -95,6 +98,7 @@ public sealed partial class BrowserController
             _tabs.Update(id, url, title); Refresh();
         };
         _pages.RuntimeChanged += Refresh;
+        _pages.VideoChanged += VideoAvailable;
         _sessions.Seed();
         _pages.CreatePopupTab = (source, url) =>
         {
@@ -188,9 +192,14 @@ public sealed partial class BrowserController
         _window.Closed += (_, _) =>
         {
             _closingWindow = true;
+            _pages.CloseAllPreviews();
+            foreach (var job in _videoJobs) job.Cancel();
+            _videoProbeCancel?.Cancel();
+            _videoWarmupCancel.Cancel();
+            foreach (var discovery in _videoDiscovery.Values) discovery.Cancel.Cancel();
             _noteMaintenance.Stop();
             CancelAi();
-            CancelChat(); CancelCategories(); _chatGpt.CancelSignIn();
+            CloseVoice(); CancelChat(); CancelCategories(); _chatGpt.CancelSignIn();
             _categoriesTimer.Stop();
             _pages.StopSpelling();
             _capture.Cancel();
@@ -218,6 +227,8 @@ public sealed partial class BrowserController
     {
         if (c.Type is not ("popup.size" or "dock.size" or "split.resize")) DebugLog.Write($"commande {c.Type} {c.Id} {c.Index}");
         if (SidebarCommand(c)) return;
+        if (PreviewCommand(c)) return;
+        if (WorkspaceCommand(c)) return;
         if (ChatCommand(c)) return;
         if (TabGroupAiCommand(c)) return;
         if (ExecuteCommands0(c)) return;

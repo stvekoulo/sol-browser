@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { t } from './i18n';
 import { Icon } from './Icons';
 import { toCurl } from './networkFormat';
+import { send } from './bridge';
 
 export type Detail = {
   tabId: string;
@@ -28,6 +29,7 @@ export function DetailPane({ detail, onClose, onEdit }: { detail: Detail; onClos
         </Button>
       </div>
       <div className="net-detail-actions">
+        <Button variant="ghost" size="sm" whileHover={undefined} className="pill-action" title={t('Demander à ChatGPT d’analyser cette requête, après autorisation des détails', 'Ask ChatGPT to analyze this request after permission for its details')} onClick={()=>send({type:'chat.ask',id:'developer',input:t(`Analyse la requête réseau ${detail.id} de l’onglet ${detail.tabId}. Lis ses détails avec read_network_request, explique l’erreur, distingue les faits des hypothèses et propose une correction concrète et sa vérification.`, `Analyze network request ${detail.id} in tab ${detail.tabId}. Read its details with read_network_request, explain the error, distinguish facts from hypotheses and suggest a concrete fix and verification.`)})}>{t('Expliquer avec ChatGPT','Explain with ChatGPT')}</Button>
         <Button variant="ghost" size="sm" whileHover={undefined} className="pill-action net-edit" onClick={onEdit}><Icon name="edit" size={14}/>{t('Modifier et renvoyer','Edit and resend')}</Button>
         <CopyAction label={t('Copier l’URL','Copy URL')} text={detail.url}/>
         <CopyAction label="cURL (Bash)" text={toCurl(detail)}/>

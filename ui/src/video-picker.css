@@ -1,0 +1,59 @@
+.video-picker { padding: 20px; min-width: 0; display: flex; flex-direction: column; gap: 14px; color: var(--text); }
+.video-header { display: flex; align-items: center; gap: 12px; }
+.video-header > div { flex: 1; min-width: 0; }
+.video-header h2 { font-size: 16px; font-weight: 600; line-height: 1.35; margin: 0 0 3px; }
+.video-header > div > span { font-size: 12px; color: var(--text-dim); }
+.video-heading-icon { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; flex-shrink: 0; background: color-mix(in srgb, var(--accent) 13%, var(--bg-tab-hover)); color: var(--accent); }
+.video-close { flex-shrink: 0; width: 36px; height: 36px; border-radius: 12px; }
+.video-page-title { margin: 0; padding: 12px 14px; border-radius: 12px; background: var(--bg-tab-hover); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.video-quality-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.video-quality-heading h3 { font-size: 13px; font-weight: 600; margin: 0; }
+.video-quality-heading > span { color: var(--text-dim); font-size: 11px; }
+.video-picker .video-qualities { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; max-height: min(280px, 42vh); overflow-y: auto; padding: 3px; }
+.video-picker .video-quality-item { align-items: center; min-height: 60px; padding: 12px; gap: 10px; border-radius: 13px; background: var(--bg-tab-hover); border: 1px solid var(--border-card); min-width: 0; transition: background-color 140ms ease, border-color 140ms ease; }
+.video-quality-item:hover { border-color: var(--border-strong); }
+.video-quality-item.is-selected { background: color-mix(in srgb, var(--accent) 10%, var(--bg-tab-hover)); border-color: var(--accent); }
+.video-picker [role="radio"] { width: 20px; height: 20px; padding: 0; border: 2px solid var(--border-strong); border-radius: 50%; background: transparent; flex-shrink: 0; }
+.video-picker [role="radio"][aria-checked="true"] { border-color: var(--accent); }
+.video-picker [role="radio"] > span { background: var(--accent); }
+.video-quality-item:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.video-quality-item > span { min-width: 0; overflow-wrap: anywhere; }
+.video-quality-item > span > span:first-child { font-size: 13px; font-weight: 500; }
+.video-quality-item > span > span + span { font-size: 11px; line-height: 1.35; color: var(--text-dim); }
+.video-picker .video-download-btn { width: 100%; min-height: 46px; height: auto; padding: 12px 14px; border-radius: 14px; font-size: 14px; font-weight: 600; gap: 10px; white-space: normal; background: var(--accent); color: #fff; }
+.video-download-btn > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.video-picker .video-back { align-self: flex-start; gap: 6px; padding-inline: 6px; }
+.video-sources { display: grid; gap: 8px; max-height: min(320px, 48vh); overflow-y: auto; padding: 2px; }
+.video-picker .video-source { display: flex; width: 100%; height: auto; min-height: 62px; gap: 12px; justify-content: flex-start; text-align: left; padding: 12px; border-radius: 13px; background: var(--bg-tab-hover); border: 1px solid var(--border-card); color: var(--text); white-space: normal; }
+.video-source > span:nth-child(2) { display: grid; gap: 4px; min-width: 0; flex: 1; }
+.video-source strong { font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
+.video-source small { font-size: 11px; color: var(--text-dim); overflow-wrap: anywhere; }
+.video-status { min-height: 150px; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px; text-align: center; padding: 16px 8px; }
+.video-status > strong { font-size: 14px; font-weight: 500; }
+.video-status > p { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-dim); max-width: 34ch; }
+.video-status > span { color: var(--accent); }
+.video-footer-hints { padding-top: 12px; border-top: 1px solid var(--border-card); font-size: 11px; line-height: 1.45; color: var(--text-dim); text-align: center; }
+.video-help { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-dim); }
+.video-collection-actions, .video-collection-pages { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.video-collection-pages > span { color: var(--text-dim); font-size: 11px; }
+.video-collection-list { max-height: min(250px, 35vh); overflow-y: auto; display: grid; gap: 6px; padding: 3px; }
+.video-collection-entry { padding: 10px; border-radius: 12px; background: var(--bg-tab-hover); border: 1px solid var(--border-card); min-width: 0; }
+.video-collection-entry > label { width: 100%; align-items: flex-start; }
+.video-collection-entry label { overflow-wrap: anywhere; font-size: 12px; line-height: 1.4; }
+.video-picker [role="checkbox"] { width: 20px; height: 20px; padding: 0; border: 2px solid var(--border-strong); border-radius: 6px; flex-shrink: 0; background: transparent; color: var(--text); }
+.video-picker [role="checkbox"][aria-checked="true"], .video-picker [role="checkbox"][aria-checked="mixed"] { background: var(--accent); border-color: var(--accent); color: white; }
+.video-picker [role="checkbox"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.video-batch-quality { font-size: 13px; font-weight: 600; margin: 0; }
+@media (max-width: 360px) {
+  .video-picker { padding: 14px; gap: 12px; }
+  .video-header { gap: 8px; }
+  .video-heading-icon { width: 36px; height: 36px; border-radius: 12px; }
+  .video-header h2 { font-size: 14px; }
+  .video-picker .video-quality-item { padding: 10px; gap: 8px; }
+}
+@media (max-width: 270px) { .video-picker .video-qualities { grid-template-columns: minmax(0, 1fr); } }
+@media (prefers-reduced-motion: no-preference) {
+  .video-loading { animation: video-search-pulse 1.5s ease-in-out infinite; }
+  @keyframes video-search-pulse { 50% { opacity: .45; transform: scale(.93); } }
+}
+@media (prefers-reduced-motion: reduce) { .video-picker .video-quality-item { transition: none; } }

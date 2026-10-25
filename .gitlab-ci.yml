@@ -1,0 +1,32 @@
+# Tests on merge requests and the default branch; a tag such as v0.1.0 builds the three Windows architectures, uploads the installers,
+# the archives and their checksums to the package registry, and creates the GitLab release that links to them.
+# Sol reads those release links to update itself.
+stages: [test, release]
+
+.windows:
+  tags: [saas-windows-medium-amd64]
+  before_script:
+    - . ./tools/ci-setup.ps1
+    - Push-Location ui; npm ci; if ($LASTEXITCODE -ne 0) { throw 'npm ci failed' }; Pop-Location
+
+test:
+  extends: .windows
+  stage: test
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG =~ /^v\d/
+  script:
+    - Push-Location ui; npm run build; if ($LASTEXITCODE -ne 0) { throw 'interface build failed' }; Pop-Location
+    - node tools/check-ci-upload.mjs; if ($LASTEXITCODE -ne 0) { throw 'CI upload checks failed' }
+    - dotnet test tests/Browser.Core.Tests -c Release --nologo; if ($LASTEXITCODE -ne 0) { throw 'tests failed' }
+    - dotnet build src/Browser.App -c Release --nologo; if ($LASTEXITCODE -ne 0) { throw 'build failed' }
+
+release:
+  extends: .windows
+  stage: release
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d/
+    - if: '$CI_PIPELINE_SOURCE == "api" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $SOL_RELEASE_VERSION'
+  script:
+    - ./tools/ci-release.ps1

@@ -40,3 +40,4 @@
 .sol-chat-log .sol-markdown { min-width: 0; overflow-wrap: anywhere; }
 .sol-chat-log .markdown-table { overflow-wrap: normal; }
 .sol-chat-log [role='log'] { display: flex; flex-direction: column; gap: 12px; }
+.sol-chat-permission{flex-shrink:0;margin:0;padding:6px 12px;font-size:11px;line-height:1.4;color:var(--text-dim);overflow-wrap:anywhere}

@@ -2,3 +2,4 @@
 .ai-trace { display: flex; flex-direction: column; gap: 8px; font-size: 12px; min-width: 0; }
 .ai-trace .sol-approve { padding: 6px 16px; border-radius: 999px; background: var(--accent); color: #fff; font-weight: 600; }
 .ai-trace .sol-reject { padding: 6px 14px; border-radius: 999px; background: var(--bg-tab-hover); }
+.ai-approval-always{margin-top:8px;white-space:normal}.ai-approval-hint{font-size:11px;line-height:1.45;color:var(--text-dim);margin:6px 0 0;overflow-wrap:anywhere}

@@ -6,8 +6,8 @@ namespace Browser.App;
 // Shared WebView2 environment for pages and user-installed extensions.
 public static class AdBlock
 {
-    private static Task<CoreWebView2Environment>? s_environment;
-    public static Task<CoreWebView2Environment> EnvironmentAsync() => s_environment ??= CreateEnvironmentAsync();
+    private static readonly StartupTask<CoreWebView2Environment> Engine = new(CreateEnvironmentAsync);
+    public static Task<CoreWebView2Environment> EnvironmentAsync() => Engine.GetAsync();
     private static async Task<CoreWebView2Environment> CreateEnvironmentAsync() =>
         await CoreWebView2Environment.CreateWithOptionsAsync(null, Environment.GetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER"),
             new CoreWebView2EnvironmentOptions { AreBrowserExtensionsEnabled = true });

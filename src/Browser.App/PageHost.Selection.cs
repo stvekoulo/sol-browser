@@ -18,7 +18,7 @@ public sealed partial class PageHost
             var kind = root.GetProperty("kind").GetString() ?? "";
             var action = root.GetProperty("action").GetString() ?? "";
             var value = root.GetProperty("value").GetString() ?? "";
-            if (kind is not ("selection" or "link" or "image" or "code") || value.Length is 0 or > 50_000) return;
+            if (kind is not ("selection" or "link" or "image" or "code" or "video") || value.Length is 0 or > 50_000) return;
             var ratio = root.GetProperty("ratio").GetDouble() / view.XamlRoot.RasterizationScale;
             if (!double.IsFinite(ratio) || ratio <= 0) ratio = 1;
             var origin = view.TransformToVisual(null).TransformPoint(new Windows.Foundation.Point(0, 0));

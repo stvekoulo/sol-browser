@@ -15,16 +15,18 @@
     <UseWinUI>true</UseWinUI>
     <!-- Point d'entrée écrit à la main (Program.cs) : l'installateur doit pouvoir agir avant l'interface. -->
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+    <DefineConstants Condition="'$(SolStoreBuild)' == 'true'">$(DefineConstants);SOL_STORE</DefineConstants>
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <EnableMsixTooling>true</EnableMsixTooling>
-    <Version>1.0.19</Version>
+    <Version>1.1.1</Version>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.*" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.*" />
+    <PackageReference Include="System.Speech" Version="10.0.0" />
     <PackageReference Include="Velopack" Version="1.2.161" />
     <ProjectReference Include="..\Browser.Core\Browser.Core.csproj" />
   </ItemGroup>

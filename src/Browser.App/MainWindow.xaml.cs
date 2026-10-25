@@ -108,7 +108,7 @@ public sealed partial class MainWindow : Window
         var bridge = new UiBridge(Ui, "index.html", pages: pages);
         _bridge = bridge;
         UiBridge.SystemColorsChanged += () => DispatcherQueue.TryEnqueue(bridge.BroadcastTheme);
-        _sidebar = new SidebarHost(SidebarColumn, bridge.Post);
+        _sidebar = new SidebarHost(SidebarColumn, bridge.Post, () => Root.ActualWidth);
         bridge.SidebarHost = _sidebar;
         WirePresentation(bridge,pages);
         bridge.PageColorChanged += (r, g, b) =>
@@ -155,6 +155,7 @@ public sealed partial class MainWindow : Window
             chat.Rescale();
         }
         _controller.InterfaceScaleChanged += ApplyInterfaceScale;
+        Root.SizeChanged += (_, _) => { if (_beforeFullScreen is null) _sidebar.Resize(settings.SidebarWidth * settings.UiFactor); };
         ApplyInterfaceScale();
         WireSidebarGrip(settings);
         WireGestures();
