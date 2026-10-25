@@ -68,7 +68,8 @@ if (-not $existing) {
         '--title', $tag, '--notes-file', $notes) | Out-Host
 }
 Invoke-GitHub -Arguments (@('release', 'upload', $tag, '--repo', $repo, '--clobber') + @($files.FullName)) | Out-Host
-$release = Invoke-GitHub -Arguments @('api', "repos/$repo/releases/tags/$tag") | ConvertFrom-Json
+$release = Invoke-GitHub -Arguments @('api', "repos/$repo/releases?per_page=100") |
+    ConvertFrom-Json | Where-Object { $_.tag_name -eq $tag }
 if (-not $release.draft -or $release.assets.Count -ne 13) { throw 'Incomplete draft release.' }
 $evidence = foreach ($file in $files) {
     $asset = @($release.assets | Where-Object { $_.name -eq $file.Name })
