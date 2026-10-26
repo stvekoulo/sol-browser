@@ -2,6 +2,7 @@
 param(
     [ValidateSet('x64', 'arm64', 'x86')][string[]]$Arch = @('x64', 'arm64', 'x86'),
     [string]$Out,
+    [ValidatePattern('^[1-9][0-9]*\.[0-9]+\.[0-9]+\.0$')][string]$StoreVersion,
     [switch]$SkipUiBuild
 )
 $ErrorActionPreference = 'Stop'
@@ -35,6 +36,10 @@ try {
             "-p:Platform=$platform" -p:SolStoreBuild=true --self-contained true -p:PublishReadyToRun=true `
             -o $app --nologo -v q
         if ($LASTEXITCODE) { throw "Compilation Store $a en échec." }
+        # Sous identite MSIX, WinUI cherche resources.pri (Sol.pri est le nom du build non empaquete).
+        $pri = Join-Path $app 'Sol.pri'
+        if (-not (Test-Path $pri)) { throw "Index WinUI absent : $pri" }
+        Move-Item -LiteralPath $pri -Destination (Join-Path $app 'resources.pri') -Force
         if (Get-ChildItem (Join-Path $app 'ui\assets') -Filter '*SFPro*' -ErrorAction SilentlyContinue) {
             throw "Une police Apple reste embarquée : reconstruire l’interface avant la distribution."
         }
@@ -57,11 +62,14 @@ try {
         $manifest.Package.Identity.ProcessorArchitecture = $a
         $version = ([xml](Get-Content (Join-Path $root 'src\Browser.App\Browser.App.csproj') -Raw)).Project.PropertyGroup.Version |
             Where-Object { $_ } | Select-Object -First 1
-        $manifest.Package.Identity.Version = "$version.0"
+        $packageVersion = if ($StoreVersion) { $StoreVersion } else { "$version.0" }
+        $manifest.Package.Identity.Version = $packageVersion
         $manifest.Save((Join-Path $app 'AppxManifest.xml'))
-        $package = Join-Path $Out "SolNavigateur-$version-$a.msix"
+        & (Join-Path $PSScriptRoot 'prepare-store-icons.ps1') -AppDirectory $app -SdkDirectory $sdk.FullName
+        $package = Join-Path $Out "SolNavigateur-$packageVersion-$a.msix"
         & $makeappx pack /d $app /p $package /o *> (Join-Path $Out "makeappx-$a.log")
         if ($LASTEXITCODE) { throw "Validation/paquet MSIX $a en échec : consulter makeappx-$a.log." }
+        & (Join-Path $PSScriptRoot 'check-store-package.ps1') -Package $package | Out-Null
         [pscustomobject]@{ File = $package; SHA256 = (Get-FileHash $package).Hash; Signed = $false } |
             ConvertTo-Json | Set-Content (Join-Path $Out "verification-$a.json")
     }
