@@ -79,16 +79,30 @@ public sealed partial class BrowserController
     {
         isPrivate |= AppPaths.Private;
         IReadOnlyList<Visit> history = isPrivate ? [] : _db.RecentHistory(13).Where(v => v.Url != Settings.DefaultHomePage).Take(12).ToList();
+        // Chaque icône part une seule fois, sous le nom de son domaine : un même site revient dans les favoris, l'historique
+        // et jusqu'à 40 liens par sujet, et la recopier à chaque fois faisait des messages de plusieurs mégaoctets.
+        var icons = new Dictionary<string, string?>();
+        string? Icon(string url)
+        {
+            var domain = SiteShortcut.DomainOf(url);
+            if (!icons.TryGetValue(domain, out var icon)) icons[domain] = icon = StartIcon(url);
+            return icon is null ? null : domain;
+        }
+        // Listes lues avant « icons », qui se remplit en les parcourant.
+        var favorites = _db.Bookmarks(MaxStartFavorites).Select(b => new { url = b.Url, title = b.Title, icon = Icon(b.Url) }).ToList();
+        var recent = history.Select(v => new { url = v.Url, title = v.Title, last = v.Last.ToUnixTimeMilliseconds(), icon = Icon(v.Url) }).ToList();
+        var categories = StartCategories(isPrivate, Icon);
         return JsonSerializer.Serialize(new
         {
             @event = "start", privateMode = isPrivate, lang = Language.Current, wallpaper = _settings.StartWallpaper,
             // Une photo va suivre (message « start-wallpaper ») : la page n'affiche pas l'image de Sol en l'attendant.
             wallpaperPhoto = CurrentWallpaper is not null,
             // Les favoris du profil, dans l'ordre de la bibliothèque : quatre rangées, puis le reste sur demande.
-            favorites = _db.Bookmarks(MaxStartFavorites).Select(b => new { url = b.Url, title = b.Title, icon = StartIcon(b.Url) }),
-            history = history.Select(v => new { url = v.Url, title = v.Title, last = v.Last.ToUnixTimeMilliseconds(), icon = StartIcon(v.Url) }),
+            favorites,
+            history = recent,
             groups = _tabs.Groups.Select(g => new { id = g.Id, name = g.Name, color = g.Color, count = _tabs.Tabs.Count(t => t.GroupId == g.Id) }),
-            categories = StartCategories(isPrivate),
+            categories,
+            icons = icons.Where(i => i.Value is not null).ToDictionary(i => i.Key, i => i.Value),
         });
     }
 

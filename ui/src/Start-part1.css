@@ -52,10 +52,13 @@
   max-width: 820px;
 }
 
-.start-brand { display:flex; align-items:center; gap:10px; margin-bottom:38px; }
+.start-brand { display:flex; align-items:center; gap:10px; margin-bottom:36px; }
 .start-brand img { width:44px; height:44px; border-radius:12px; }
+/* Le logo chromé est clair : sur le fond clair, une ombre fine garde ses pétales lisibles. */
+:root[data-theme="light"]:not([data-wallpaper="true"]) .start-brand img { filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.4)); }
 .start-brand > span { font-size:30px; font-weight:500; letter-spacing:-.065em; }
-.start-brand small { margin-left:16px; color:currentColor; opacity:.55; font-size:11px; }
+.start-brand small { margin:5px 0 0 12px; padding-left:12px; border-left:1px solid var(--border-card); color:var(--text-dim); font-size:12.5px; line-height:18px; }
+:root[data-wallpaper="true"] .start-brand small { color:rgba(255, 255, 255, 0.8); border-color:rgba(255, 255, 255, 0.28); }
 
 .start-section {
   margin: 0 0 38px;
@@ -107,13 +110,18 @@
 @media (hover: hover) and (pointer: fine) {
   .start-more:hover { background: var(--bg-glass-pill-hover); }
 }
-:root[data-wallpaper="true"] .start-more { background: rgba(255, 255, 255, 0.16); }
+/* Voile sombre comme le crédit photo : le texte blanc reste lisible sur une zone claire de l'image. */
+:root[data-wallpaper="true"] .start-more { background: rgba(0, 0, 0, 0.32); color: #fff; }
+@media (hover: hover) and (pointer: fine) {
+  :root[data-wallpaper="true"] .start-more:hover { background: rgba(0, 0, 0, 0.48); }
+}
 /* Grille Safari des Favoris : jusqu'à 9 tuiles squircle par rangée, centrées avec leur libellé dessous. */
 .start-favorites {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
   gap: 22px 18px;
   justify-items: start;
+  margin: 0 5px 0 -5px; /* la tuile de 64 px est centrée dans 74 px : son bord s'aligne sur le titre, même largeur de grille */
 }
 
 .start-site {
@@ -195,7 +203,7 @@
   word-break: break-word;
 }
 :root[data-wallpaper="true"] .start-site-label {
-  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.38);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6), 0 0 8px rgba(0, 0, 0, 0.45); /* lisible sur une zone blanche de l'image */
 }
 
 /* Groupes d'onglets en capsules flottantes */
@@ -227,4 +235,5 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  margin-inline: -12px; /* icônes alignées sur le titre ; le fond du survol déborde dans la marge */
 }

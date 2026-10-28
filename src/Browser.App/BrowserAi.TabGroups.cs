@@ -84,12 +84,19 @@ public sealed partial class BrowserController
         Refresh();
     }
 
-    // Suggestion pour l'éditeur de groupe : nom, couleur et icône d'après les onglets du groupe.
+    // Onglets que Sol AI regarde : ceux du groupe, ou, à la création, ceux qui vont le former (id = onglet d'origine).
+    private List<AiTab> GroupAiTabs(string id)
+    {
+        var creating = _groupEditing is { Group: null, TabId: var tabId } && tabId == id;
+        return _tabs.Tabs.Where(t => !t.Private && (creating ? _groupCreationTabs.Contains(t.Id) : t.GroupId == id))
+            .Select(t => SolAiTabGroups.Tab(t.Id, t.Url, t.Title)).OfType<AiTab>().ToList();
+    }
+
+    // Suggestion pour l'éditeur de groupe : nom, couleur et icône d'après ses onglets.
     private async Task SuggestGroupAsync(string groupId)
     {
         if (!AiReady || PrivateActive || _groupSuggesting != null) return;
-        var tabs = _tabs.Tabs.Where(t => t.GroupId == groupId && !t.Private)
-            .Select(t => SolAiTabGroups.Tab(t.Id, t.Url, t.Title)).OfType<AiTab>().ToList();
+        var tabs = GroupAiTabs(groupId);
         if (tabs.Count == 0) return;
         _groupSuggesting = groupId; _groupSuggestion = null; PublishGroupEditor();
         var answer = new StringBuilder();

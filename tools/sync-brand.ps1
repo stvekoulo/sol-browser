@@ -50,5 +50,13 @@ try {
         $g.DrawImage($source, 0, 0, 256, 256)
         $splash.Save((Join-Path $root 'src\Browser.App\Assets\setup-splash.png'), [Drawing.Imaging.ImageFormat]::Png)
     } finally { $g.Dispose(); $splash.Dispose() }
+    # Logo de la page d'accueil : affiché en 44 px, net jusqu'à 300 %, sans décoder l'original à chaque nouvel onglet.
+    $small = [Drawing.Bitmap]::new(132, 132)
+    $g = [Drawing.Graphics]::FromImage($small)
+    try {
+        $g.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+        $g.DrawImage($source, 0, 0, 132, 132)
+        $small.Save((Join-Path $root 'ui\src\assets\logo-start.png'), [Drawing.Imaging.ImageFormat]::Png)
+    } finally { $g.Dispose(); $small.Dispose() }
 } finally { $source.Dispose() }
 Write-Host 'Identité Sol synchronisée ; originaux conservés.'

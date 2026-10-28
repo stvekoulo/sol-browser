@@ -5,10 +5,13 @@ de l’onglet. L’action « Aperçu du lien » est aussi disponible dans l’é
 et dans le menu du clic droit. Les clics ordinaires gardent leur comportement.
 
 L’aperçu reprend la composition de la référence fournie : grande carte
-arrondie, page assombrie derrière et commandes flottantes à droite.
-Les boutons de 32 px utilisent des icônes de 18 px dessinées en traits, animées au
-survol et au clavier. Sur une zone étroite, les commandes passent au-dessus
-de la page. Les animations respectent la préférence système de mouvement réduit.
+arrondie qui occupe presque toute la page, page assombrie derrière et commandes
+flottantes à droite. Un en-tête porte précédent, suivant, recharger, le titre
+et le domaine de la page affichée. Les boutons reprennent les icônes animées de
+l’interface (lucide-animated : croix, nouvel onglet, flèches, recharger),
+rejouées en XAML au survol et au clavier. Sur une zone étroite, les commandes
+passent au-dessus de la page. Les animations respectent la préférence système
+de mouvement réduit.
 
 La page d’origine conserve sa position et ses formulaires. La navigation dans
 l’aperçu n’ajoute pas d’onglet ; un lien demandant une autre fenêtre continue

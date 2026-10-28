@@ -87,7 +87,7 @@ html.painted .sidebar-body:not(.floating) { transition: background-color 220ms v
 .pinned-strip { flex: none; }
 .pinned-pill.circle { width: 46px; flex: none; }
 /* Rangée de ronds seuls : ils se partagent la largeur de la carte, et passent à la ligne s'ils sont trop nombreux. */
-.pinned-row.even { display: grid; grid-template-columns: repeat(auto-fit, minmax(46px, 1fr)); }
+.pinned-row.even { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 10px; } /* même trame pour les accès rapides et les épinglés ; quatre par ligne dès 200 px */
 .pinned-row.even .pinned-pill.circle { width: auto; }
 .pinned-pill.wide { flex: 1; min-width: 0; padding: 0 14px; }
 .pinned-pill.wide span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -166,9 +166,12 @@ html.painted .sidebar-body:not(.floating) { transition: background-color 220ms v
   display: grid;
   place-items: center;
   color: var(--text-dim);
-  opacity: 0.55;
+  opacity: 0;
+  transition: opacity 120ms var(--ease-out);
 }
-.sidebar-tab:hover .sidebar-tab-close, .sidebar-tab.active .sidebar-tab-close { opacity: 0.85; }
+/* La croix apparaît sur l'onglet survolé, actif ou sélectionné au clavier : pas une colonne de croix sur toute la liste. */
+.sidebar-tab:hover .sidebar-tab-close, .sidebar-tab:focus-within .sidebar-tab-close, .sidebar-tab.active .sidebar-tab-close { opacity: 0.85; }
+@media (hover: none) { .sidebar-tab-close { opacity: 0.55; } }
 .sidebar-tab-close:hover { background: var(--bg-tab-hover); color: var(--text); opacity: 1 !important; }
 
 .sidebar-new-tab {
@@ -243,9 +246,11 @@ html.painted .sidebar-body:not(.floating) { transition: background-color 220ms v
   border-left: 2px solid color-mix(in srgb, var(--group) 70%, transparent);
 }
 
-/* Onglet déchargé : il garde sa place, atténué, et se recharge au clic. */
-.sidebar-tab.asleep, .pinned-pill.asleep { opacity: 0.55; }
-.sidebar-tab.asleep:hover, .pinned-pill.asleep:hover { opacity: 0.85; }
+/* Onglet déchargé : il garde sa place et se recharge au clic. Seule son icône pâlit, son titre reste lisible ;
+   après un redémarrage, presque tous les onglets dorment et la liste ne doit pas sembler désactivée. */
+.sidebar-tab.asleep .sidebar-tab-title { color: var(--text-dim); }
+:is(.sidebar-tab, .pinned-pill).asleep .favicon { opacity: 0.5; filter: grayscale(0.7); transition: opacity var(--fast) var(--ease-out), filter var(--fast) var(--ease-out); }
+:is(.sidebar-tab, .pinned-pill).asleep:hover .favicon { opacity: 0.9; filter: none; }
 
 /* En-tête et actions du profil : la liste conserve son propre défilement. */
 .sidebar-heading { display:flex; align-items:center; justify-content:space-between; gap:10px; flex:none; margin:0 2px 13px; }

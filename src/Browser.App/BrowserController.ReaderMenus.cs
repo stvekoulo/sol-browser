@@ -33,9 +33,9 @@ public sealed partial class BrowserController
             color = group?.Color ?? TabManager.GroupColors[_tabs.Groups.Count % TabManager.GroupColors.Count],
             icon = group?.Icon ?? "",
             presets = TabManager.GroupColors,
-            // Sol AI propose un nom, une couleur et une icône d'après les onglets du groupe existant.
-            ai = group is not null && AiReady,
-            suggesting = group is not null && _groupSuggesting == group.Id,
+            // Sol AI propose un nom, une couleur et une icône d'après les onglets du groupe, existant ou en création.
+            ai = AiReady && !PrivateActive && (group?.Id ?? tabId) is { } aiId && GroupAiTabs(aiId).Count > 0,
+            suggesting = (group?.Id ?? tabId) is { } busyId && _groupSuggesting == busyId,
             suggestion = _groupSuggestion is { } s ? new { name = s.Name, color = s.Color, icon = s.Icon } : null,
         });
     }

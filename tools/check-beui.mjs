@@ -88,7 +88,7 @@ try{
   assert.equal(await popup.evaluate(`[...document.querySelectorAll('.sol-menu-item')].find(b=>b.textContent.includes('Modifier le groupe'))?.querySelector('[data-icon]')?.getAttribute('data-icon')`),'edit','edit group uses an animated pencil');
   assert.equal(await popup.evaluate(`[...document.querySelectorAll('.sol-menu-item')].find(b=>b.textContent.includes('en veille'))?.querySelector('[data-icon]')?.getAttribute('data-icon')`),'sleep','sleep group uses an animated moon');
   await press('End',35);assert.equal(await popup.evaluate('document.activeElement.textContent.includes("Fermer le groupe")'),true);
-  await press('Home',36);await press('ArrowDown',40);await press('ArrowDown',40);
+  await press('Home',36);await press('ArrowDown',40);await press('ArrowDown',40);await press('ArrowDown',40);
   assert.equal(await popup.evaluate('document.activeElement.textContent.includes("Modifier le groupe")'),true);
   await shot('group-menu');await press('Enter',13);
   await host.wait(()=>popup.evaluate('!!document.querySelector(".group-editor")'),'menu opens editor without second close');

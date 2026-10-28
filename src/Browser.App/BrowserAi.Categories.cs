@@ -109,6 +109,6 @@ public sealed partial class BrowserController
         return items;
     }
 
-    private object StartCategories(bool isPrivate) => isPrivate || !_settings.SolAiCategories ? Array.Empty<object>()
-        : CategoryViews().Select(c => new { name = c.Name, total = c.Total, links = c.Links.Select(l => new { url = l.Url, title = l.Title.Length > 0 ? l.Title : SolAiCategories.Domain(l.Url), icon = StartIcon(l.Url) }) });
+    private object StartCategories(bool isPrivate, Func<string, string?> icon) => isPrivate || !_settings.SolAiCategories ? Array.Empty<object>()
+        : CategoryViews().Select(c => new { name = c.Name, total = c.Total, links = c.Links.Select(l => new { url = l.Url, title = l.Title.Length > 0 ? l.Title : SolAiCategories.Domain(l.Url), icon = icon(l.Url) }).ToArray() }).ToArray();
 }
