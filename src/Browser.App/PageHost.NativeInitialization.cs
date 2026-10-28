@@ -131,7 +131,8 @@ public sealed partial class PageHost
             }
             if (e.Source != Settings.DefaultHomePage || core.Source != Settings.DefaultHomePage) return;
             if (CommandParser.Parse(e.TryGetWebMessageAsString()) is { } command && command.Type is "start.ready" or "start.navigate" or "start.group" or "start.favorites"
-                or "start.open" or "start.split" or "start.copy" or "start.topic" or "start.groupedit")
+                or "start.open" or "start.split" or "start.copy" or "start.topic" or "start.groupedit"
+                or "start.bookmark.remove" or "start.history.remove")
                 StartRequested?.Invoke(tab.Id, command);
         };
         await ApplySettingsAsync(tab.Id, core);

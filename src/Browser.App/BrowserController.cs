@@ -100,14 +100,7 @@ public sealed partial class BrowserController
         _pages.RuntimeChanged += Refresh;
         _pages.VideoChanged += VideoAvailable;
         _sessions.Seed();
-        _pages.CreatePopupTab = (source, url) =>
-        {
-            var opener = _tabs.Tabs.FirstOrDefault(t => t.Id == source);
-            if (opener is null) return null;
-            var tab = _tabs.Open(url, sessionId: opener.SessionId, isPrivate: opener.Private);
-            Refresh();
-            return tab;
-        };
+        _pages.CreatePopupTab = OpenLinkedTab;
         _pages.PopupClosed += id =>
         {
             // Le moteur referme la fenêtre devenue téléchargement : sa vue pilote encore le transfert.

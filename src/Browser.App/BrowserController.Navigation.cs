@@ -11,7 +11,8 @@ public sealed partial class BrowserController
     private Tab OpenLink(string source, string url, bool activate = true)
     {
         var tab = _tabs.Tabs.FirstOrDefault(t => t.Id == source);
-        return Open(url, activate: activate, sessionId: tab?.SessionId, isPrivate: tab?.Private);
+        var linked = Open(url, activate: activate, sessionId: tab?.SessionId, isPrivate: tab?.Private);
+        return KeepInSourceGroup(linked, tab);
     }
     private void ChangeSession(string tabId, string sessionId)
     {

@@ -4,6 +4,7 @@ import {t} from './i18n';
 import {Icon} from './Icons';
 import type {Content,Item,Profile,Setting,Wallpaper} from './PopupTypes';
 import Row from './PopupRow';
+import DeleteSavedSite from './DeleteSavedSite';
 export default function LibraryPopup({content,rootRef,opening}:{content:Extract<Content,{popup:'library'}>;rootRef:RefObject<HTMLDivElement|null>;opening:number}){
 const root=rootRef;
 const [libTab,setLibTab]=useState<'bookmarks'|'history'>(content.tab??(content.bookmarks.length?'bookmarks':'history'));
@@ -62,11 +63,16 @@ useEffect(()=>()=>window.clearTimeout(libraryTimer.current),[]);
           </div>
         ) : (
           items.map((item, idx) => (
+            <div className="library-entry" key={`${item.url}-${idx}`}>
             <Row
-              key={`${item.url}-${idx}`}
               item={{ ...item, kind: libTab === 'bookmarks' ? 'site' : 'history' }}
               onPick={() => open(item)}
             />
+            <DeleteSavedSite collection={libTab} url={item.url} title={item.title} onDelete={() => {
+              window.clearTimeout(libraryTimer.current);
+              send({type:'library.remove',url:item.url,input:libTab,query:libraryQuery,index:content.page});
+            }}/>
+            </div>
           ))
         )}
       </div>

@@ -1,0 +1,70 @@
+import assert from 'node:assert/strict';
+import {DatabaseSync} from 'node:sqlite';
+import {writeFile} from 'node:fs/promises';
+import {resolve} from 'node:path';
+import {sidebarHost} from './sidebar-check-host.mjs';
+
+const host=await sidebarHost(process.argv[2]??'src/Browser.App/bin/x64/Release/net10.0-windows10.0.19041.0/win-x64/Sol.exe');
+const db=new DatabaseSync(resolve(host.profile,'browser.db'));
+db.exec('CREATE TABLE bookmarks(url TEXT PRIMARY KEY,title TEXT NOT NULL,added INTEGER NOT NULL); CREATE TABLE visits(url TEXT PRIMARY KEY,title TEXT NOT NULL,count INTEGER NOT NULL,last INTEGER NOT NULL)');
+const url=index=>`${host.origin}/entry-${index}`;
+for(let i=0;i<102;i++)db.prepare('INSERT INTO visits VALUES(?,?,?,?)').run(url(i),`Entry ${i}`,2,Date.now()+i*1000);
+for(const i of [100,101])db.prepare('INSERT INTO bookmarks VALUES(?,?,?)').run(url(i),`Entry ${i}`,i);
+db.prepare('INSERT INTO bookmarks VALUES(?,?,?)').run(`${host.origin}/kept`,'Kept favorite',102);
+db.close();
+const selector=(kind,address)=>`.saved-item-delete[data-collection="${kind}"][data-url=${JSON.stringify(address)}]`;
+const exists=(page,css)=>page.evaluate(`!!document.querySelector(${JSON.stringify(css)})`);
+const click=async(page,css)=>{
+  const point=await page.evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(css)});e.scrollIntoView({block:'nearest'});const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`);
+  await page.call('Input.dispatchMouseEvent',{type:'mouseMoved',...point});
+  if(css.includes('saved-item-delete'))await host.wait(()=>page.evaluate(`getComputedStyle(document.querySelector(${JSON.stringify(css)})).opacity==='1'`),'delete visible on hover');
+  for(const type of ['mousePressed','mouseReleased'])await page.call('Input.dispatchMouseEvent',{type,...point,button:'left',clickCount:1});
+};
+try {
+  const ui=await host.launch();
+  const command=command=>ui.evaluate(`chrome.webview.postMessage(${JSON.stringify(JSON.stringify(command))})`);
+  await command({type:'tab.open',url:'https://start.sol/index.html#start'});
+  const start=await host.connect('https://start.sol/index.html#start');
+  await start.call('Emulation.setFocusEmulationEnabled',{enabled:true});
+  await host.wait(()=>exists(start,'.start-site'),'home ready');
+  assert(await exists(start,selector('bookmarks',url(100))),'home offers a bookmark delete button');
+  await start.evaluate(`document.querySelector(${JSON.stringify(selector('bookmarks',url(100)))}).focus()`);
+  await host.wait(()=>start.evaluate(`getComputedStyle(document.activeElement).opacity==='1'`),'delete visible on keyboard focus');
+  await writeFile(resolve(host.base,'home-removal.png'),Buffer.from((await start.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+  await start.call('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,text:'\r',unmodifiedText:'\r'});
+  await start.call('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+  await host.wait(async()=>!await exists(start,selector('bookmarks',url(100))),'favorite removed from home');
+  assert(await exists(start,selector('history',url(100))),'removing a favorite preserves its history');
+  await click(start,selector('history',url(101)));
+  await host.wait(async()=>!await exists(start,selector('history',url(101))),'history removed from home');
+  assert(await exists(start,selector('bookmarks',url(101))),'removing history preserves its favorite');
+  assert(!(await host.targets()).some(target=>[url(100),url(101)].includes(target.url)),'delete does not navigate');
+  await command({type:'library.open',x:500,y:700});
+  const popup=await host.connect('#popup');
+  await host.wait(()=>exists(popup,'.library-popup'),'library ready');
+  await click(popup,selector('bookmarks',url(101)));
+  await host.wait(async()=>!await exists(popup,selector('bookmarks',url(101))),'favorite removed in library');
+  await host.wait(async()=>!await exists(start,selector('bookmarks',url(101))),'home synchronized from library');
+  await click(popup,'.popup-seg-btn:nth-child(2)');
+  await popup.evaluate(`(()=>{const input=document.querySelector('.library-search');const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;setter.call(input,'Entry');input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+  await host.wait(()=>popup.evaluate(`document.querySelectorAll('.library-entry').length===100`),'history search ready');
+  await click(popup,'.library-pages button:last-child');
+  await host.wait(()=>exists(popup,selector('history',url(0))),'last history page');
+  await click(popup,selector('history',url(0)));
+  await host.wait(()=>popup.evaluate(`document.querySelectorAll('.library-entry').length===100&&!document.querySelector('.library-pages')`),'last-page removal clamps pagination');
+  assert.equal(await popup.evaluate(`document.querySelector('.library-search').value`),'Entry','search remains after deletion');
+  assert.equal(await popup.evaluate(`document.querySelectorAll('[role="tab"]')[1].getAttribute('aria-selected')`),'true','history tab remains active');
+  await writeFile(resolve(host.base,'library-removal.png'),Buffer.from((await popup.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+  await command({type:'popup.close'});
+  await start.call('Page.reload');
+  await host.wait(()=>exists(start,'.start-site'),'home reloaded');
+  assert(!await exists(start,selector('bookmarks',url(100))),'favorite deletion survives reload');
+  await host.close(ui);
+  const saved=new DatabaseSync(resolve(host.profile,'browser.db'));
+  try {
+    assert.equal(saved.prepare('SELECT count(*) AS n FROM visits').get().n,100);
+    assert.equal(saved.prepare('SELECT count(*) AS n FROM bookmarks').get().n,1);
+    assert.equal(saved.prepare('SELECT url FROM bookmarks').get().url,`${host.origin}/kept`);
+  } finally {saved.close();}
+  console.log(JSON.stringify({passed:'home/library removal, independent favorites/history, no navigation, search and pagination preserved, persistence',evidence:host.base}));
+} finally {await host.dispose();}
