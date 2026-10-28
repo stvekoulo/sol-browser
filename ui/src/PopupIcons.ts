@@ -20,6 +20,12 @@ export const menuPaths={
   extension:'M3 3h4a2 2 0 1 1 2 0h4v4a2 2 0 1 1 0 2v4H9a2 2 0 1 0-2 0H3V9a2 2 0 1 0 0-2z',
   tools:'M2 3h12v10H2zM4 6l2 2-2 2M8 10h3',
   spell:'M2 11l3-8 3 8M3 8h4M9 11l2 2 3-4',
+  preview:'M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8zM8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4',
+  ask:'M2.5 3.5h11v7.5H7.5l-3 2.5V11h-2zM6.6 6.1a1.4 1.4 0 1 1 1.9 1.3c-.3.1-.5.4-.5.8M8 9.4h.01',
+  sync:'M2.5 7a5.5 5.5 0 0 1 9.6-2.6M12.5 2v3h-3M13.5 9a5.5 5.5 0 0 1-9.6 2.6M3.5 14v-3h3',
+  theme:'M8 2.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11M8 2.5v11M8 5h3.5M8 8h5.5M8 11h3.5',
+  workspace:'M2.5 2.5h5v6h-5zM9.5 2.5h4v3h-4zM9.5 7.5h4v6h-4zM2.5 10.5h5v3h-5z',
+  search:'M7 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M10 10l3 3',
 };
 const normalized=(label:string)=>label.normalize('NFD').replace(/\p{M}/gu,'').toLowerCase().trim();
 export function menuIconPath(label: string): string {
@@ -39,6 +45,12 @@ export function menuIconPath(label: string): string {
   if(has('supprimer','retirer','delete','remove'))return menuPaths.trash;
   if (has('epingler', 'detacher', 'pin','unpin')) return 'M5.5 2.5h5l.5 4 2 2v1h-9v-1l2-2zM8 9.5v4.5';
   if (isClosing(label)) return 'M4.5 4.5l7 7M11.5 4.5l-7 7';
+  if(has('apercu','preview'))return menuPaths.preview;
+  if(has('espaces de travail','workspace','workspaces'))return menuPaths.workspace;
+  if(has('poser une question','ask about','ask'))return menuPaths.ask;
+  if(has('rechercher','search'))return menuPaths.search;
+  if(has('synchroniser','synchronisees','sync','synchronized'))return menuPaths.sync;
+  if(has('theme','color scheme'))return menuPaths.theme;
   if(has('scindee','split','a cote','beside'))return 'M2 3h12v10H2zM8 3v10';
   if(has('nouvel onglet','new tab'))return menuPaths.tab;
   if(has('note','notes'))return menuPaths.note;
@@ -46,15 +58,15 @@ export function menuIconPath(label: string): string {
   if(has('extension','extensions'))return menuPaths.extension;
   if(has('imprimer','print'))return menuPaths.print;
   if(has('couper','cut'))return menuPaths.cut;
-  if(has('tout selectionner','select all'))return menuPaths.select;
+  if(has('tout selectionner','selectionner tout','select all'))return menuPaths.select;
   if(has('annuler','undo'))return menuPaths.undo;
   if(has('retablir','redo'))return menuPaths.redo;
   if(has('sol ai'))return 'M4 2.5h5.5L12 5v8.5H4zM6 7.5h4M6 10h4';
-  if(has('orthographe','spelling'))return menuPaths.spell;
+  if(has('orthographe','orthographique','spelling','spell check','spellcheck'))return menuPaths.spell;
   if(has('devtools'))return menuPaths.tools;
   if(has('design'))return menuPaths.edit;
   if (has('pivoter', 'rotate')) return 'M12.8 8a4.8 4.8 0 1 1-1.4-3.4M12.8 3.2v3h-3';
-  if (has('comparer', 'compare', 'ecrans', 'screens')) return 'M1.5 4.5h3.5v7H1.5zM6.5 3.5h3v9h-3zM11 5.5h3.5v5H11z';
+  if (has('comparer', 'compare', 'comparaison', 'comparison', 'ecrans', 'screens')) return 'M1.5 4.5h3.5v7H1.5zM6.5 3.5h3v9h-3zM11 5.5h3.5v5H11z';
   if (has('macbook', 'imac')) return 'M3.5 3.5h9v6.5h-9zM1.5 12.5h13';
   if (has('ordinateur', 'desktop')) return 'M2.5 3.5h11v7h-11zM6 13h4M8 10.5V13';
   if (has('mobile', 'iphone', 'ipad', 'appareil', 'device')) return 'M5 2.5h6v11H5zM7.3 11.5h1.4';

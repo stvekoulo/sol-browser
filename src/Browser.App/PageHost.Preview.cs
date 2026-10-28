@@ -2,6 +2,7 @@ using Browser.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.Web.WebView2.Core;
 using Windows.System;
 using Windows.UI;
@@ -10,8 +11,17 @@ namespace Browser.App;
 
 public sealed partial class PageHost
 {
-    private sealed record PreviewSurface(string SourceId, Grid Overlay, WebView2 View, TextBlock Status, ProgressBar Progress)
-    { public string Url = ""; public bool Loading; }
+    private sealed record PreviewSurface(string SourceId, Grid Overlay, WebView2 View, TextBlock Status, ProgressBar Progress,
+        TextBlock Title, TextBlock Host, Button Back, Button Forward)
+    {
+        public string Url = ""; public bool Loading;
+        public void Show(string url, string title)
+        {
+            var host = Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri.Host : url;
+            Host.Text = host.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? host[4..] : host;
+            Title.Text = title.Length > 0 ? title : Host.Text;
+        }
+    }
     private readonly Dictionary<string, PreviewSurface> _previews = [];
     private PreviewSurface? _preview;
     private string? _previewTabId;
@@ -56,7 +66,7 @@ public sealed partial class PageHost
     {
         if (!LinkPreview.Allowed(url) || Core(sourceId) is not { } source) return;
         ClosePreviewFor(sourceId);
-        var preview = CreatePreview(sourceId); preview.Url = url; _previews[sourceId] = preview;
+        var preview = CreatePreview(sourceId); preview.Url = url; preview.Show(url, ""); _previews[sourceId] = preview;
         SetPreviewTab(_previewTabId ?? sourceId);
         container.Children.Add(preview.Overlay);
         try
@@ -77,7 +87,9 @@ public sealed partial class PageHost
                 if (!LinkPreview.Allowed(e.Uri)) { e.Cancel = true; return; }
                 preview.Loading = true; preview.Progress.Visibility = Visibility.Visible; preview.Status.Visibility = Visibility.Collapsed;
             };
-            core.SourceChanged += (_, _) => { if (LinkPreview.Allowed(core.Source)) preview.Url = core.Source; };
+            core.SourceChanged += (_, _) => { if (LinkPreview.Allowed(core.Source)) { preview.Url = core.Source; preview.Show(core.Source, core.DocumentTitle); } };
+            core.DocumentTitleChanged += (_, _) => preview.Show(preview.Url, core.DocumentTitle);
+            core.HistoryChanged += (_, _) => { preview.Back.IsEnabled = core.CanGoBack; preview.Forward.IsEnabled = core.CanGoForward; };
             core.NavigationCompleted += (_, e) =>
             {
                 preview.Loading = false; preview.Progress.Visibility = Visibility.Collapsed;
@@ -120,44 +132,62 @@ public sealed partial class PageHost
         var hoverBg = new SolidColorBrush(isDark ? Color.FromArgb(240, 48, 48, 54) : Color.FromArgb(245, 240, 240, 245));
         var borderBrush = new SolidColorBrush(isDark ? Color.FromArgb(38, 255, 255, 255) : Color.FromArgb(25, 0, 0, 0));
         var ink = new SolidColorBrush(isDark ? Color.FromArgb(255, 245, 245, 245) : Color.FromArgb(255, 24, 24, 27));
+        var muted = new SolidColorBrush(isDark ? Color.FromArgb(150, 245, 245, 245) : Color.FromArgb(150, 24, 24, 27));
+        var clear = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
 
-        var overlay = new Grid { Background = new SolidColorBrush(Color.FromArgb(120, 0, 0, 0)) };
+        var overlay = new Grid { Background = new SolidColorBrush(Color.FromArgb(140, 0, 0, 0)) };
         Grid.SetColumnSpan(overlay, 3); Canvas.SetZIndex(overlay, 50);
 
+        var slide = new TranslateTransform();
         var card = new Grid
         {
-            CornerRadius = new CornerRadius(18),
+            CornerRadius = new CornerRadius(16),
             Background = new SolidColorBrush(surfaceBg),
             BorderBrush = borderBrush,
             BorderThickness = new Thickness(1),
             Shadow = new ThemeShadow(),
             Translation = new System.Numerics.Vector3(0, 0, 32),
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center
+            RenderTransform = slide,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top
         };
+        card.RowDefinitions.Add(new RowDefinition { Height = new GridLength(PreviewHeaderHeight) });
+        card.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         overlay.Children.Add(card);
 
         overlay.PointerPressed += (_, e) => { if (ReferenceEquals(e.OriginalSource, overlay)) { ClosePreview(); e.Handled = true; } };
         overlay.KeyDown += (_, e) => { if (e.Key == VirtualKey.Escape) { ClosePreview(); e.Handled = true; } };
 
+        // En-tête : l'historique propre à l'aperçu, puis le titre et le domaine de la page affichée.
+        var header = new Grid { Padding = new Thickness(8, 0, 16, 0), BorderBrush = borderBrush, BorderThickness = new Thickness(0, 0, 0, 1) };
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        Button Nav(string label, string kind) => PreviewButton(label, kind, () => NavigatePreview(kind), ink, clear, hoverBg, clear, 32, 16, 8);
+        var back = Nav(Language.T("Page précédente", "Back"), "back");
+        var forward = Nav(Language.T("Page suivante", "Forward"), "forward");
+        back.IsEnabled = forward.IsEnabled = false;
+        var nav = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
+        nav.Children.Add(back); nav.Children.Add(forward); nav.Children.Add(Nav(Language.T("Recharger", "Reload"), "reload"));
+        header.Children.Add(nav);
+        var title = new TextBlock { Foreground = ink, FontSize = 13, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis, TextWrapping = TextWrapping.NoWrap };
+        var host = new TextBlock { Foreground = muted, FontSize = 11.5, TextTrimming = TextTrimming.CharacterEllipsis, TextWrapping = TextWrapping.NoWrap };
+        var label = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 0, 0), Spacing = 1 };
+        label.Children.Add(title); label.Children.Add(host);
+        Grid.SetColumn(label, 1); header.Children.Add(label);
+        card.Children.Add(header);
+
         var rail = new StackPanel { Spacing = PreviewActionSpacing, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
         overlay.Children.Add(rail); Canvas.SetZIndex(rail, 2);
-
-        rail.Children.Add(PreviewRailButton(Language.T("Fermer l’aperçu (Échap)", "Close preview (Escape)"),
-            "M4 4 L16 16 M16 4 L4 16", ClosePreview, "close", ink, buttonBg, hoverBg, borderBrush));
-        rail.Children.Add(PreviewRailButton(Language.T("Ouvrir dans un nouvel onglet", "Open in a new tab"),
-            "M9 3 H4 Q3 3 3 4 V16 Q3 17 4 17 H16 Q17 17 17 16 V11 M11 3 H17 V9 M17 3 L9 11",
-            () => PromotePreview(false), "tab", ink, buttonBg, hoverBg, borderBrush));
-        rail.Children.Add(PreviewRailButton(Language.T("Ouvrir à côté", "Open beside"),
-            "M4 3 H16 Q17 3 17 4 V16 Q17 17 16 17 H4 Q3 17 3 16 V4 Q3 3 4 3 M10 3 V17",
-            () => PromotePreview(true), "split", ink, buttonBg, hoverBg, borderBrush));
+        rail.Children.Add(PreviewButton(Language.T("Fermer l’aperçu (Échap)", "Close preview (Escape)"), "close", ClosePreview, ink, buttonBg, hoverBg, borderBrush));
+        rail.Children.Add(PreviewButton(Language.T("Ouvrir dans un nouvel onglet", "Open in a new tab"), "tab", () => PromotePreview(false), ink, buttonBg, hoverBg, borderBrush));
+        rail.Children.Add(PreviewButton(Language.T("Ouvrir à côté", "Open beside"), "split", () => PromotePreview(true), ink, buttonBg, hoverBg, borderBrush));
 
         var view = new CursorWebView { DefaultBackgroundColor = surfaceBg, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch };
-        card.Children.Add(view);
-        view.SizeChanged += (_, _) => CornerClip.Set(view, 18);
+        Grid.SetRow(view, 1); card.Children.Add(view);
+        view.SizeChanged += (_, _) => CornerClip.Set(view, 16, squareTop: true);
 
-        var progress = new ProgressBar { IsIndeterminate = true, Height = 2, VerticalAlignment = VerticalAlignment.Top, HorizontalAlignment = HorizontalAlignment.Stretch };
-        Canvas.SetZIndex(progress, 2); card.Children.Add(progress);
+        var progress = new ProgressBar { IsIndeterminate = true, Height = 2, MinHeight = 2, VerticalAlignment = VerticalAlignment.Top, HorizontalAlignment = HorizontalAlignment.Stretch };
+        Grid.SetRow(progress, 1); Canvas.SetZIndex(progress, 2); card.Children.Add(progress);
 
         var status = new TextBlock
         {
@@ -169,30 +199,42 @@ public sealed partial class PageHost
             VerticalAlignment = VerticalAlignment.Bottom,
             Visibility = Visibility.Collapsed
         };
-        Canvas.SetZIndex(status, 3); card.Children.Add(status);
+        Grid.SetRow(status, 1); Canvas.SetZIndex(status, 3); card.Children.Add(status);
 
         void LayoutSurfaces()
         {
             var w = overlay.ActualWidth;
             var h = overlay.ActualHeight;
             if (w <= 0 || h <= 0) return;
-            // Reserve a real rail on wide windows; move it above the page on compact ones.
+            // La carte occupe presque toute la page, commandes à sa droite ; sur une zone étroite elles passent au-dessus.
             var compact = w < 620;
-            var margin = w < 360 ? 8 : 16;
-            var railWidth = 3 * PreviewActionSize + 2 * PreviewActionSpacing;
-            var reserve = PreviewActionSize + PreviewRailGap + margin;
-            var cardW = Math.Max(1, Math.Min(1440, compact ? w - margin * 2 : Math.Min(w * .84, w - reserve * 2)));
-            var cardH = Math.Max(1, Math.Min(980, compact ? h - PreviewActionSize - PreviewRailGap - 2 * margin : Math.Min(h * .88, h - 40)));
+            var margin = compact ? 8 : w < 900 ? 16 : 24;
+            var railLength = 3 * PreviewActionSize + 2 * PreviewActionSpacing;
+            var side = compact ? 0 : PreviewActionSize + PreviewRailGap;
+            var above = compact ? PreviewActionSize + PreviewRailGap : 0;
+            var cardW = Math.Max(1, Math.Min(1680, w - 2 * margin - side));
+            var cardH = Math.Max(1, h - 2 * margin - above);
+            var left = Math.Max(margin, (w - cardW - side) / 2);
             card.Width = cardW; card.Height = cardH;
-            card.Margin = new Thickness(0, compact ? PreviewActionSize : 0, compact ? 0 : PreviewActionSize, 0);
-            var cardLeft = (w - cardW - (compact ? 0 : PreviewActionSize)) / 2;
-            var cardTop = (h - cardH + (compact ? PreviewActionSize : 0)) / 2;
+            card.Margin = new Thickness(left, margin + above, 0, 0);
             rail.Orientation = compact ? Orientation.Horizontal : Orientation.Vertical;
-            rail.Margin = new Thickness(compact ? Math.Max(margin, (w - railWidth) / 2) : cardLeft + cardW + PreviewRailGap,
-                compact ? Math.Max(4, cardTop - PreviewActionSize - PreviewRailGap) : cardTop, 0, 0);
+            rail.Margin = compact ? new Thickness(Math.Max(margin, (w - railLength) / 2), margin, 0, 0)
+                : new Thickness(left + cardW + PreviewRailGap, margin, 0, 0);
         }
 
         overlay.SizeChanged += (_, _) => LayoutSurfaces();
-        return new(sourceId, overlay, view, status, progress);
+        overlay.Loaded += (_, _) =>
+        {
+            if (!PreviewMotion.AnimationsEnabled) return;
+            var story = new Storyboard();
+            foreach (var (target, property, from, to, ms) in new (DependencyObject, string, double, double, double)[] { (overlay, "Opacity", 0, 1, 160), (slide, "Y", 18, 0, 260) })
+            {
+                var animation = new DoubleAnimation { From = from, To = to, Duration = TimeSpan.FromMilliseconds(ms), EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+                Storyboard.SetTarget(animation, target); Storyboard.SetTargetProperty(animation, property);
+                story.Children.Add(animation);
+            }
+            story.Begin();
+        };
+        return new(sourceId, overlay, view, status, progress, title, host, back, forward);
     }
 }

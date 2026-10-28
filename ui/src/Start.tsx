@@ -3,7 +3,7 @@ import { useIconLook } from './useIconLook';
 import { formatDomain, onMessage, send } from './bridge';
 import { useFavoriteWindow } from './useFavoriteWindow';
 import { setLang, t, useLang } from './i18n';
-import logo from './assets/logo.png';
+import logo from './assets/logo-start.png'; // 132 px, produit par tools/sync-brand.ps1
 
 import './Start.css';
 import './Start-responsive.css';
@@ -19,6 +19,7 @@ type StartData = {
   history: Site[];
   groups: { id: string; name: string; color: string; count: number }[];
   categories?: { name: string; total: number; links: Site[] }[];
+  icons?: Record<string, string>; // icônes par domaine ; « icon » d'un site en donne le nom
 };
 
 const empty: StartData = {
@@ -113,8 +114,12 @@ export default function Start() {
         if (!sent.url) delete document.documentElement.dataset.wallpaperPhoto; // photo indisponible : l'image de Sol
         return;
       }
-      const next = value as StartData;
-      if (next.event !== 'start') return;
+      const received = value as StartData;
+      if (received.event !== 'start') return;
+      // Sol envoie chaque icône une seule fois : chaque site reprend la sienne par le nom de son domaine.
+      const withIcon = (site: Site) => site.icon ? { ...site, icon: received.icons?.[site.icon] } : site;
+      const next = { ...received, favorites: received.favorites.map(withIcon), history: received.history.map(withIcon),
+        categories: received.categories?.map(category => ({ ...category, links: category.links.map(withIcon) })) };
       setLang(next.lang);
       setData(next);
       document.documentElement.dataset.private = String(next.privateMode);

@@ -19,6 +19,7 @@
   .start-section-head { gap: 6px 12px; }
   .start-groups > button { padding-inline: 12px; }
   .start-history > button { gap: 8px; padding-inline: 8px; }
+  .start-history { margin-inline: -8px; }
 }
 @media (max-height: 560px) and (min-width: 681px) {
   .start-page { padding-top: 32px; }
