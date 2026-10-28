@@ -13,6 +13,8 @@ public sealed partial class BrowserController
         var url = command.Input ?? "";
         switch (command.Type)
         {
+            case "start.bookmark.remove": RemoveSavedSite(url, history: false); return true;
+            case "start.history.remove": RemoveSavedSite(url, history: true); return true;
             case "start.open":
                 if (IsWeb(url)) { Open(url, activate: false); Refresh(); }
                 return true;

@@ -77,6 +77,7 @@ public sealed partial class BrowserController
             case "library.search":
                 if (_popup.IsOpen && (_panel == "library" || _panelNext == "library")) _popup.Post(LibraryJson(c.Query!, c.Index!.Value));
                 return true;
+            case "library.remove": RemoveLibraryItem(c); return true;
             case "downloads.open": OpenDownloads(c.X!.Value, c.Y!.Value); return true;
             case "download.cancel" or "download.pause" or "download.resume": ControlDownload(id,c.Type); return true;
             case "download.open" or "download.reveal":

@@ -85,6 +85,8 @@ public sealed partial class BrowserDb : IDisposable
 
     public void RemoveBookmark(string url) => Exec("DELETE FROM bookmarks WHERE url = $url", ("$url", url));
 
+    public void RemoveHistory(string url) => Exec("DELETE FROM visits WHERE url = $url", ("$url", url));
+
     public bool IsBookmarked(string url)
     {
         using var cmd = Command("SELECT 1 FROM bookmarks WHERE url = $url", ("$url", url));

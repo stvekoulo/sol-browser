@@ -24,6 +24,12 @@
 .tab-group-heading:hover { background: color-mix(in srgb, var(--group) 25%, transparent); }
 .tab-group-header { flex: 1; min-width: 0; background: transparent; padding: 0 7px 0 10px; gap: 6px; height: 34px; }
 .tab-group-header:hover { background: transparent; }
+/* Les groupes gardent leur hauteur naturelle ; seule la liste latérale défile. */
+.tab-group-block, .tab-group-tabs, .sol-sidebar-sort, .sol-sidebar-sort-list, .sol-sidebar-sort-item { flex-shrink: 0; min-width: 0; }
+.tab-group-heading { flex: none; min-height: 34px; overflow: hidden; }
+.tab-group-header { overflow: hidden; }
+/* Le fantôme de déplacement est géré par Sol : éviter les translations superposées des listes beUI imbriquées. */
+.sol-sidebar-sort-item { height: auto; transform: none !important; }
 /* « + » et « ··· » du groupe s'ouvrent au survol ou au clavier, comme le menu des onglets ; au repos ils ne prennent
    aucune place et le nombre d'onglets se range contre le bord droit. */
 .tab-group-heading .sidebar-item-action { width: 0; height: 30px; opacity: 0; overflow: hidden; transition: opacity 120ms var(--ease-out), width 120ms var(--ease-out); }

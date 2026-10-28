@@ -4,6 +4,7 @@ import { formatDomain, onMessage, send } from './bridge';
 import { useFavoriteWindow } from './useFavoriteWindow';
 import { setLang, t, useLang } from './i18n';
 import logo from './assets/logo-start.png'; // 132 px, produit par tools/sync-brand.ps1
+import DeleteSavedSite from './DeleteSavedSite';
 
 import './Start.css';
 import './Start-responsive.css';
@@ -170,6 +171,8 @@ export default function Start() {
             {favorites.map((site, index) => (
               <div key={site.url} className="start-favorite" style={allFavorites ? { gridRow: Math.floor((visible.first + index) / columns) + 1, gridColumn: (visible.first + index) % columns + 1 } : undefined}>
                 <SiteTile site={site} />
+                <DeleteSavedSite collection="bookmarks" url={site.url} title={site.title}
+                  onDelete={() => send({type:'start.bookmark.remove',input:site.url})}/>
               </div>
             ))}
           </div>
@@ -233,7 +236,8 @@ export default function Start() {
               const domain = formatDomain(site.url);
               const title = site.title || domain;
               return (
-                <button key={site.url} onClick={() => open(site.url)} title={site.url}>
+                <div key={site.url} className="start-history-entry">
+                <button className="start-history-open" onClick={() => open(site.url)} title={site.url}>
                   <HistoryIcon site={site} />
                   <span>
                     <strong>{title}</strong>
@@ -243,6 +247,9 @@ export default function Start() {
                     {new Date(site.last!).toLocaleDateString(document.documentElement.lang, { day: 'numeric', month: 'short' })}
                   </time>
                 </button>
+                <DeleteSavedSite collection="history" url={site.url} title={site.title}
+                  onDelete={() => send({type:'start.history.remove',input:site.url})}/>
+                </div>
               );
             })}
           </div>
