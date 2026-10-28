@@ -89,6 +89,8 @@ html.painted .sidebar-body:not(.floating) { transition: background-color 220ms v
 /* Rangée de ronds seuls : ils se partagent la largeur de la carte, et passent à la ligne s'ils sont trop nombreux. */
 .pinned-row.even { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 10px; } /* même trame pour les accès rapides et les épinglés ; quatre par ligne dès 200 px */
 .pinned-row.even .pinned-pill.circle { width: auto; }
+.pinned-row.shortcuts-row { display: grid; grid-template-columns: repeat(var(--count), minmax(0, 1fr)); gap: 10px; }
+.pinned-row.shortcuts-row .pinned-pill { width: auto; min-width: 0; }
 .pinned-pill.wide { flex: 1; min-width: 0; padding: 0 14px; }
 .pinned-pill.wide span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .pinned-pill:hover { background: var(--bg-pill-solid-hover); transform: translateY(-0.5px); }
