@@ -160,6 +160,7 @@ public sealed partial class PageHost
         s.IsPasswordAutosaveEnabled = settings.SavePasswords && !AppPaths.Private && !PrivateBrowsing.IsProfile(core.Profile.ProfileName);
         s.IsSwipeNavigationEnabled = true;
         s.IsZoomControlEnabled = false; // le zoom est géré par le navigateur (Ctrl +, Ctrl -, Ctrl molette), pas par le moteur // balayage horizontal : page précédente ou suivante
+        await WireWheelZoomAsync(core);
         s.IsGeneralAutofillEnabled = false;
         s.HiddenPdfToolbarItems = CoreWebView2PdfToolbarItems.None; // recherche, pages, rotation, impression et enregistrement natifs
         _ = core.AddScriptToExecuteOnDocumentCreatedAsync(SidewaysScript);

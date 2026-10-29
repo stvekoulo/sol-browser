@@ -102,10 +102,9 @@ public sealed partial class MainWindow
             if (PopupFrame.Visibility == Visibility.Visible || CaptureFrame.Visibility == Visibility.Visible ||
                 point.X < 0 || point.Y < 0 || point.X >= Pages.ActualWidth || point.Y >= Pages.ActualHeight) return;
             var p = e.GetCurrentPoint(Root).Properties;
-            // Ctrl + molette : zoom de la page.
+            // Ctrl + wheel is routed by the document after editor handlers have run.
             if (!p.IsHorizontalMouseWheel && e.KeyModifiers.HasFlag(Windows.System.VirtualKeyModifiers.Control))
             {
-                _controller?.Shortcut(p.MouseWheelDelta > 0 ? "zoom.in" : "zoom.out");
                 return;
             }
             if (!p.IsHorizontalMouseWheel) return;

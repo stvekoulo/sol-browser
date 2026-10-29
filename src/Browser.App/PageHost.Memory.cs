@@ -34,8 +34,9 @@ public sealed partial class PageHost
         {
             if (hidden && _hiddenSince.TryAdd(id, DateTime.UtcNow) && settings.MemorySaver)
                 core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low;
-            else if (!hidden && _hiddenSince.Remove(id))
+            else if (!hidden)
             {
+                _hiddenSince.Remove(id);
                 _discardProtected.Remove(id);
                 Wake(id, core);
             }
@@ -99,8 +100,9 @@ public sealed partial class PageHost
     private void Wake(string id, CoreWebView2 core)
     {
         _suspendRefused.Remove(id);
-        if (core.IsSuspended) core.Resume();
-        else if (core.MemoryUsageTargetLevel != CoreWebView2MemoryUsageTargetLevel.Normal)
+        // Repeat the wake request even when suspension has not finished reporting its state.
+        core.Resume();
+        if (core.MemoryUsageTargetLevel != CoreWebView2MemoryUsageTargetLevel.Normal)
             core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Normal;
     }
 
