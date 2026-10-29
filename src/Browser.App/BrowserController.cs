@@ -65,6 +65,7 @@ public sealed partial class BrowserController
         _welcome = welcome;
         (_window, _pages, _bridge, _popup, _dock, _tools, _settings) = (window, pages, bridge, popup, dock, panel, settings);
         _pages.PagePressed += DismissAiPopup;
+        _pages.WheelZoomRequested += (id, inward) => Zoom(id, inward ? "zoom.in" : "zoom.out");
         _pages.PreviewPromoted+=PromoteLinkPreview;
         _pages.LinkPreviewRequested+=(id,url)=>_=ShowLinkPreviewAsync(id,url);
         WireSelection();

@@ -69,6 +69,17 @@ try{
   assert.equal(await tabs.get('/8').page.evaluate(`sessionStorage.getItem('draft')`),'Gardé en mémoire');
   await activate('/3');
   await host.wait(()=>tabs.get('/3').page.evaluate(`window.__ticks>${idle}`),'draft resumes immediately');
+  for(let cycle=0;cycle<3;cycle++){
+    await activate('/9');
+    await delay(6000);
+    const resumed=await activate('/3');
+    const ticks=await resumed.evaluate('window.__ticks');
+    await host.wait(()=>resumed.evaluate(`window.__ticks>${ticks}`),'repeated sleep resumes timers');
+    assert.equal(await resumed.evaluate(`document.querySelector('#draft').value`),'Ne pas perdre','resume preserves draft');
+  }
+  const oldEditor=instances.get('/6');
+  await command({type:'nav.reload',id:tabs.get('/6').id});
+  await host.wait(()=>instances.get('/6')!==oldEditor,'reload wakes a background suspended tab');
   await command({type:'settings.set',id:'memory',index:0});
   const previous=tabs.get('/2').instance;
   const restored=await activate('/2');assert.notEqual(await restored.evaluate('window.__instance'),previous,'discarded document reloads on demand');

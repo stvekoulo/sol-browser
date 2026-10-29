@@ -7,7 +7,7 @@ namespace Browser.App;
 
 public sealed partial class PageHost
 {
-    public void Remove(string id)
+    public void Remove(string id, bool preserveProfile = false)
     {
         ClosePreviewFor(id);
         _privateTabs.Remove(id);
@@ -32,12 +32,12 @@ public sealed partial class PageHost
         _navigation.Remove(id);
         _target.Remove(id); _errorUrl.Remove(id); _showingError.Remove(id); _downloading.Remove(id);
         container.Children.Remove(view);
-        CloseView(view);
+        CloseView(view, preserveProfile);
     }
-    private void CloseView(WebView2 view)
+    private void CloseView(WebView2 view, bool preserveProfile = false)
     {
         var core = view.CoreWebView2;
-        if (core is not null && PrivateBrowsing.IsProfile(core.Profile.ProfileName) && _privateTabs.Count == 0)
+        if (!preserveProfile && core is not null && PrivateBrowsing.IsProfile(core.Profile.ProfileName) && _privateTabs.Count == 0)
         { _closingProfiles[core.Profile.ProfileName] = DeletePrivateProfileAsync(view, core.Profile); return; }
         if (core is null || _views.Values.Any(v => v.CoreWebView2?.Profile.ProfileName == core.Profile.ProfileName))
         { view.Close(); return; }
@@ -60,6 +60,7 @@ public sealed partial class PageHost
         if (!Uri.TryCreate(url, UriKind.Absolute, out _)) return;
         if (_ready.Contains(id) && Core(id) is { } core)
         {
+            Wake(id, core);
             // Le moteur termine parfois l'ancien chargement avant d'annoncer le suivant (ConnectionAborted).
             // Il est déjà remplacé dès que l'utilisateur demande une autre adresse.
             _navigation.Remove(id);
@@ -96,8 +97,9 @@ public sealed partial class PageHost
         if (_errorUrl.TryGetValue(id, out var failed)) Navigate(id, failed);
         else if (Core(id) is { } core)
         {
+            Wake(id, core);
             _navigation.Remove(id);
-            core.Reload();
+            _ = ReloadResponsiveAsync(id, core);
         }
         foreach (var mirror in _sims.GetValueOrDefault(id, []).Skip(1))
         {
