@@ -8,14 +8,14 @@ namespace Browser.App;
 
 public sealed partial class BrowserController
 {
+    private (int Count, int Active, bool Docked) _downloadSummary;
 
     private void UpdateDock()
     {
         var shown = _settings.FloatingDownloads
             ? _downloads.Where(d => DownloadPending(d.Id,d.Op)
-                || (_finishedAt.TryGetValue(d.Id, out var at) && DateTime.UtcNow - at < DockLinger)).ToList()
+                || (_finishedAt.TryGetValue(d.Id, out var at) && DateTime.UtcNow - at < Linger(d.Op))).ToList()
             : [];
-        var changed = _dockShown != shown.Count > 0;
         _dockShown = shown.Count > 0;
         // Mise à jour de Sol en téléchargement ou prête : l'encart l'annonce, jusqu'à « Plus tard ».
         var update = _updateDismissed ? null : Program.Update;
@@ -29,7 +29,14 @@ public sealed partial class BrowserController
         {
             _dock.Hide();
         }
-        if (changed) Refresh(); // le bouton de la barre apparaît quand l'encart disparaît, et inversement
+        // La barre ne dépend pas des octets : éviter sa sérialisation et ses lectures de base à chaque progression.
+        var summary = (_downloads.Count,
+            _downloads.Count(d => d.Op.State == Microsoft.Web.WebView2.Core.CoreWebView2DownloadState.InProgress), _dockShown);
+        if (summary != _downloadSummary)
+        {
+            _downloadSummary = summary;
+            Refresh();
+        }
     }
 
     private string DownloadsJson(IEnumerable<(string Id, DownloadOperation Op, string TabId)> downloads) => JsonSerializer.Serialize(new
@@ -43,7 +50,7 @@ public sealed partial class BrowserController
             total = d.Op.TotalBytesToReceive>0?(long?)d.Op.TotalBytesToReceive:null,
             state = d.Op.State.ToString(),
             paused=DownloadPaused(d.Id,d.Op),canceled=_canceledDownloads.Contains(d.Id)||d.Op.State==Microsoft.Web.WebView2.Core.CoreWebView2DownloadState.Interrupted&&d.Op.InterruptReason==Microsoft.Web.WebView2.Core.CoreWebView2DownloadInterruptReason.UserCanceled&&!DownloadPaused(d.Id,d.Op),
-            canResume=!_canceledDownloads.Contains(d.Id)&&d.Op.CanResume,reason=d.Op.InterruptReason.ToString(),
+            canResume=!_canceledDownloads.Contains(d.Id)&&d.Op.CanResume,canRetry=d.Op.Uri is {Length:>0},reason=d.Op.InterruptReason.ToString(),
         }),
     });
 
@@ -112,6 +119,8 @@ public sealed partial class BrowserController
         language = Math.Max(0, Array.IndexOf(Languages, _settings.Language)),
         spelling = _settings.Spelling,
         spellingLanguages = _pages.SpellingLanguages,
+        spellingOnline = _settings.SpellingOnline,
+        cloud = AppPaths.Private ? null : CloudJson(),
         shortcuts = BrowserShortcuts.All.GroupBy(s => s.Action).Select(g => new
         {
             action = g.Key, title = T(g.First().French, g.First().English),

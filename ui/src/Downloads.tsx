@@ -4,7 +4,7 @@ import { Icon } from './Icons';
 import {Button} from '@/components/motion/button/base';
 import './downloads.css';
 
-export type Download = { id: string; name: string; received: number; total: number | null; state: 'InProgress' | 'Interrupted' | 'Completed';paused?:boolean;canceled?:boolean;canResume?:boolean;reason?:string;phase?:string };
+export type Download = { id: string; name: string; received: number; total: number | null; state: 'InProgress' | 'Interrupted' | 'Completed';paused?:boolean;canceled?:boolean;canResume?:boolean;canRetry?:boolean;reason?:string;phase?:string };
 
 const size = (bytes: number) =>
   bytes < 1024 * 1024 ? `${Math.max(0, Math.round(bytes / 1024))} ${t('Ko', 'KB')}` : `${(bytes / 1024 / 1024).toFixed(1)} ${t('Mo', 'MB')}`;
@@ -48,6 +48,8 @@ export function DownloadCard({ d }: { d: Download }) {
               <Icon name="close" size={14}/>{t('Annuler', 'Cancel')}
             </Button>
           </>}
+          {d.state === 'Interrupted' && !d.canceled && !pendingDownload(d) && d.canRetry && <Button variant="ghost" size="sm" whileHover={undefined} pressScale={0.98} className="pill-action" aria-label={t(`Réessayer ${d.name}`,`Retry ${d.name}`)} onClick={() => send({ type: 'download.retry', id: d.id })}><Icon name="play" size={14}/>{t('Réessayer','Retry')}</Button>}
+          {!pendingDownload(d) && <Button variant="ghost" size="sm" whileHover={undefined} pressScale={0.98} className="pill-action" aria-label={t(`Retirer ${d.name} de la liste`,`Remove ${d.name} from the list`)} title={t('Retirer de la liste','Remove from the list')} onClick={() => send({ type: 'download.forget', id: d.id })}><Icon name="close" size={14}/></Button>}
           {d.state === 'Completed' && (
             <>
               <Button variant="ghost" size="sm" whileHover={undefined} pressScale={0.98} className="pill-action primary" aria-label={t(`Ouvrir ${d.name}`,`Open ${d.name}`)} onClick={() => send({ type: 'download.open', id: d.id })}>

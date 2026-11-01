@@ -10,7 +10,7 @@ export default function Dock(){
   const [items,setItems]=useState<Download[]>([]),[update,setUpdate]=useState<Update|null>(null),[expanded,setExpanded]=useState(false);
   const root=useRef<HTMLDivElement>(null);useLang();
   useEffect(()=>{
-    const off=onMessage(data=>{const content=data as {items?:Download[];update?:Update|null};if(content.items===undefined&&content.update===undefined)return;setItems(content.items??[]);setUpdate(content.update??null);});
+    const off=onMessage(data=>{const content=data as {items?:Download[];update?:Update|null};if(content.items===undefined&&content.update===undefined)return;setItems(content.items??[]);setUpdate(content.update??null);if(!content.items?.length)setExpanded(false);});
     const blur=()=>setExpanded(false);window.addEventListener('blur',blur);send({type:'dock.ready'});
     return()=>{off();window.removeEventListener('blur',blur);};
   },[]);

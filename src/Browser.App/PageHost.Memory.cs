@@ -36,9 +36,10 @@ public sealed partial class PageHost
                 core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low;
             else if (!hidden)
             {
-                _hiddenSince.Remove(id);
+                var returning = _hiddenSince.Remove(id);
                 _discardProtected.Remove(id);
                 Wake(id, core);
+                if (returning) { _ = CheckReturnedTabAsync(id, core); _ = PageZoom.RefreshAsync(core); } // le zoom a pu changer pendant sa veille
             }
         }
         catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { /* vue fermée entre-temps */ }
@@ -69,19 +70,20 @@ public sealed partial class PageHost
         }
     }
 
-    private readonly HashSet<string> _saving = new();
+    private readonly HashSet<CoreWebView2> _saving = new();
     private async Task SuspendAsync(string id, CoreWebView2 core)
     {
-        if (!_saving.Add(id)) return;
+        if (!_saving.Add(core)) return;
         try
         {
             await RestCoreAsync(id, core);
+            if (Core(id) != core) return;
             if (!settings.MemorySaver || !_hiddenSince.ContainsKey(id) || KeepAwake(id)
                 || _pip == id || _sims.ContainsKey(id) || _loading.Contains(id) || core.IsDocumentPlayingAudio) Wake(id, core);
         }
         catch (Exception error) when (error is InvalidOperationException or System.Runtime.InteropServices.COMException)
         { DebugLog.Write($"memory.suspend.failed {id} {error.HResult}"); }
-        finally { _saving.Remove(id); }
+        finally { _saving.Remove(core); }
     }
 
     private async Task RestCoreAsync(string id, CoreWebView2 core)
@@ -100,15 +102,20 @@ public sealed partial class PageHost
     private void Wake(string id, CoreWebView2 core)
     {
         _suspendRefused.Remove(id);
-        // Repeat the wake request even when suspension has not finished reporting its state.
-        core.Resume();
-        if (core.MemoryUsageTargetLevel != CoreWebView2MemoryUsageTargetLevel.Normal)
-            core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Normal;
+        try
+        {
+            // Repeat the wake request even when suspension has not finished reporting its state.
+            core.Resume();
+            if (core.MemoryUsageTargetLevel != CoreWebView2MemoryUsageTargetLevel.Normal)
+                core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Normal;
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException)
+        { DebugLog.Write($"memory.wake.failed {id} {e.HResult}"); }
     }
 
     private async Task DiscardIfSafeAsync(string id, CoreWebView2 core)
     {
-        if (!_saving.Add(id)) return;
+        if (!_saving.Add(core)) return;
         try
         {
             // Keep live state and embedded sign-in/media frames; suspension retains their browser context.
@@ -116,11 +123,11 @@ public sealed partial class PageHost
             var source = core.Source;
             Wake(id, core);
             var safe = await core.ExecuteScriptAsync(@"(() => { try {
-                return sessionStorage.length === 0 && !document.querySelector('iframe,[contenteditable]:not([contenteditable=false]),[role=textbox]')
+                return sessionStorage.length === 0 && !document.querySelector('iframe,canvas,[role=application],.vue-flow,.react-flow,[contenteditable]:not([contenteditable=false]),[role=textbox]')
                     && ![...document.querySelectorAll('input,textarea')].some(e => e.value !== e.defaultValue || ('checked' in e && e.checked !== e.defaultChecked))
                     && ![...document.querySelectorAll('select option')].some(e => e.selected !== e.defaultSelected)
                     && ![...document.querySelectorAll('video,audio')].some(e => !e.paused && !e.ended);
-                } catch { return false; } })()");
+                } catch { return false; } })()").AsTask().WaitAsync(TimeSpan.FromSeconds(4));
             if (safe == "true" && settings.MemorySaver && _hiddenSince.ContainsKey(id)
                 && CoreOf(id) == core && core.Source == source && !_loading.Contains(id) && !KeepAwake(id)
                 && _pip != id && !_sims.ContainsKey(id) && !_previews.ContainsKey(id) && !core.IsDocumentPlayingAudio) Discard(id, core);
@@ -133,8 +140,13 @@ public sealed partial class PageHost
                     || _pip == id || _sims.ContainsKey(id) || _loading.Contains(id) || core.IsDocumentPlayingAudio) Wake(id, core);
             }
         }
+        catch (TimeoutException)
+        {
+            if (Core(id) == core) _discardProtected.Add(id);
+            DebugLog.Write($"memory.probe.timeout {id}");
+        }
         catch (Exception error) when (error is InvalidOperationException or System.Runtime.InteropServices.COMException) { }
-        finally { _saving.Remove(id); }
+        finally { _saving.Remove(core); }
     }
 
     private void Discard(string id, CoreWebView2 core)
@@ -155,9 +167,21 @@ public sealed partial class PageHost
         settings.PageZoom = zoom;
         PageZoom.Set(zoom);
         RuntimeChanged?.Invoke();
-        // Une page affichée relaie la demande : tous les onglets prennent le nouveau zoom tout de suite.
-        foreach (var core in _views.Values.Select(v => v.CoreWebView2).OfType<CoreWebView2>().DistinctBy(c => c.Profile.ProfileName))
-            _ = PageZoom.RefreshAsync(core);
+        _ = RelayZoomAsync();
+    }
+
+    // Une page relaie la demande à l'extension de son profil. Une vue en veille n'exécute rien et une page qui démarre n'a
+    // pas encore son script : la vue affichée passe d'abord, et la demande (sans effet si le zoom est déjà bon) est répétée.
+    private async Task RelayZoomAsync()
+    {
+        foreach (var wait in new[] { 0, 500, 1500 })
+        {
+            await Task.Delay(wait);
+            var relays = _views.Where(v => v.Value.CoreWebView2 is { IsSuspended: false })
+                .OrderByDescending(v => _visible.Contains(v.Key))
+                .Select(v => v.Value.CoreWebView2).DistinctBy(c => c.Profile.ProfileName).ToArray();
+            foreach (var core in relays) _ = PageZoom.RefreshAsync(core);
+        }
     }
 
     // À la sortie d'un appareil simulé : la page retrouve les métriques de sa vue et le zoom du profil.

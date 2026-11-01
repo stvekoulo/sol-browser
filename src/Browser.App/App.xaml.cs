@@ -21,6 +21,22 @@ public partial class App : Application
             [WebArgsVariable] = Environment.GetEnvironmentVariable(WebArgsVariable),
         };
 
+        // Une vue fermée pendant un appel au moteur ne doit pas emporter toute la fenêtre.
+        UnhandledException += (_, e) =>
+        {
+            DebugLog.Write($"unhandled {e.Exception.GetType().Name} {e.Exception.HResult} {e.Message}");
+            e.Handled = e.Exception is System.Runtime.InteropServices.COMException or InvalidOperationException or ObjectDisposedException or TimeoutException or TaskCanceledException;
+        };
+        TaskScheduler.UnobservedTaskException += (_, e) => { DebugLog.Write($"task.unobserved {e.Exception.InnerException?.GetType().Name} {e.Exception.HResult}"); e.SetObserved(); };
+
+        // Relancé après la perte du moteur : la fenêtre précédente rend d'abord le profil.
+        const string after = "--after=";
+        if (Environment.GetCommandLineArgs().FirstOrDefault(a => a.StartsWith(after, StringComparison.Ordinal))?[after.Length..] is { } previous && int.TryParse(previous, out var pid))
+        {
+            try { using var process = System.Diagnostics.Process.GetProcessById(pid); process.WaitForExit(8000); }
+            catch (ArgumentException) { /* déjà terminée */ }
+        }
+
         // Lancé par une fenêtre privée qui se ferme (« --cleanup=profil ») : attend que cette fenêtre et son moteur aient
         // rendu les fichiers, efface ses données, puis s'arrête sans rien afficher.
         const string cleanup = "--cleanup=";

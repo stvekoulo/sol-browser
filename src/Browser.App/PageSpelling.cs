@@ -1,21 +1,52 @@
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using Browser.Core;
 using Microsoft.UI.Xaml;
+using Microsoft.Web.WebView2.Core;
 
 namespace Browser.App;
 
 public sealed partial class PageHost
 {
+    private sealed class SpellingField
+    {
+        public required string Text;
+        public required int Mode;
+        public required WindowsSpelling.Error[] Local;
+        public required Func<string, Task<string>> Run; // l'onglet, ou le cadre d'un autre site qui contient le champ
+        public required bool InFrame;
+        public bool Inline; // vue de Sol sans menu du moteur : les suggestions accompagnent les fautes
+        public SpellingIssue[]? Online;
+        public DateTime Changed = DateTime.UtcNow;
+        public bool Checking, Checked, Repaint;
+    }
+
+    private static readonly HttpClient SpellingHttp = new() { Timeout = TimeSpan.FromSeconds(8) };
+    private readonly OnlineSpelling _online = new(SpellingHttp);
+    private static readonly TimeSpan OnlinePause = TimeSpan.FromMilliseconds(1200); // pas de requête au milieu d'un mot
     private readonly WindowsSpelling _spelling = new();
     private readonly DispatcherTimer _spellingTimer = new() { Interval = TimeSpan.FromMilliseconds(450) };
     private bool _spellingStarted, _spellingBusy;
-    private readonly Dictionary<string, (string Text, int Mode, WindowsSpelling.Error[] Errors)> _spellingCache = new();
+    private readonly Dictionary<string, SpellingField> _spellingCache = new();
     private readonly HashSet<string> _spellingSeen = new(); // onglets où le correcteur de Sol a été posé
-    // Un seul aller-retour par passage : le script se pose s'il manque, puis dit quel champ est en cours de saisie.
-    private const string SpellingRead = "(window.__solSpelling || " + SpellingScript + ", window.__solSpelling.read())";
+    private readonly Dictionary<string, List<CoreWebView2Frame>> _spellingFrames = new();
+    // Le script n'est envoyé qu'une fois par document ; les passages suivants ne font que l'interroger.
+    private const string SpellingRead = "window.__solSpelling ? window.__solSpelling.read() : 'missing'";
     public string[] SpellingLanguages => _spelling.Languages;
     public string SpellingAccent { get; set; } = "#6495ed";
     public void StopSpelling() => _spellingTimer.Stop();
+    /// <summary>Champs de Sol lui-même : le chat, et la barre latérale en local seulement (une adresse ne quitte pas la machine).</summary>
+    public Func<IEnumerable<(string Id, CoreWebView2? Core, bool Online)>>? SpellingViews { get; set; }
+
+    private void WireSpellingFrames(string id, CoreWebView2 core)
+    {
+        core.FrameCreated += (_, e) =>
+        {
+            var frames = _spellingFrames.TryGetValue(id, out var known) ? known : _spellingFrames[id] = [];
+            frames.Add(e.Frame);
+            e.Frame.Destroyed += (_, _) => frames.Remove(e.Frame);
+        };
+    }
 
     private void StartSpelling()
     {
@@ -27,33 +58,120 @@ public sealed partial class PageHost
             _spellingBusy = true;
             try
             {
-                var enabled = settings.Spelling != 0 && SpellingLanguages.Any(l => settings.Spelling == 3 || l.StartsWith(settings.Spelling == 1 ? "fr" : "en"));
-                foreach (var id in _visible.ToArray())
+                var targets = _visible.Select(id => (Id: id, Core: Core(id), Online: Core(id) is { } page && OnlineAllowed(id, page), Inline: false))
+                    .Concat((SpellingViews?.Invoke() ?? []).Select(v => (v.Id, v.Core, Online: v.Online && settings.SpellingOnline, Inline: true))).ToArray();
+                foreach (var target in targets)
                 {
-                    if (Core(id) is not { } core || !core.Source.StartsWith("http", StringComparison.OrdinalIgnoreCase)) continue;
-                    if (!enabled)
-                    {
-                        // Correcteur coupé : la page est remise en état une fois, puis laissée tranquille.
-                        if (_spellingSeen.Remove(id) | _spellingCache.Remove(id)) await core.ExecuteScriptAsync("window.__solSpelling?.clear()");
-                        continue;
-                    }
-                    _spellingSeen.Add(id);
-                    var json = await core.ExecuteScriptAsync(SpellingRead);
-                    using var snapshot = JsonDocument.Parse(json);
-                    if (snapshot.RootElement.ValueKind != JsonValueKind.Object) { _spellingCache.Remove(id); continue; }
-                    if (!snapshot.RootElement.TryGetProperty("text", out var textValue) || textValue.ValueKind != JsonValueKind.String) continue;
-                    var text = textValue.GetString() ?? "";
-                    if (text.Length > 8000) continue;
-                    if (!_spellingCache.TryGetValue(id, out var previous) || previous.Text != text || previous.Mode != settings.Spelling)
-                        _spellingCache[id] = (text, settings.Spelling, _spelling.Check(text, settings.Spelling));
-                    var errors = _spellingCache[id].Errors.Select(e => new[] { e.Start, e.Length });
-                    await core.ExecuteScriptAsync($"window.__solSpelling.paint({JsonSerializer.Serialize(text)}, {JsonSerializer.Serialize(errors)}, {JsonSerializer.Serialize(SpellingAccent)})");
+                    if (target.Core is null) continue;
+                    try { await CheckFieldAsync(target.Id, target.Core, target.Online, target.Inline); }
+                    catch (Exception e) when (e is COMException or InvalidOperationException or JsonException or TimeoutException or ArgumentException) { _spellingCache.Remove(target.Id); }
                 }
             }
-            catch (Exception e) when (e is COMException or InvalidOperationException or JsonException) { /* vue fermée ou page remplacée */ }
             finally { _spellingBusy = false; }
         };
         _spellingTimer.Start();
+    }
+
+    private bool OnlineAllowed(string id, CoreWebView2 core) =>
+        settings.SpellingOnline && !IsPrivate(id) && !TabSessions.IsSignIn(core.Source);
+
+    private async Task CheckFieldAsync(string id, CoreWebView2 core, bool online, bool inline)
+    {
+        if (!core.Source.StartsWith("http", StringComparison.OrdinalIgnoreCase)) return;
+        var local = SpellingLanguages.Any(l => settings.Spelling == 3 || l.StartsWith(settings.Spelling == 1 ? "fr" : "en"));
+        if (settings.Spelling == 0 || !local && !online)
+        {
+            // Correcteur coupé : la page est remise en état une fois, puis laissée tranquille.
+            var field = _spellingCache.GetValueOrDefault(id);
+            if (_spellingSeen.Remove(id) | _spellingCache.Remove(id)) await (field?.Run ?? Runner(core))("window.__solSpelling?.clear()");
+            return;
+        }
+        _spellingSeen.Add(id);
+        var (json, run, inFrame) = await ReadFieldAsync(id, core);
+        if (!inline && !ReferenceEquals(Core(id), core)) return;
+        using var snapshot = JsonDocument.Parse(json);
+        var root = snapshot.RootElement;
+        _spellingCache.TryGetValue(id, out var known);
+        if (root.ValueKind != JsonValueKind.Object || root.TryGetProperty("frame", out _))
+        {
+            if (known is not null)
+            {
+                _spellingCache.Remove(id);
+                if (known.InFrame) await known.Run("window.__solSpelling?.clear()");
+            }
+            return;
+        }
+        if (root.TryGetProperty("idle", out _) && known is not null) run = known.Run;
+        else
+        {
+            if (!root.TryGetProperty("text", out var value) || value.ValueKind != JsonValueKind.String) return;
+            var text = value.GetString() ?? "";
+            if (text.Length > OnlineSpelling.MaxLength) return;
+            if (known is null || known.Text != text || known.Mode != settings.Spelling)
+                _spellingCache[id] = known = new SpellingField { Text = text, Mode = settings.Spelling, Local = inline && !text.Contains(' ') ? [] : _spelling.Check(text, settings.Spelling), Run = run, InFrame = inFrame, Inline = inline };
+            known.Repaint = true;
+        }
+        if (online && !known.Checked && !known.Checking && DateTime.UtcNow - known.Changed >= OnlinePause && _online.Worth(known.Text))
+            _ = CheckOnlineAsync(known);
+        if (!known.Repaint) return;
+        known.Repaint = false;
+        await known.Run($"window.__solSpelling.paint({JsonSerializer.Serialize(known.Text)}, {JsonSerializer.Serialize(Merged(known))}, {JsonSerializer.Serialize(SpellingAccent)}, {(known.Inline ? "true" : "false")})");
+    }
+
+    private async Task CheckOnlineAsync(SpellingField field)
+    {
+        field.Checking = true;
+        var issues = await _online.CheckAsync(field.Text, field.Mode);
+        field.Checking = false;
+        if (issues is null) return; // service absent ou quota atteint : la correction locale reste, nouvel essai au prochain passage
+        field.Checked = true;
+        // Un nom propre ou un mot d'une autre langue connu de Windows n'est pas une faute.
+        var hasLocal = SpellingLanguages.Length > 0;
+        field.Online = issues.Where(i => i.Kind != 0 || !hasLocal
+            || SpellingFilter.Keep(field.Text, i.Start, i.Length) && _spelling.Check(field.Text.Substring(i.Start, i.Length), field.Mode).Length > 0).ToArray();
+        field.Repaint = true;
+    }
+
+    private object[][] Merged(SpellingField field)
+    {
+        var online = field.Online ?? [];
+        var marks = online.Select(i => (i.Start, i.Length, i.Kind, i.Suggestions))
+            .Concat(field.Local.Where(e => !online.Any(o => o.Start < e.Start + e.Length && e.Start < o.Start + o.Length))
+                .Select(e => (e.Start, e.Length, Kind: 0, Suggestions: field.Inline ? _spelling.Suggest(field.Text.Substring(e.Start, e.Length), field.Mode) : [])))
+            .OrderBy(e => e.Start);
+        return marks.Select(e => field.Inline ? new object[] { e.Start, e.Length, e.Kind, e.Suggestions } : [e.Start, e.Length, e.Kind]).ToArray();
+    }
+
+    private static Func<string, Task<string>> Runner(CoreWebView2 core) =>
+        script => core.ExecuteScriptAsync(script).AsTask().WaitAsync(TimeSpan.FromSeconds(2));
+    private static Func<string, Task<string>> Runner(CoreWebView2Frame frame) =>
+        script => frame.ExecuteScriptAsync(script).AsTask().WaitAsync(TimeSpan.FromSeconds(2));
+
+    private async Task<(string Json, Func<string, Task<string>> Run, bool InFrame)> ReadFieldAsync(string id, CoreWebView2 core)
+    {
+        var run = Runner(core);
+        var json = await ReadOrInstallAsync(run);
+        // Le champ est dans un cadre d'un autre site : la page ne peut pas le lire, le moteur interroge chaque cadre.
+        if (!json.Contains("\"frame\"", StringComparison.Ordinal)) return (json, run, false);
+        foreach (var frame in _spellingFrames.GetValueOrDefault(id)?.ToArray() ?? [])
+        {
+            var inner = Runner(frame);
+            try
+            {
+                var value = await ReadOrInstallAsync(inner);
+                if (value != "null") return (value, inner, true);
+            }
+            catch (Exception e) when (e is COMException or InvalidOperationException or TimeoutException) { /* cadre détruit ou bloqué */ }
+        }
+        return (json, run, false);
+    }
+
+    private static async Task<string> ReadOrInstallAsync(Func<string, Task<string>> run)
+    {
+        var json = await run(SpellingRead);
+        if (json != "\"missing\"") return json;
+        await run(SpellingScript);
+        return await run(SpellingRead);
     }
 
     public async Task<(string Word, string[] Suggestions)> SpellingSuggestions(string id)
@@ -61,135 +179,26 @@ public sealed partial class PageHost
         if (settings.Spelling == 0 || Core(id) is not { } core) return ("", []);
         try
         {
-            using var doc = JsonDocument.Parse(await core.ExecuteScriptAsync("window.__solSpelling?.word() ?? null"));
+            var field = _spellingCache.GetValueOrDefault(id);
+            using var doc = JsonDocument.Parse(await (field?.Run ?? Runner(core))("window.__solSpelling?.word() ?? null"));
             if (doc.RootElement.ValueKind != JsonValueKind.String) return ("", []);
             var word = doc.RootElement.GetString()!;
+            if (field?.Online?.FirstOrDefault(i => i.Suggestions.Length > 0 && string.CompareOrdinal(field.Text, i.Start, word, 0, i.Length) == 0 && word.Length == i.Length) is { } issue)
+                return (word, issue.Suggestions);
             return _spelling.Check(word, settings.Spelling).Length == 0 ? ("", []) : (word, _spelling.Suggest(word, settings.Spelling));
         }
-        catch (Exception e) when (e is COMException or InvalidOperationException or JsonException) { return ("", []); }
+        catch (Exception e) when (e is COMException or InvalidOperationException or JsonException or TimeoutException) { return ("", []); }
     }
     public async void CorrectSpelling(string id, string original, string replacement)
     {
         try
         {
             if (Core(id) is { } core)
-                await core.ExecuteScriptAsync($"window.__solSpelling?.replace({JsonSerializer.Serialize(original)}, {JsonSerializer.Serialize(replacement)})");
+                await (_spellingCache.GetValueOrDefault(id)?.Run ?? Runner(core))($"window.__solSpelling?.replace({JsonSerializer.Serialize(original)}, {JsonSerializer.Serialize(replacement)})");
         }
-        catch (Exception e) when (e is COMException or InvalidOperationException) { /* onglet fermé */ }
+        catch (Exception e) when (e is COMException or InvalidOperationException or TimeoutException) { /* onglet fermé */ }
     }
 
-    // ponytail: champ actif du document principal, 8 000 caractères ; garder la correction native dans les iframes et les éditeurs spécialisés.
-    private const string SpellingScript = """
-        (() => {
-          if (window.__solSpelling) return;
-          const host = document.createElement('div');
-          host.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147483647';
-          const shadow = host.attachShadow({mode:'closed'});
-          const layer = document.createElement('div'); shadow.append(layer);
-          let field, originalAttribute, selected, scanned = {}, painted;
-          const plain = el => el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement;
-          // Zone éditable : le texte de ses nœuds, avec un saut de ligne entre deux blocs, à un retour à la ligne et autour
-          // d'un élément non modifiable (étiquette, mention). Sans lui, la fin d'un paragraphe et le début du suivant
-          // formeraient un seul mot (« pas.Beaucoup »), signalé à tort.
-          const scan = el => {
-            if (scanned.el === el && scanned.raw === el.textContent && scanned.list.every(s => s.node.isConnected)) return scanned;
-            const list = []; let text = '', last = null, broken = false;
-            const block = n => { let e = n.parentElement; while (e && e !== el && /^(inline|contents)$/.test(getComputedStyle(e).display)) e = e.parentElement; return e; };
-            const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT,
-              { acceptNode: n => n.nodeType === 1 && n.isContentEditable === false ? (broken = true, NodeFilter.FILTER_REJECT) : NodeFilter.FILTER_ACCEPT });
-            for (let n; n = walker.nextNode();) {
-              if (n.nodeType === 1) { if (n.tagName === 'BR') broken = true; continue; }
-              if (!n.length) continue;
-              const owner = block(n);
-              if (list.length && (broken || owner !== last)) text += '\n';
-              list.push({ node: n, start: text.length }); text += n.data; last = owner; broken = false;
-            }
-            return scanned = { el, raw: el.textContent, text, list };
-          };
-          const value = el => plain(el) ? el.value : scan(el).text;
-          // Position du curseur dans ce texte, ou -1 (sélection étendue, curseur hors d'un nœud de texte).
-          const caret = () => {
-            if (plain(field)) return field.selectionStart === field.selectionEnd ? field.selectionStart : -1;
-            const selection = getSelection();
-            if (!selection.isCollapsed) return -1;
-            const at = scan(field).list.find(s => s.node === selection.focusNode);
-            return at ? at.start + selection.focusOffset : -1;
-          };
-          const hide = () => { painted = undefined; layer.replaceChildren(); host.remove(); };
-          const clear = () => {
-            painted = undefined; layer.replaceChildren(); host.remove();
-            if (field) { if (originalAttribute === null) field.removeAttribute('spellcheck'); else field.setAttribute('spellcheck', originalAttribute); }
-            field = undefined;
-          };
-          const eligible = el => el && el !== document.body && !el.readOnly && !el.disabled && el.spellcheck !== false && !el.closest('[spellcheck="false"]') &&
-            !(el.autocomplete && /password|credit-card|cc-|one-time-code/i.test(el.autocomplete)) &&
-            (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement && ['text','search'].includes(el.type) || el.isContentEditable);
-          const range = (start, length) => {
-            const r=document.createRange();let begun=false;
-            for(const s of scan(field).list){const end=s.start+s.node.length;
-              if(!begun && start<end){r.setStart(s.node,Math.max(0,start-s.start));begun=true;}
-              if(begun && start+length<=end){r.setEnd(s.node,start+length-s.start);return r;}}
-          };
-          const read = () => {
-            let el=document.activeElement; while(el?.shadowRoot?.activeElement)el=el.shadowRoot.activeElement;
-            if (el === field && document.hasFocus() && value(field).length<=8000) return {text:value(field)};
-            clear();
-            if(!document.hasFocus() || !eligible(el) || value(el).length>8000)return null;
-            field=el; originalAttribute=el.getAttribute('spellcheck'); el.spellcheck=false;
-            return {text:value(el)};
-          };
-          const paint = (text, errors, accent) => {
-            if(!field || !field.isConnected || value(field)!==text){hide();return;}
-            // Le mot en cours de frappe (curseur juste après lui) n'est pas encore une faute.
-            const typing = caret();
-            errors = errors.filter(([start,length]) => start+length !== typing);
-            const box=field.getBoundingClientRect(), css=getComputedStyle(field);
-            // Rien n'a changé depuis le dernier passage (texte, fautes, place du champ) : les traits restent tels quels.
-            const state = [text, errors, accent, box.left, box.top, box.width, box.height, field.scrollLeft, field.scrollTop].join('|');
-            if(state === painted && host.isConnected)return;
-            painted = state;
-            layer.replaceChildren();
-            host.dataset.solSpelling = String(errors.length);
-            if(!host.isConnected)document.documentElement.append(host);
-            if(plain(field)){
-              const clip=document.createElement('div');clip.style.cssText=`position:fixed;left:${box.left}px;top:${box.top}px;width:${box.width}px;height:${box.height}px;overflow:hidden;border-radius:${css.borderRadius};`;
-              const mirror=document.createElement('div');
-              for(const key of ['font','letterSpacing','lineHeight','padding','borderWidth','borderStyle','boxSizing','textAlign','textIndent','direction','wordSpacing','tabSize'])mirror.style[key]=css[key];
-              mirror.style.borderColor='transparent'; mirror.style.color='transparent';
-              mirror.style.width=box.width+'px';mirror.style.minHeight=box.height+'px';
-              mirror.style.whiteSpace=field instanceof HTMLInputElement ? 'pre' : 'pre-wrap';mirror.style.overflowWrap='break-word';
-              mirror.style.transform=`translate(${-field.scrollLeft}px,${-field.scrollTop}px)`;
-              let offset=0;
-              for(const [start,length] of errors){mirror.append(document.createTextNode(text.slice(offset,start)));const mark=document.createElement('span');mark.textContent=text.slice(start,start+length);mark.style.textDecoration=`underline wavy ${accent}`;mark.style.textUnderlineOffset='3px';mirror.append(mark);offset=start+length;}
-              mirror.append(document.createTextNode(text.slice(offset)+'\u200b'));clip.append(mirror);layer.append(clip);
-            }else{
-              for(const [start,length] of errors){const r=range(start,length);if(!r)continue;
-                for(const rect of r.getClientRects()){if(rect.bottom<box.top || rect.top>box.bottom)continue;const mark=document.createElement('div');
-                  mark.style.cssText=`position:fixed;left:${Math.max(rect.left,box.left)}px;top:${Math.min(rect.bottom,box.bottom)-2}px;width:${Math.max(0,Math.min(rect.right,box.right)-Math.max(rect.left,box.left))}px;height:3px;background:radial-gradient(circle at 2px 0,transparent 1px,${accent} 1px,${accent} 2px,transparent 2px) 0 0/4px 3px repeat-x`;layer.append(mark);}
-              }
-            }
-          };
-          document.addEventListener('input',e=>{if(field && e.composedPath().includes(field))hide();},true);
-          // Les traits sont posés à l'écran : dès que le texte bouge (défilement, taille), ils s'effacent jusqu'au prochain passage.
-          addEventListener('scroll',hide,{capture:true,passive:true});
-          addEventListener('resize',hide,{passive:true});
-          document.addEventListener('contextmenu',e=>{
-            selected=undefined;
-            if(!field || !(e.composedPath().includes(field) || field.contains(e.target)))return;
-            const text=value(field);let caret=plain(field)?field.selectionStart:undefined;
-            if(caret===undefined){const hit=document.caretRangeFromPoint(e.clientX,e.clientY);const at=hit && scan(field).list.find(s=>s.node===hit.startContainer);if(!at)return;caret=at.start+hit.startOffset;}
-            const words=[...text.matchAll(/[\p{L}\p{M}]+(?:['’][\p{L}\p{M}]+)*/gu)];
-            const word=words.find(m=>caret>=m.index && caret<=m.index+m[0].length);
-            selected=word ? {field,text,start:word.index,length:word[0].length,word:word[0],at:performance.now()} : undefined;
-          },true);
-          const replace = (original,replacement) => {
-            const s=selected;if(!s || !s.field.isConnected || value(s.field)!==s.text || s.word!==original)return false;
-            s.field.focus();
-            if(plain(s.field))s.field.setSelectionRange(s.start,s.start+s.length);
-            else {field=s.field;originalAttribute=field.getAttribute('spellcheck');field.spellcheck=false;const r=range(s.start,s.length);if(!r)return false;getSelection().removeAllRanges();getSelection().addRange(r);}
-            return document.execCommand('insertText',false,replacement);
-          };
-          window.__solSpelling={read,paint,clear,word:()=>selected && performance.now()-selected.at<1500 ? selected.word : null,replace};
-        })()
-        """;
+    private static readonly string SpellingScript = File.ReadAllText(
+        Path.Combine(AppContext.BaseDirectory, "inject", "spelling.js"));
 }

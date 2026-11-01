@@ -37,7 +37,20 @@ public sealed partial class PageHost
             catch (Exception error) when (error is InvalidOperationException or System.Runtime.InteropServices.COMException)
             { DebugLog.Write($"private.cleanup.failed {error.GetType().Name}"); }
             finally { container.Children.Remove(view); view.Close(); }
+            _ = RemoveAbandonedFolderAsync(folder);
         }
+    }
+
+    // Le moteur peut repousser la suppression jusqu'à son arrêt : des données privées n'attendent pas la fermeture de Sol.
+    private static async Task RemoveAbandonedFolderAsync(string folder)
+    {
+        for (var attempt = 0; attempt < 20 && Directory.Exists(folder); attempt++)
+        {
+            await Task.Delay(1000);
+            try { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { /* encore tenu par le moteur */ }
+        }
+        if (Directory.Exists(folder)) DebugLog.Write("private.cleanup.deferred");
     }
 
     private async Task DeletePrivateProfileAsync(WebView2 view, CoreWebView2Profile profile)

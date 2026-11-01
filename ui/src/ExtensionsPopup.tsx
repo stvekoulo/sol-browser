@@ -9,6 +9,13 @@ import type {Content} from './PopupTypes';
 export default function ExtensionsPopup({content,rootRef}:{content:Extract<Content,{popup:'extensions'}>;rootRef:RefObject<HTMLDivElement|null>}){
   return <div ref={rootRef} className="popup extensions-popup">
     <div className="popup-header"><span className="popup-header-title">{t('Extensions','Extensions')}</span><span className="popup-badge">{content.installed.length}</span></div>
+    {content.inSessionTab&&!content.inSessions&&<p className="row-hint">{t('Dans cette session d’onglet, seules les extensions marquées « Sessions » tournent.','In this tab session, only extensions marked “Sessions” run.')}</p>}
+    <div className="theme-row"><span className="row-title">{t('Sessions d’onglets','Tab sessions')}</span>
+      <div className="popup-segment" role="radiogroup" aria-label={t('Extensions dans les sessions d’onglets','Extensions in tab sessions')}>
+        {[t('Session principale','Main session'),t('Toutes les sessions','All sessions')].map((label,index)=><button key={label} type="button" role="radio" aria-checked={content.inSessions===(index===1)} className={`popup-seg-btn${content.inSessions===(index===1)?' active':''}`} onClick={()=>send({type:'settings.set',id:'extensionsInSessions',index})}>{label}</button>)}
+      </div>
+      {content.inSessions&&<p className="row-hint">{t('Chaque session lance sa propre copie de chaque extension, ce qui consomme plus de mémoire.','Each session runs its own copy of every extension, which uses more memory.')}</p>}
+    </div>
     <p className="row-sub extension-note">{t('Disponibles dans toutes les sessions de ce profil Sol. Cookies et données des extensions restent séparés entre sessions. Rechargez les pages après un changement. Les extensions sont désactivées en navigation privée.','Available in every session of this Sol profile. Extension data and cookies stay separate between sessions. Reload pages after a change. Extensions are disabled in private browsing.')}</p>
     <div className="popup-list">
       {!content.installed.length&&<p className="row-hint">{t('Aucune extension ajoutée pour l’instant.','No extension added yet.')}</p>}
@@ -17,6 +24,7 @@ export default function ExtensionsPopup({content,rootRef}:{content:Extract<Conte
           <Switch className="sol-switch" checked={e.enabled} ariaLabel={t(`Activer ${e.name}`,`Enable ${e.name}`)} onCheckedChange={()=>send({type:'extension.toggle',id:e.id})}/></div>
         {e.update&&<div className="sol-extension-update"><span className="row-sub">{t(`Version ${e.update} disponible, avec de nouveaux accès.`,`Version ${e.update} available, with new access.`)}</span><Button variant="ghost" size="sm" className="pill-action primary" onClick={()=>send({type:'extension.update',id:e.id})}>{t('Mettre à jour','Update')}</Button></div>}
         <div className="row-actions">
+          {!content.inSessions&&<Button variant="ghost" size="sm" className={`pill-action${e.inSessions?' on':''}`} aria-pressed={e.inSessions} title={t('Faire tourner aussi cette extension dans les sessions d’onglets','Also run this extension in tab sessions')} onClick={()=>send({type:'extension.session',id:e.id})}>{t('Sessions','Sessions')}</Button>}
           <Button variant="ghost" size="sm" className={`pill-action${e.pinned?' on':''}`} aria-pressed={e.pinned} onClick={()=>send({type:'extension.pin',id:e.id})}>{e.pinned?t('Désépingler','Unpin'):t('Épingler','Pin')}</Button>
           {e.page&&e.enabled&&<Button variant="ghost" size="sm" className="pill-action" onClick={()=>send({type:'extension.show',id:e.id})}>{t('Ouvrir','Open')}</Button>}
           {e.options&&e.enabled&&<Button variant="ghost" size="sm" className="pill-action" onClick={()=>send({type:'extension.options',id:e.id})}>{t('Réglages','Settings')}</Button>}

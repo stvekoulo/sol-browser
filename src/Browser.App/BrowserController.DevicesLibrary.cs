@@ -82,7 +82,7 @@ public sealed partial class BrowserController
             var aiText = AiReady ? await _pages.CaptureAiAsync(tabId) : null;
             if (AiReady && !e.ContextMenuTarget.IsEditable && e.ContextMenuTarget.HasSelection && e.ContextMenuTarget.SelectionText is { Length: > 0 and <= 50_000 } aiSelection)
                 aiText = new(aiSelection, false, "", "", _tabs.Tabs.FirstOrDefault(t => t.Id == tabId)?.Title ?? "");
-            var correction = e.ContextMenuTarget.IsEditable && e.ContextMenuTarget.FrameUri == _pages.CoreOf(tabId)?.Source
+            var correction = e.ContextMenuTarget.IsEditable
                 ? await _pages.SpellingSuggestions(tabId) : (Word: "", Suggestions: Array.Empty<string>());
             foreach (var suggestion in correction.Suggestions)
             {

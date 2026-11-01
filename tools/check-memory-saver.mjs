@@ -82,6 +82,8 @@ try{
   await host.wait(()=>instances.get('/6')!==oldEditor,'reload wakes a background suspended tab');
   await command({type:'settings.set',id:'memory',index:0});
   const previous=tabs.get('/2').instance;
+  await command({type:'nav.reload',id:tabs.get('/2').id});
+  await host.wait(()=>instances.get('/2')!==previous,'explicit reload recreates discarded background tab',8000);
   const restored=await activate('/2');assert.notEqual(await restored.evaluate('window.__instance'),previous,'discarded document reloads on demand');
   const background=tabs.get('/4').page;const awake=await background.evaluate('window.__ticks');
   await host.wait(()=>background.evaluate(`window.__ticks>${awake}+2`),'turning saver off resumes hidden pages');

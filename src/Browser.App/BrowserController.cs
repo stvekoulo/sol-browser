@@ -99,8 +99,13 @@ public sealed partial class BrowserController
             _tabs.Update(id, url, title); Refresh();
         };
         _pages.RuntimeChanged += Refresh;
+        _pages.EngineLost += RestartAfterEngineLoss;
+        LoadDownloadHistory();
+        // Sessions proposées par d'anciennes versions et jamais ouvertes : aucune donnée à garder, elles disparaissent.
+        foreach (var unused in _sessions.Unassigned.Where(s => !Directory.Exists(Path.Combine(EngineData, "WV2Profile_sol-" + s.Id))).ToList())
+            if (_tabs.Tabs.All(t => t.SessionId != unused.Id)) _sessions.Delete(unused.Id);
+        _pages.PageUnresponsive += id => { if (id == _tabs.ActiveId) Notice(T("Cette page ne répond plus", "This page is not responding"), T("Rechargez-la pour la relancer (Ctrl+R).", "Reload it to restart it (Ctrl+R).")); };
         _pages.VideoChanged += VideoAvailable;
-        _sessions.Seed();
         _pages.CreatePopupTab = OpenLinkedTab;
         _pages.PopupClosed += id =>
         {
@@ -110,6 +115,7 @@ public sealed partial class BrowserController
         };
         _pages.SessionFailed += id => Notice(T("Session indisponible", "Session unavailable"), T("Sol n’a pas pu ouvrir cette session. Réessayez en activant l’onglet ; aucune autre session n’a été utilisée.", "Sol could not open this session. Activate the tab to retry; no other session was used."));
         _pages.Loaded += RecordVisit;
+        _pages.Loaded += id => { if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { SessionId.Length: > 0 } tab) _sessions.Adopt(tab.SessionId, tab.Url); };
         _pages.StoreInstallRequested += url => _ = InstallStoreExtensionAsync(url);
         _pages.StoreManageRequested += () => _ = OpenExtensionsAsync();
         _pages.ExtensionsChanged += () => _ = RefreshExtensionsAsync();
@@ -224,6 +230,7 @@ public sealed partial class BrowserController
         if (PreviewCommand(c)) return;
         if (WorkspaceCommand(c)) return;
         if (ChatCommand(c)) return;
+        if (CloudCommand(c)) return;
         if (TabGroupAiCommand(c)) return;
         if (ExecuteCommands0(c)) return;
         if (ExecuteCommands1(c)) return;

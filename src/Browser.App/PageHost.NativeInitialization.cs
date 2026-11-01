@@ -54,7 +54,22 @@ public sealed partial class PageHost
         finally { container.Children.Remove(view); view.Close(); }
     }
 
-    public async void Add(Tab tab) => await AddAsync(tab);
+    public async void Add(Tab tab) => await AddGuardedAsync(tab);
+
+    // La préparation d'une vue enchaîne des appels au moteur : s'il échoue en route, l'onglet redevient endormi au lieu
+    // de laisser une vue vide, et il sera retenté à la prochaine activation.
+    private async Task AddGuardedAsync(Tab tab)
+    {
+        try { await AddAsync(tab); }
+        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException or ArgumentException)
+        {
+            DebugLog.Write($"tab.prepare.failed {tab.Id} {e.GetType().Name} {e.HResult}");
+            if (!_views.ContainsKey(tab.Id)) return; // fermé pendant la préparation
+            Remove(tab.Id, preserveProfile: true);
+            AddAsleep(tab);
+            SessionFailed?.Invoke(tab.Id);
+        }
+    }
 
     private async Task<CoreWebView2?> AddAsync(Tab tab, bool navigate = true)
     {
@@ -187,9 +202,13 @@ public sealed partial class PageHost
         core.NavigationCompleted += (sender, e) =>
         {
             DebugLog.Write($"navigation.end {tab.Id} #{e.NavigationId} current={_navigation.GetValueOrDefault(tab.Id)} success={e.IsSuccess} status={e.WebErrorStatus} http={e.HttpStatusCode}");
+            if (!_views.TryGetValue(tab.Id, out var current) || current != view) return;
+            // Une page qui n'a jamais annoncé son contenu reste affichable, sinon l'onglet resterait vide.
+            if (!core.Source.StartsWith("https://start.sol/", StringComparison.Ordinal) && view.Opacity == 0) { view.Opacity = 1; ContentPainted?.Invoke(); }
+            // Retour, avance ou arrêt sans nouvelle navigation annoncée : rien ne reprendra l'indicateur de chargement.
+            if (!_navigation.ContainsKey(tab.Id)) { _loading.Remove(tab.Id); RuntimeChanged?.Invoke(); return; }
             // Une navigation remplacée ne peut ni arrêter le nouvel indicateur ni remplacer sa page.
-            if (!_views.TryGetValue(tab.Id, out var current) || current != view
-                || _navigation.GetValueOrDefault(tab.Id) != e.NavigationId) return;
+            if (_navigation.GetValueOrDefault(tab.Id) != e.NavigationId) return;
             _loading.Remove(tab.Id);
             var downloading = _downloading.Remove(tab.Id);
             RuntimeChanged?.Invoke();
@@ -204,11 +223,8 @@ public sealed partial class PageHost
                     or CoreWebView2WebErrorStatus.ValidAuthenticationCredentialsRequired))
                 ShowError(tab.Id, core, _target.GetValueOrDefault(tab.Id, core.Source), ErrorKind(e.WebErrorStatus), e.WebErrorStatus.ToString());
         };
-        core.ProcessFailed += (_, e) =>
-        {
-            if (e.ProcessFailedKind == CoreWebView2ProcessFailedKind.RenderProcessExited && _views.GetValueOrDefault(tab.Id) == view)
-                ShowError(tab.Id, core, _errorUrl.GetValueOrDefault(tab.Id, core.Source), "crash");
-        };
+        core.ProcessFailed += (_, e) => OnProcessFailed(tab.Id, view, core, e.ProcessFailedKind);
+        WireSpellingFrames(tab.Id, core);
         core.NewWindowRequested += (sender, e) => _ = OpenWindowAsync(tab.Id, e);
         core.ContextMenuRequested += (_, e) =>
         {

@@ -7,6 +7,9 @@ namespace Browser.App;
 internal static class SharedExtensions
 {
     private static readonly SemaphoreSlim Gate = new(1, 1);
+    /// <summary>Le moteur isole les extensions par session : sans ce choix, seule la session principale les fait tourner.</summary>
+    public static bool InSessions { get; set; }
+    public static IReadOnlyCollection<string> ChosenForSessions { get; set; } = [];
     private static Dictionary<string, bool?>? _state;
     private static string StateFile => Path.Combine(AppPaths.DataDir, "extension-state.json");
     private static Dictionary<string, bool?> State => _state!;
@@ -56,6 +59,7 @@ internal static class SharedExtensions
         {
             _state ??= await Task.Run(LoadState);
             var installed = (await profile.GetBrowserExtensionsAsync()).ToDictionary(e => e.Id);
+            var tabSession = !InSessions && profile.ProfileName.StartsWith("sol-", StringComparison.Ordinal);
             var changed = false;
             // Migration des installations existantes, sans ressusciter celles supprimées depuis la migration.
             foreach (var extension in installed.Values)
@@ -76,11 +80,14 @@ internal static class SharedExtensions
                         continue;
                     }
                     // Ne pas lancer le service worker d'une extension désactivée dans une nouvelle session.
-                    if (extension is null && !enabled.Value) continue;
+                    // Hors de la session principale, seules les extensions choisies tournent ; les autres sont à l'arrêt,
+                    // pas supprimées : leurs réglages dans cette session reviennent si le choix change.
+                    var run = enabled.Value && (!tabSession || ChosenForSessions.Contains(id));
+                    if (extension is null && !run) continue;
                     var folder = Folder(id);
                     if (ExtensionCatalog.Read(folder, id) is null) continue;
-                    var prepared = enabled.Value && ExtensionShim.Apply(folder);
-                    if (extension is null || prepared || id == reloadId && enabled.Value)
+                    var prepared = run && ExtensionShim.Apply(folder);
+                    if (extension is null || prepared || id == reloadId && run)
                     {
                         extension = await profile.AddBrowserExtensionAsync(folder);
                         if (extension.Id != id)
@@ -89,7 +96,7 @@ internal static class SharedExtensions
                             throw new InvalidOperationException("L’identité de l’extension a changé.");
                         }
                     }
-                    if (extension.IsEnabled != enabled.Value) await extension.EnableAsync(enabled.Value);
+                    if (extension.IsEnabled != run) await extension.EnableAsync(run);
                 }
                 catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException
                     or System.Runtime.InteropServices.COMException or ArgumentException)

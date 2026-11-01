@@ -29,7 +29,17 @@ public sealed class DockHost(Grid frame, WebView2 view, UiBridge bridge, Func<Ta
             return;
         }
         _started = true;
-        _ = init(); // l'encart demandera son contenu une fois prêt (voir Ready)
+        _ = InitializeAsync(); // l'encart demandera son contenu une fois prêt (voir Ready)
+    }
+
+    private async Task InitializeAsync()
+    {
+        try { await init(); }
+        catch (Exception error)
+        {
+            _started = false; // la prochaine progression ou carte pourra réessayer
+            DebugLog.Write($"dock.init.failed {error.GetType().Name}");
+        }
     }
 
     /// <summary>L'encart vient de se charger : il reçoit le dernier contenu envoyé.</summary>
@@ -40,6 +50,7 @@ public sealed class DockHost(Grid frame, WebView2 view, UiBridge bridge, Func<Ta
 
     public void SetSize(double width, double height)
     {
+        if (_last is null || !double.IsFinite(width) || !double.IsFinite(height) || width <= 0 || height <= 0) return;
         (_requestedWidth, _requestedHeight) = (width, height);
         var parent = frame.Parent as FrameworkElement;
         if (!_tracksBounds && parent is not null)
@@ -60,6 +71,8 @@ public sealed class DockHost(Grid frame, WebView2 view, UiBridge bridge, Func<Ta
 
     public void Hide()
     {
+        if (_last is not null && _started) bridge.Post("""{"items":[],"update":null}"""); // pas d'ancienne carte au prochain affichage
+        _last = null; // invalide aussi les réponses Ready/size encore en vol
         if (Visible) DebugLog.Write("dock.hidden");
         frame.Visibility = Visibility.Collapsed;
     }

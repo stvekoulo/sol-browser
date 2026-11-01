@@ -1,6 +1,6 @@
 namespace Browser.Core;
 
-public sealed record TabSession(string Id, string Name);
+public sealed record TabSession(string Id, string Name, string Site = "");
 
 /// <summary>Identités stables des profils WebView2, distinctes des noms affichés.</summary>
 public sealed class TabSessions(string path)
@@ -44,17 +44,36 @@ public sealed class TabSessions(string path)
         if (File.Exists(path)) return;
         foreach (var name in new[] { "Admin", "User", "Invité" }) Create(name);
     }
-    public string? Create(string name)
+    public string? Create(string name, string site = "")
     {
         if (Items.Count >= 30 || Clean(name) is not { Length: > 0 } clean) return null;
         var id = Guid.NewGuid().ToString("N");
-        _items!.Add(new(id, clean)); Save(); return id;
+        _items!.Add(new(id, clean, site)); Save(); return id;
+    }
+    // Une session appartient au site où elle a été créée. Les plus anciennes, sans site, prennent celui qu'elles chargent.
+    private string SiteOfSession(string id)
+    {
+        var session = Items.FirstOrDefault(s => s.Id == id);
+        if (session is null) return "";
+        return session.Site.Length > 0 ? session.Site : Sites.FirstOrDefault(p => p.Value == id).Key ?? "";
+    }
+    public IReadOnlyList<TabSession> ForHost(string url) =>
+        SiteOf(url) is { } site ? Items.Where(s => SiteOfSession(s.Id) == site).ToList() : [];
+    /// <summary>Sessions d'une version précédente, encore rattachées à aucun site.</summary>
+    public IReadOnlyList<TabSession> Unassigned => Items.Where(s => SiteOfSession(s.Id).Length == 0).ToList();
+    public bool Belongs(string id, string url) => id.Length > 0 && SiteOf(url) is { } site && SiteOfSession(id) == site;
+    public void Adopt(string id, string url)
+    {
+        var i = Items.ToList().FindIndex(s => s.Id == id);
+        if (i < 0 || _items![i].Site.Length > 0 || SiteOf(url) is not { } site) return;
+        _items[i] = _items[i] with { Site = SiteOfSession(id) is { Length: > 0 } known ? known : site };
+        Save();
     }
     public bool Rename(string id, string name)
     {
         var i = Items.ToList().FindIndex(s => s.Id == id);
         if (i < 0 || Clean(name) is not { Length: > 0 } clean) return false;
-        _items![i] = new(id, clean); Save(); return true;
+        _items![i] = _items[i] with { Name = clean }; Save(); return true;
     }
     public void Delete(string id)
     {

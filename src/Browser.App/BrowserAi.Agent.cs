@@ -30,7 +30,7 @@ public sealed partial class BrowserController
             if (trace?.Pending is { } pending && pending.Id == c.Id) pending.Answer.TrySetResult(c.Index == 1);
     }
 
-    // tabId() donne l'onglet au moment de l'appel : celui de la vue Sol AI, ou l'onglet actif pour la discussion.
+    // tabId() donne l'onglet au moment de l'appel : celui de la vue Sol AI, ou celui de la question pour la discussion.
     private Func<AgentCall, Task<string>> AgentTools(AgentTrace trace, Func<string?> tabId, CancellationToken ct) => async call =>
     {
         var (kind, label, detail) = Describe(call);
@@ -128,6 +128,9 @@ public sealed partial class BrowserController
             }
             return ToolError("Timed out waiting for visible text. Inspect the page before retrying; do not repeat a submission blindly.");
         }
+        // Une question posée pendant le chargement attend la page plutôt que d'échouer.
+        for (var waited = 0; call.Name == "read_page" && waited < 32 && _pages.IsLoading(tabId); waited++) await Task.Delay(250, ct);
+        if (_pages.CoreOf(tabId) != core) return ToolError("tab changed while waiting");
         if (_pages.IsLoading(tabId)) return ToolError("page is still loading; use read_tab with this tab id to wait for it");
         if (call.Name is "press_key" or "hover") return await PageInputToolAsync(core, call, ct);
         var expression = call.Name switch

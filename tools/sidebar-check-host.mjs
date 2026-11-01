@@ -74,6 +74,8 @@ export async function sidebarHost(executable,{serve=null,downloads=false,capture
     await copyFile(resolve(profile,'debug.log'),resolve(base,'native-debug.log')).catch(error=>{if(error.code!=='ENOENT')throw error;});
     await rm(resolve(base,'profiles'),{recursive:true,force:true,maxRetries:30,retryDelay:200});
     if(downloads)await rm(resolve(base,'downloads'),{recursive:true,force:true,maxRetries:10,retryDelay:200});
+    // Les données de test ne restent jamais sur le disque, sauf demande explicite pour un diagnostic.
+    if(!process.env.NAVIGATEUR_KEEP_TEST_DATA){await delay(1500);await rm(base,{recursive:true,force:true,maxRetries:30,retryDelay:200});}
   };
   const crash=async()=>{
     if(app&&app.exitCode===null){const exited=once(app,'exit');app.kill();await exited;}

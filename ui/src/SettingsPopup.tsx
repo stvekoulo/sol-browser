@@ -1,3 +1,4 @@
+import SettingsCloud from './SettingsCloud';
 import {Button} from '@/components/motion/button/base';
 import SolSelect from './SolSelect';
 import SolTabs from './SolTabs';
@@ -94,6 +95,12 @@ const root=rootRef;
               <Button variant="ghost" size="sm" pressScale={0.97} key={label} role="radio" aria-checked={content.spelling === index} className={`popup-seg-btn${content.spelling === index ? ' active' : ''}`}
                 onClick={() => send({type:'settings.set', id:'spelling', index})}>{label}</Button>)}
           </div>
+          <div className="popup-segment" role="radiogroup" aria-label={t('Grammaire en ligne', 'Online grammar')}>
+            {[t('Locale seulement', 'Local only'), t('Grammaire en ligne', 'Online grammar')].map((label, index) =>
+              <Button variant="ghost" size="sm" pressScale={0.97} key={label} role="radio" aria-checked={content.spellingOnline === (index === 1)} className={`popup-seg-btn${content.spellingOnline === (index === 1) ? ' active' : ''}`}
+                onClick={() => send({type:'settings.set', id:'spellingOnline', index})}>{label}</Button>)}
+          </div>
+          {content.spellingOnline && <p className="row-hint">{t('Le texte saisi est envoyé à LanguageTool (service gratuit) pour vérifier la grammaire. Jamais en navigation privée, sur les pages de connexion ni dans les champs de mot de passe, de paiement ou d’identifiant.', 'Typed text is sent to LanguageTool (free service) to check grammar. Never in private browsing, on sign-in pages or in password, payment or username fields.')}</p>}
           <p className="row-hint">{t('Correction locale · dictionnaires Windows : ', 'Local correction · Windows dictionaries: ')}{content.spellingLanguages.map(l => l.startsWith('fr') ? 'Français' : 'English').join(', ') || t('aucun installé', 'none installed')}</p>
           {['fr', 'en'].some(prefix => !content.spellingLanguages.some(l => l.startsWith(prefix))) &&
             <p className="row-hint">{t('Une langue absente ne peut pas être corrigée. Ajoutez son option de saisie dans Windows, puis redémarrez Sol.', 'A missing language cannot be checked. Add its typing feature in Windows, then restart Sol.')}</p>}
@@ -158,6 +165,7 @@ const root=rootRef;
               <Button variant="ghost" size="sm" pressScale={0.97} className="pill-action" onClick={() => send({ type: 'backup.import' })}>{t('Restaurer', 'Restore')}</Button>
             </span>
           </div>
+          {content.cloud && <SettingsCloud cloud={content.cloud} hidden={settingsSection !== 'data'} />}
           <div className="setting-row static" hidden={settingsSection !== 'privacy'}>
             <span className="setting-text">
               <span className="row-title">{t('Accès accordés aux sites', 'Site permissions')}</span>

@@ -47,7 +47,7 @@
         options: el.tagName === 'SELECT' ? [...el.options].slice(0, 80).map(o => ({ value: o.value, label: o.label, selected: o.selected, disabled: o.disabled })) : undefined });
     }
     const text = mainText();
-    return { url: location.href, title: document.title, language: document.documentElement.lang || '',
+    return { url: location.href, title: document.title, language: document.documentElement.lang || '', selection: clip(String(getSelection() || ''), 20000),
       headings: [...document.querySelectorAll('h1,h2,h3')].filter(visible).slice(0, 60).map(h => clip(h.innerText, 120)),
       text: text.slice(0, 20000), truncated: text.length > 20000, links, controls,
       limitations: ['Password, payment, OTP and file inputs are not available.', 'Cross-origin frames and closed shadow roots cannot be read.'],
