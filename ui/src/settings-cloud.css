@@ -1,0 +1,18 @@
+/* Sauvegarde en ligne : carte beUI, même rythme que les cartes d'extensions. */
+.sol-cloud { display:flex; flex-direction:column; gap:12px; margin-block:8px; }
+.sol-cloud[hidden] { display:none; }
+.sol-cloud-head { display:flex; align-items:center; gap:12px; min-width:0; }
+.sol-cloud-head .setting-text { flex:1; min-width:0; }
+.sol-cloud-head .row-sub { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sol-cloud-form { display:flex; flex-direction:column; gap:12px; }
+.sol-cloud-form label { padding:0; font-size:13px; font-weight:500; }
+.sol-cloud-tabs .sol-tabs-wrap,.sol-cloud-tabs .sol-tabs-list { width:100%; }
+.sol-cloud-tabs .sol-tabs-list > div { flex:1; min-width:0; }
+.sol-cloud-tabs .sol-tab { width:100%; justify-content:center; }
+.sol-cloud-main { width:100%; justify-content:center; }
+.sol-cloud-list { display:flex; flex-direction:column; margin:0; padding:0; list-style:none; }
+.sol-cloud-list li { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 12px; padding-block:12px; border-top:1px solid var(--border-card); }
+.sol-cloud-list .row-actions { flex-direction:row; flex-wrap:wrap; }
+.sol-cloud-note { display:flex; gap:8px; margin:0; }
+.sol-cloud-note svg { flex:none; margin-top:2px; }
+.sol-cloud-error { margin:0; color:var(--danger, #b3261e); }

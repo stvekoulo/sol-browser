@@ -47,6 +47,9 @@ try{
   console.log('Evidence:',host.base);
   const a=(await state()).activeId,sessionA=await create('Account A',a);
   let page=await nav('/set?account=A');assert.equal(await cookie(page),'A');
+  // Sans choix explicite, une session d'onglet ne fait pas tourner les extensions ; elles y restent installées, à l'arrêt.
+  assert.equal(await page.evaluate('document.documentElement.dataset.solExtension'),undefined,'extensions stay out of tab sessions by default');
+  await command({type:'settings.set',id:'extensionsInSessions',index:1});
   const inherited=await open();assert.equal((await tabState(inherited)).sessionId,sessionA,'new tab inherits active session');
   page=await nav('/inherited');assert.equal(await cookie(page),'A','first navigation keeps inherited cookies');
   const b=await open(host.origin+'/new-b');assert.equal((await tabState(b)).sessionId,sessionA);
@@ -68,7 +71,9 @@ try{
   await host.wait(()=>menu.evaluate('document.body.textContent.includes("Dupliquer")'),'duplicate action');
   await menu.evaluate('[...document.querySelectorAll(".sol-menu-item")].find(e=>e.textContent.includes("Dupliquer")).dispatchEvent(new MouseEvent("mousedown",{bubbles:true,button:0}))');
   const duplicate=await host.wait(async()=>{const id=(await state()).activeId;return id!==b&&id!==a&&id;},'duplicated tab');
-  assert.equal((await tabState(duplicate)).sessionId,sessionA);await command({type:'tab.close',id:duplicate});await activate(b);
+  assert.equal((await tabState(duplicate)).sessionId,sessionA);
+  // Copie dans un groupe : une première fermeture la décharge seulement, la seconde la ferme vraiment.
+  await command({type:'tab.close',id:duplicate});await command({type:'tab.close',id:duplicate});await activate(b);
   await command({type:'tab.reopen'});const reopened=await host.wait(async()=>{const id=(await state()).activeId;return id!==b&&id;},'closed tab reopened');
   assert.equal((await tabState(reopened)).sessionId,sessionA);await command({type:'tab.close',id:reopened});await activate(b);
   page=await nav('/history-one');await nav('/history-two');await command({type:'nav.back',id:b});

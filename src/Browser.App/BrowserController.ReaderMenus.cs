@@ -207,6 +207,7 @@ public sealed partial class BrowserController
     private async Task ExportBackupAsync(string key)
     {
         if (AppPaths.Private) return;
+        if (_cloudUpload) { _cloudUpload = false; await UploadCloudAsync(key); return; }
         if (key.Length < Backup.MinKeyLength) { AskBackupKey(export: true, tooShort: true); return; }
         HidePopup();
         var picker = new Windows.Storage.Pickers.FileSavePicker
@@ -219,22 +220,7 @@ public sealed partial class BrowserController
         if (await picker.PickSaveFileAsync() is not { } target) return;
         try
         {
-            SaveSession();
-            JsonFileStore.Save(AppPaths.Settings, _settings);
-            var temp = Path.Combine(AppPaths.DataDir, "import");
-            Directory.CreateDirectory(temp);
-            var copy = Path.Combine(temp, $"backup-{Guid.NewGuid():N}.db");
-            _db.BackupTo(copy);
-            var (sealedFile, passwords) = await Task.Run(() =>
-            {
-                var files = new Dictionary<string, byte[]> { ["browser.db"] = File.ReadAllBytes(copy) };
-                File.Delete(copy);
-                foreach (var name in Backup.ProfileFiles)
-                    if (name != "browser.db" && File.Exists(Path.Combine(AppPaths.DataDir, name))) files[name] = File.ReadAllBytes(Path.Combine(AppPaths.DataDir, name));
-                var logins = PasswordImport.Read(EngineData, Path.Combine(EngineData, "Default"), temp).Logins;
-                files[Backup.Passwords] = JsonSerializer.SerializeToUtf8Bytes(logins);
-                return (Backup.Seal(files, key), logins.Count);
-            });
+            var (sealedFile, passwords) = await SealProfileAsync(key);
             await File.WriteAllBytesAsync(target.Path, sealedFile);
             Notice(T("Sauvegarde exportée", "Backup exported"),
                 T($"Réglages, onglets, favoris, historique et {passwords} mot{(passwords > 1 ? "s" : "")} de passe. Gardez le fichier et sa clé.", $"Settings, tabs, bookmarks, history and {passwords} password{(passwords == 1 ? "" : "s")}. Keep the file and its key."));
@@ -266,6 +252,8 @@ public sealed partial class BrowserController
             return;
         }
         _restoreFile = null;
+        // Copie téléchargée depuis le service : plus utile une fois la restauration préparée.
+        if (Path.GetFileName(file).StartsWith("cloud-", StringComparison.Ordinal)) try { File.Delete(file); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         try
         {
             Backup.Stage(AppPaths.DataDir, files);

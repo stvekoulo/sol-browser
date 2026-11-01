@@ -1,0 +1,63 @@
+// Preuve de bout en bout de la sauvegarde cloud : compte, jeton, envoi, isolation entre comptes, restauration, suppression.
+// À lancer sur une branche jetable uniquement : `node cloud/e2e.mjs <fichier .env>`. Les comptes créés partent avec la branche.
+import assert from 'node:assert/strict';
+import { randomBytes } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import pg from 'pg';
+
+const env = Object.fromEntries(readFileSync(process.argv[2] ?? '.env.local', 'utf8').split(/\r?\n/).filter(l => l.includes('=') && !l.startsWith('#')).map(l => {
+  const at = l.indexOf('='); return [l.slice(0, at), l.slice(at + 1).replace(/^"|"$/g, '')];
+}));
+assert.notEqual(env.NEON_BRANCH, 'production', 'test accounts never go on production');
+const auth = env.NEON_AUTH_BASE_URL, api = env.NEON_FUNCTION_BACKUP_BASE_URL.replace(/\/$/, '');
+const ORIGIN = 'https://ui.navigateur';
+const ok = label => console.log(`ok - ${label}`);
+
+async function account(tag) {
+  const email = `sol-e2e-${tag}-${Date.now()}@example.com`, password = randomBytes(18).toString('base64url');
+  const post = (path, body, cookie) => fetch(`${auth}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: ORIGIN, ...(cookie ? { Cookie: cookie } : {}) }, body: JSON.stringify(body) });
+  const up = await post('/sign-up/email', { email, password, name: tag });
+  assert.equal(up.status, 200, `sign-up ${await up.clone().text()}`);
+  const inn = await post('/sign-in/email', { email, password });
+  assert.equal(inn.status, 200, `sign-in ${await inn.clone().text()}`);
+  const cookie = inn.headers.getSetCookie().map(c => c.split(';')[0]).join('; ');
+  const token = await fetch(`${auth}/token`, { headers: { Cookie: cookie, Origin: ORIGIN } });
+  assert.equal(token.status, 200, `token ${await token.clone().text()}`);
+  return { jwt: (await token.json()).token, cookie, email };
+}
+const call = (user, path, init = {}) => fetch(`${api}${path}`, { ...init, headers: { ...(init.headers ?? {}), ...(user ? { Authorization: `Bearer ${user.jwt}` } : {}) } });
+
+assert.equal(await (await call(null, '/health')).text(), 'ok'); ok('Functions répond');
+assert.equal((await call(null, '/backups')).status, 401); ok('sans jeton : 401');
+assert.equal((await call({ jwt: 'faux.jeton.signe' }, '/backups')).status, 401); ok('jeton forgé : 401');
+
+const a = await account('a'), b = await account('b'); ok('Auth : inscription, connexion et jeton pour deux comptes');
+assert.equal((await call(a, '/backups', { method: 'POST', body: 'pas une sauvegarde' })).status, 400); ok('fichier non chiffré refusé');
+
+const sealed = Buffer.concat([Buffer.from('SOLBACKUP1'), randomBytes(200 * 1024)]);
+const created = await call(a, '/backups?device=Test', { method: 'POST', body: sealed });
+assert.equal(created.status, 201, await created.clone().text());
+const { id } = await created.json(); ok('Object Storage + Postgres : sauvegarde envoyée');
+
+const list = await (await call(a, '/backups')).json();
+assert.equal(list.backups.length, 1); assert.equal(list.backups[0].bytes, sealed.length); ok('liste du compte');
+const back = Buffer.from(await (await call(a, `/backups/${id}`)).arrayBuffer());
+assert(back.equals(sealed)); ok('restauration identique à l’octet près');
+
+assert.deepEqual((await (await call(b, '/backups')).json()).backups, []);
+assert.equal((await call(b, `/backups/${id}`)).status, 404);
+assert.equal((await call(b, `/backups/${id}`, { method: 'DELETE' })).status, 404); ok('un autre compte ne voit ni ne supprime rien');
+
+const db = new pg.Client({ connectionString: env.DATABASE_URL });
+await db.connect();
+const row = await db.query('SELECT user_id, bytes FROM backups WHERE id = $1', [id]);
+assert.equal(row.rowCount, 1); assert.equal(Number(row.rows[0].bytes), sealed.length);
+assert.deepEqual(Object.keys((await db.query('SELECT * FROM backups LIMIT 1')).rows[0]).sort(), ['bytes', 'created_at', 'device', 'id', 'user_id']);
+await db.end(); ok('Postgres : seules des métadonnées, aucun contenu');
+
+for (let i = 0; i < 6; i++) assert.equal((await call(a, '/backups', { method: 'POST', body: sealed })).status, 201);
+assert.equal((await (await call(a, '/backups')).json()).backups.length, 5); ok('cinq sauvegardes conservées par compte');
+assert.equal((await call(a, `/backups/${id}`)).status, 404); ok('la plus ancienne est bien retirée');
+const latest = (await (await call(a, '/backups')).json()).backups[0].id;
+assert.equal((await call(a, `/backups/${latest}`, { method: 'DELETE' })).status, 204); ok('suppression');
+console.log('PASS cloud backup');

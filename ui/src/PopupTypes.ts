@@ -20,9 +20,9 @@ export type Content =
   | { popup: 'menu'; items: string[] }
   | { popup: 'split-layout'; ratio: number }
   | { popup: 'downloads'; items: Download[] }
-  | { popup: 'settings'; section?: string; ai: SolAiState; version: string; update: { version: string; percent: number; ready: boolean } | null; check: 'idle' | 'checking' | 'current' | 'failed' | 'portable' | 'store'; zoom: number; uiScale: number; videoQuality:number; fanEnabled: boolean; fanTrigger: number; wallpaperCustom: boolean; shortcuts: {action:string; title:string; keys:string}[]; theme: number; language: number; spelling: number; spellingLanguages: string[]; home: string; wallpaperOn: boolean; wallpaper: number; wallpaperDaily: boolean; wallpapers: Wallpaper[]; font: number;  engine: number; engines: string[]; sites: { origin: string; host: string; summary: string }[]; permissions: number; siteData: 'idle' | 'clearing' | 'done' | 'failed'; tint: Setting[]; items: Setting[] }
+  | { popup: 'settings'; section?: string; ai: SolAiState; version: string; update: { version: string; percent: number; ready: boolean } | null; check: 'idle' | 'checking' | 'current' | 'failed' | 'portable' | 'store'; zoom: number; uiScale: number; videoQuality:number; fanEnabled: boolean; fanTrigger: number; wallpaperCustom: boolean; shortcuts: {action:string; title:string; keys:string}[]; theme: number; language: number; spelling: number; spellingLanguages: string[]; spellingOnline: boolean; cloud: import('./SettingsCloud').CloudState | null; home: string; wallpaperOn: boolean; wallpaper: number; wallpaperDaily: boolean; wallpapers: Wallpaper[]; font: number;  engine: number; engines: string[]; sites: { origin: string; host: string; summary: string }[]; permissions: number; siteData: 'idle' | 'clearing' | 'done' | 'failed'; tint: Setting[]; items: Setting[] }
   | { popup: 'profiles'; items: Profile[] }
-  | { popup: 'sessions'; id: string; current: string; deleting: string | null; items: {id:string;name:string;count:number}[] }
+  | { popup: 'sessions'; id: string; current: string; site: string | null; deleting: string | null; items: {id:string;name:string;count:number;legacy?:boolean}[] }
   | { popup: 'group-edit'; create: boolean; id: string; name: string; color: string; icon: string; presets: string[]; count?: number; ai?: boolean; suggesting?: boolean; suggestion?: { name: string; color: string; icon: string } | null }
   | { popup: 'shortcut-edit'; id: string; name: string; url: string }
   | { popup: 'compare-pick'; id: string; min: number; max: number; devices: { name: string; label: string; size: string; on: boolean }[] }
@@ -31,7 +31,7 @@ export type Content =
   | { popup: 'notice'; title: string; hint: string }
   | { popup: 'site-reset'; site: string; session: string }
   | { popup: 'extension-confirm'; id: string; name: string; version: string; icon: string | null; update: boolean; access: string[] }
-  | { popup: 'extensions'; session: string; updates: '' | 'checking' | 'current' | 'updated' | 'failed'; installed: { id: string; name: string; version: string; enabled: boolean; page: boolean; options: boolean; pinned: boolean; icon: string | null; store: boolean; update: string | null }[]; available: { id: string; name: string; version: string; from: string }[] };
+  | { popup: 'extensions'; session: string; inSessions: boolean; inSessionTab: boolean; updates: '' | 'checking' | 'current' | 'updated' | 'failed'; installed: { id: string; name: string; version: string; enabled: boolean; page: boolean; options: boolean; pinned: boolean; inSessions: boolean; icon: string | null; store: boolean; update: string | null }[]; available: { id: string; name: string; version: string; from: string }[] };
 
 export type Profile = { id: string; name: string; current: boolean; renamable: boolean; deletable: boolean };
 

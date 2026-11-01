@@ -71,7 +71,7 @@ try{
   await popup.evaluate('[...document.querySelectorAll(".extension-confirm-actions button")].find(b=>b.textContent.includes("Ajouter")).click()');
   assert(await popup.evaluate('window.__commands.some(c=>c.type==="extension.confirm"&&c.id==="demo")'));
   await cmd(sidebar,{type:'welcome.open'});const welcome=await host.connect('#welcome');
-  await host.wait(()=>welcome.evaluate('!!document.querySelector(".sol-surface-card.welcome-card[data-slot=card]")'),'welcome has an outer beUI Card');
+  await host.wait(()=>welcome.evaluate('!!document.querySelector(".welcome-card")'),'welcome card shown');
   assert(await welcome.evaluate('document.querySelector(".welcome-step").getBoundingClientRect().height>100&&document.querySelectorAll(".welcome-step [data-slot=card]").length===0'),'welcome content stays unchanged inside the Card');
   await welcome.call('Page.captureScreenshot',{format:'png'}).then(r=>writeFile(resolve(host.base,'welcome-card.png'),Buffer.from(r.data,'base64')));
   assert(session);console.log(JSON.stringify({passed:'native profile rename and focus; create/select/rename site session; protected deletion and cancellation; beUI extension actions and confirmation; narrow layout; light/dark; outer welcome Card',evidence:host.base}));

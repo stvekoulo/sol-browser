@@ -21,6 +21,7 @@ public sealed partial class PageHost
         _webApps.Remove(id);
         _webAppGeneration.Remove(id);
         _ready.Remove(id);
+        _spellingFrames.Remove(id);
         _hiddenSince.Remove(id);
         _discardProtected.Remove(id);
         _suspendRefused.Remove(id);
@@ -49,8 +50,8 @@ public sealed partial class PageHost
     }
     private async Task PreserveSessionAsync(WebView2 view, CoreWebView2 core, string name)
     {
-        try { _sessionCookies[name] = (await core.Profile.CookieManager.GetCookiesAsync("")).Where(c => c.IsSession).Select(c => core.Profile.CookieManager.CopyCookie(c)).ToArray(); }
-        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException)
+        try { _sessionCookies[name] = (await core.Profile.CookieManager.GetCookiesAsync("").AsTask().WaitAsync(TimeSpan.FromSeconds(4))).Where(c => c.IsSession).Select(c => core.Profile.CookieManager.CopyCookie(c)).ToArray(); }
+        catch (Exception e) when (e is TimeoutException or InvalidOperationException or System.Runtime.InteropServices.COMException)
         { DebugLog.Write($"session.cookies.failed {e.GetType().Name} {e.HResult}"); }
         finally { view.Close(); }
     }
@@ -101,6 +102,7 @@ public sealed partial class PageHost
             _navigation.Remove(id);
             _ = ReloadResponsiveAsync(id, core);
         }
+        else if (_asleep.Remove(id, out var asleep)) Add(asleep); // onglet déchargé : le recharger, c'est le recréer
         foreach (var mirror in _sims.GetValueOrDefault(id, []).Skip(1))
         {
             _following.Add(mirror.View);

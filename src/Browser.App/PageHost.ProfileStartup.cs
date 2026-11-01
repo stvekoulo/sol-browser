@@ -20,6 +20,8 @@ public sealed partial class PageHost
             StartupPreparation.OptionalAsync(stage, prepare, (step, error) => RecordStartupFailure(step, error, isPrivate));
         await Optional("legacy-blocker", () => AdBlock.RemoveBundledAsync(profile));
         await Optional("page-zoom", () => PageZoom.InstallAsync(profile, settings.PageZoom));
+        SharedExtensions.InSessions = settings.ExtensionsInSessions;
+        SharedExtensions.ChosenForSessions = settings.SessionExtensions;
         await Optional("extensions", async () => { await SharedExtensions.SyncAsync(profile); });
         ExtensionsChanged?.Invoke();
     }

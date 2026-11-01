@@ -43,6 +43,7 @@ public static class CommandParser
         ["ai.open"] = ["id"], ["ai.run"] = ["query", "title"],
         ["ai.apply"] = [], ["ai.copy"] = [], ["ai.note"] = [],
         ["chat.toggle"] = [], ["tabs.ai"] = [], ["tabs.ai.apply"] = [], ["tabs.ai.dismiss"] = [], ["group.ai"] = ["id"], ["chat.ready"] = [], ["chat.send"] = ["input"], ["chat.copy"] = ["id"], ["chat.note"] = ["id"], ["chat.ask"] = ["input"], ["chat.cancel"] = [], ["chat.clear"] = [],
+        ["chat.attach"] = [], ["chat.capture"] = [], ["chat.detach"] = ["id"], ["chat.file"] = ["id", "input"], ["download.retry"] = ["id"], ["download.forget"] = ["id"],
         ["voice.open"] = [], ["voice.listen"] = [], ["voice.stop"] = [], ["voice.close"] = [], ["voice.settings"] = [],
         ["notes.open"] = [], ["notes.draft"] = ["id", "title", "input"],
         ["notes.save"] = [], ["notes.delete"] = ["id"], ["notes.edit"] = ["id"], ["notes.export"] = [],
@@ -87,6 +88,7 @@ public static class CommandParser
         ["capture.size"] = ["height"], ["capture.close"] = [], ["capture.visibility"] = ["index"],
         ["capture.run"] = ["query"], ["capture.region"] = ["x", "y", "width", "height"],
         ["capture.selection"] = ["index"], ["capture.save"] = [],
+        ["cloud.sign"] = ["id", "query", "input"], ["cloud.signout"] = [], ["cloud.refresh"] = [], ["cloud.backup"] = [], ["cloud.restore"] = ["id"], ["cloud.delete"] = ["id"], ["extension.session"] = ["id"],
         ["backup.export"] = [], ["backup.export.key"] = ["title"], ["backup.import"] = [], ["backup.restore"] = ["title"],
         ["ui.ready"] = [], ["ui.tooltip"] = [], ["ui.layout"] = ["x","y","width","height"],
     };

@@ -80,8 +80,15 @@ public sealed partial class BrowserController
             case "library.remove": RemoveLibraryItem(c); return true;
             case "downloads.open": OpenDownloads(c.X!.Value, c.Y!.Value); return true;
             case "download.cancel" or "download.pause" or "download.resume": ControlDownload(id,c.Type); return true;
+            case "download.retry": RetryDownload(id); return true;
+            case "download.forget": ForgetDownload(id); return true;
             case "download.open" or "download.reveal":
-                if (FindDownload(id) is { State: Microsoft.Web.WebView2.Core.CoreWebView2DownloadState.Completed } done && File.Exists(done.ResultFilePath))
+                if (FindDownload(id) is { State: Microsoft.Web.WebView2.Core.CoreWebView2DownloadState.Completed } moved && !File.Exists(moved.ResultFilePath))
+                {
+                    Notice(T("Fichier introuvable", "File not found"), T("Ce fichier a été déplacé ou supprimé.", "This file was moved or deleted."));
+                    return true;
+                }
+                if (FindDownload(id) is { State: Microsoft.Web.WebView2.Core.CoreWebView2DownloadState.Completed } done)
                 {
                     // Ouvrir un fichier téléchargé l'exécute avec son application : uniquement sur clic de l'utilisateur.
                     var start = c.Type == "download.open"

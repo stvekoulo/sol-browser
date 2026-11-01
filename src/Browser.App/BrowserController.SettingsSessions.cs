@@ -247,7 +247,8 @@ public sealed partial class BrowserController
     private void Zoom(string? id, string action, int? percent = null)
     {
         if (id is null) return;
-        if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is not { } tab || tab.Url is Settings.DefaultHomePage or QuickNotes.PageUrl) return;
+        // L'adresse de la vue plutôt que celle de l'onglet, qui peut encore être l'ancienne juste après une navigation.
+        if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is not { } tab || (_pages.CoreOf(id)?.Source ?? tab.Url) is Settings.DefaultHomePage or QuickNotes.PageUrl) return;
         if (_pages.IsPdf(id)) return; // le lecteur PDF possède son zoom ; il ne change pas celui des sites
         var current = _settings.PageZoom;
         var zoom = action switch
@@ -276,7 +277,12 @@ public sealed partial class BrowserController
     {
         popup = "sessions", id = tabId,
         current = _tabs.Tabs.FirstOrDefault(t => t.Id == tabId)?.SessionId ?? "",
-        items = _sessions.Items.Select(s => new { id = s.Id, name = s.Name, count = _tabs.Tabs.Count(t => t.SessionId == s.Id) }),
+        site = TabSessions.SiteOf(_tabs.Tabs.FirstOrDefault(t => t.Id == tabId)?.Url ?? ""),
+        // Seules les sessions créées pour ce site sont proposées ; celle de l'onglet reste visible pour pouvoir la quitter.
+        items = _sessions.ForHost(_tabs.Tabs.FirstOrDefault(t => t.Id == tabId)?.Url ?? "")
+            .Concat(_sessions.Items.Where(s => s.Id == _tabs.Tabs.FirstOrDefault(t => t.Id == tabId)?.SessionId)).DistinctBy(s => s.Id)
+            .Concat(TabSessions.SiteOf(_tabs.Tabs.FirstOrDefault(t => t.Id == tabId)?.Url ?? "") is null ? [] : _sessions.Unassigned).DistinctBy(s => s.Id)
+            .Select(s => new { id = s.Id, name = s.Name, count = _tabs.Tabs.Count(t => t.SessionId == s.Id), legacy = s.Site.Length == 0 }),
         deleting = _deletingSession,
     });
     private void OpenSessionMenu(string tabId, double x, double y)

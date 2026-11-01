@@ -61,6 +61,20 @@ public sealed partial class BrowserController
                     if (_settingsOpen) _popup.Post(SettingsJson());
                     return true;
                 }
+                if (id == "extensionsInSessions")
+                {
+                    SharedExtensions.InSessions = _settings.ExtensionsInSessions = c.Index == 1;
+                    JsonFileStore.Save(AppPaths.Settings, _settings);
+                    _ = ApplyExtensionsInSessionsAsync();
+                    return true;
+                }
+                if (id == "spellingOnline")
+                {
+                    _settings.SpellingOnline = c.Index == 1;
+                    JsonFileStore.Save(AppPaths.Settings, _settings);
+                    if (_settingsOpen) _popup.Post(SettingsJson());
+                    return true;
+                }
                 if (id == "uiScale")
                 {
                     if (c.Index is not (0 or 1 or 2 or 3 or 4)) return true;
@@ -142,6 +156,7 @@ public sealed partial class BrowserController
                 if (ExtensionCatalog.IsId(id) && ExtensionCatalog.Read(ExtensionFolder(id), id)?.Options is { } options)
                 { HidePopup(); Open($"chrome-extension://{id}/{options.TrimStart('/')}"); } break;
             case "extension.toggle": _ = ChangeExtensionAsync(id, remove: false); return true;
+            case "extension.session": _ = ToggleExtensionInSessionsAsync(id); return true;
             case "extension.remove": _ = ChangeExtensionAsync(id, remove: true); return true;
             case "extensions.menu": _ = OpenExtensionsMenuAsync(c.X!.Value, c.Y!.Value); return true;
             case "extension.show":
@@ -172,8 +187,9 @@ public sealed partial class BrowserController
             case "session.set": ChangeSession(id, c.Query!); return true;
             case "session.new": AskName(T("Nouvelle session", "New session"), T("Cookies, connexions et stockage de site séparés. Historique, favoris et notes restent ceux du profil Sol.", "Separate cookies, sign-ins and site storage. History, bookmarks and notes belong to the Sol profile."), T("Nom de la session", "Session name"), T("Créer", "Create"), "", "session.create", id); return true;
             case "session.create":
-                if (!_tabs.Tabs.Any(t => t.Id == (id.Length > 0 ? id : _tabs.ActiveId) && t.Private) && _sessions.Create(c.Title!) is { } created && (id.Length > 0 ? id : _tabs.ActiveId) is { } current) ChangeSession(current, created);
-                else Notice(T("Session non créée", "Session not created"), T("Utilisez un nom et au maximum 30 sessions.", "Use a name and at most 30 sessions."));
+                var sessionTab = _tabs.Tabs.FirstOrDefault(t => t.Id == (id.Length > 0 ? id : _tabs.ActiveId));
+                if (sessionTab is { Private: false } && TabSessions.SiteOf(sessionTab.Url) is { } sessionSite && _sessions.Create(c.Title!, sessionSite) is { } created) ChangeSession(sessionTab.Id, created);
+                else Notice(T("Session non créée", "Session not created"), T("Ouvrez d’abord un site, puis utilisez un nom et au maximum 30 sessions.", "Open a site first, then use a name and at most 30 sessions."));
                 return true;
             case "session.rename":
                 _sessions.Rename(id, c.Title!); HidePopup(); Refresh(); return true;

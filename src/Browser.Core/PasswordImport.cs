@@ -38,8 +38,7 @@ public static class PasswordImport
             var copy = Path.Combine(tempDir, $"import-{Guid.NewGuid():N}.db");
             try
             {
-                using (var original = Open(source, SqliteOpenMode.ReadOnly))
-                using (var snapshot = Open(copy, SqliteOpenMode.ReadWriteCreate)) original.BackupDatabase(snapshot);
+                Snapshot(source, copy);
                 using var db = Open(copy, SqliteOpenMode.ReadOnly);
                 using var cmd = db.CreateCommand();
                 cmd.CommandText = "SELECT origin_url, action_url, username_element, username_value, password_element, password_value, signon_realm FROM logins WHERE blacklisted_by_user = 0";
@@ -56,11 +55,35 @@ public static class PasswordImport
             finally
             {
                 SqliteConnection.ClearAllPools();
-                try { File.Delete(copy); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+                foreach (var part in new[] { copy, copy + "-wal", copy + "-journal", copy + "-shm" })
+                    try { File.Delete(part); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
             }
         }
         if (failure is not null) throw new IOException("Cannot read the saved passwords. Close the source browser and retry, or import its CSV export.", failure);
         return (list, unreadable);
+    }
+
+    // Le moteur en cours d'exécution garde sa base verrouillée pour SQLite : les fichiers restent lisibles directement,
+    // journal compris, et SQLite le rejoue sur la copie pour retrouver un état cohérent.
+    private static void Snapshot(string source, string copy)
+    {
+        try
+        {
+            using var original = Open(source, SqliteOpenMode.ReadOnly);
+            using var snapshot = Open(copy, SqliteOpenMode.ReadWriteCreate);
+            original.BackupDatabase(snapshot);
+        }
+        catch (SqliteException)
+        {
+            SqliteConnection.ClearAllPools();
+            foreach (var suffix in new[] { "", "-wal", "-journal" })
+            {
+                if (!File.Exists(source + suffix)) continue;
+                using var from = new FileStream(source + suffix, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using var to = new FileStream(copy + suffix, FileMode.Create, FileAccess.Write);
+                from.CopyTo(to);
+            }
+        }
     }
 
     /// <summary>

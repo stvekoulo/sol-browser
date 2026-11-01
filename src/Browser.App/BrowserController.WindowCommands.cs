@@ -42,7 +42,7 @@ public sealed partial class BrowserController
 
             case "suggest.pick":
                 if (_suggestTab is not null && c.Index is int i && i >= 0 && i < _suggestions.Count)
-                    _pages.Navigate(_suggestTab, _suggestions[i].Url);
+                    GoTo(_suggestTab, _suggestions[i].Url);
                 break;
             case "ui.ready":
                 _statePosted = null; // une vue de l'interface vient de (re)démarrer : elle n'a encore rien reçu
@@ -87,7 +87,7 @@ public sealed partial class BrowserController
                 if (_tabs.Move(id, c.Index!.Value)) KeepPairAdjacent();
                 break;
             case "tab.reopen": if (_tabs.ReopenClosed() is { } reopened) _pages.Add(reopened); break;
-            case "nav.go": _pages.Navigate(id, Resolve(c.Input!)); break;
+            case "nav.go": GoTo(id, Resolve(c.Input!)); break;
             case "nav.back": _pages.Back(id); break;
             case "nav.forward": _pages.Forward(id); break;
             case "nav.reload": _pages.Reload(id); break;

@@ -39,7 +39,7 @@ internal sealed class WindowsSpelling
     public record Error(int Start, int Length);
     public Error[] Check(string text, int mode)
     {
-        if (text.Length > 8000) return [];
+        if (text.Length > OnlineSpelling.MaxLength) return [];
         var checkers = Selected(mode).ToArray();
         if (checkers.Length == 0) return [];
         var errors = Errors(checkers[0], text);

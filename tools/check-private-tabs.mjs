@@ -14,7 +14,10 @@ const privateProfiles=()=>readdir(engine).then(names=>names.filter(n=>/^WV2Profi
 const active=async()=>{const s=await state();return s.tabs.find(t=>t.id===s.activeId)};
 const navigate=async(id,path)=>{
   const url=host.origin+path;await cmd({type:'nav.go',id,input:url});
-  const page=await host.connect(url);await host.wait(()=>page.evaluate('document.readyState==="complete"').catch(()=>false),'page loaded');return page;
+  const page=await host.connect(url);
+  // La cible apparaît avant la fin de la navigation : tant que la page n'est pas celle demandée, l'ancien document répond encore.
+  await host.wait(()=>page.evaluate(`location.href===${JSON.stringify(url)}&&document.readyState==="complete"`).catch(()=>false),'page loaded');
+  await host.wait(()=>state().then(s=>s.tabs.find(t=>t.id===id)?.url===url),'tab shows the page');return page;
 };
 const close=async id=>{await cmd({type:'tab.close',id});await host.wait(()=>state().then(s=>s.tabs.every(t=>t.id!==id)),'tab removed')};
 const privateTab=async()=>{
@@ -66,7 +69,8 @@ try{
   assert.deepEqual(await freshPage.evaluate('[document.cookie,localStorage.getItem("session")]'),['',null],'new private session starts clean');
   await freshPage.evaluate('document.cookie="session=discard;path=/;max-age=86400";localStorage.setItem("session","discard")');
   await host.close(sidebar);sidebar=null;
-  for(let i=0;i<100&&(await privateProfiles()).length;i++)await delay(100);
+  // Le moteur retire le dossier en s'arrêtant, ce qui peut prendre du temps sur une machine chargée.
+  for(let i=0;i<300&&(await privateProfiles()).length;i++)await delay(100);
   assert.equal((await privateProfiles()).length,0,'closing the window removes private data');
   sidebar=await host.launch();
   assert.equal((await state()).tabs.some(t=>t.privateMode||t.url.includes('private-secret')),false,'restart restores only normal tabs');

@@ -40,12 +40,19 @@ try{
   const page=await host.connect(host.origin+'/2');
   await host.wait(()=>page.evaluate('document.documentElement.dataset.solAction==="1"'),'native action runs inside Sol with activeTab');
   assert(!await page.evaluate('document.documentElement.dataset.solContext'),'internal action must not trigger unrelated context handlers');
-  await page.call('Input.dispatchMouseEvent',{type:'mousePressed',button:'right',buttons:2,x:100,y:100,clickCount:1});
-  await page.call('Input.dispatchMouseEvent',{type:'mouseReleased',button:'right',x:100,y:100,clickCount:1});
-  await host.wait(()=>popup.evaluate('document.body.textContent.includes("Fixture context action")'),'native extension entries retained in Sol context menu');
-  assert(!await popup.evaluate('document.body.textContent.includes("Sol action ")'),'internal activation menu is hidden');
-  await popup.evaluate('[...document.querySelectorAll("button")].find(b=>b.textContent.includes("Fixture context action")).dispatchEvent(new MouseEvent("mousedown",{bubbles:true,button:0}))');
-  await host.wait(()=>page.evaluate('document.documentElement.dataset.solContext==="yes"'),'extension context menu invokes its native command');
+  // La vue de l'extension ouverte juste avant peut reprendre le focus et refermer le menu : le geste est alors refait.
+  let invoked=false;
+  for(let attempt=0;attempt<4&&!invoked;attempt++){
+    await page.call('Input.dispatchMouseEvent',{type:'mousePressed',button:'right',buttons:2,x:100,y:100,clickCount:1});
+    await page.call('Input.dispatchMouseEvent',{type:'mouseReleased',button:'right',x:100,y:100,clickCount:1});
+    await host.wait(()=>popup.evaluate('document.body.textContent.includes("Fixture context action")'),'native extension entries retained in Sol context menu');
+    assert(!await popup.evaluate('document.body.textContent.includes("Sol action ")'),'internal activation menu is hidden');
+    await new Promise(r=>setTimeout(r,500));
+    if(!await popup.evaluate('[...document.querySelectorAll("button")].some(b=>b.textContent.includes("Fixture context action"))'))continue;
+    await popup.evaluate('[...document.querySelectorAll("button")].find(b=>b.textContent.includes("Fixture context action")).dispatchEvent(new MouseEvent("mousedown",{bubbles:true,button:0}))');
+    invoked=await host.wait(()=>page.evaluate('document.documentElement.dataset.solContext==="yes"'),'context command',6000).then(()=>true,()=>false);
+  }
+  assert(invoked,'extension context menu invokes its native command');
   await page.evaluate('window.addEventListener("contextmenu",event=>event.preventDefault(),true)');
   await command({type:'extension.show',id:action.id,x:600,y:100});
   await host.wait(()=>page.evaluate('document.documentElement.dataset.solAction==="2"'),'native action works when the page prevents its context menu');

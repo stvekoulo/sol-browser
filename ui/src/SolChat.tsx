@@ -10,10 +10,11 @@ import { CornerActions } from '@/components/bencho/CornerActions';
 import { Copy, Mic, NotebookPen } from 'lucide-react';
 import SolAiTrace, { type AgentState } from './SolAiTrace';
 import type { VoiceState } from './SolVoice';
+import SolChatAttachments, { AttachmentActions, readAttachment, type ChatAttachment } from './SolChatAttachments';
 import './chat.css';
 
 const SolVoice = lazy(() => import('./SolVoice'));
-type ChatState = { chat: true; ready: boolean; signingIn?: boolean; account: string; busy: boolean; error: string | null; messages: { from: 'user' | 'assistant'; text: string }[]; agent?: AgentState; focus?: string; voice?: VoiceState; autoApproveActions?: boolean };
+type ChatState = { chat: true; ready: boolean; signingIn?: boolean; account: string; busy: boolean; error: string | null; messages: { from: 'user' | 'assistant'; text: string }[]; agent?: AgentState; focus?: string; voice?: VoiceState; autoApproveActions?: boolean; attachments?: ChatAttachment[]; attaching?: boolean; attachmentError?: string | null };
 
 const suggestions = (focus?: string) => focus === 'developer'
   ? [t('Ouvre l’inspecteur réseau de cet onglet', 'Open the network inspector for this tab'), t('Explique cette erreur et propose une correction : ', 'Explain this error and suggest a fix: '), t('Quels appareils puis-je simuler pour tester le responsive ?', 'Which devices can I simulate to test responsive layouts?')]
@@ -36,7 +37,12 @@ export default function SolChat() {
     send({ type: 'chat.ready' });
     return off;
   }, []);
-  return <div className="sol-chat" data-eyt-frame>
+  // Capture collée (Win+Maj+S puis Ctrl+V) ou fichiers déposés sur le panneau.
+  const attach = (files: Iterable<File>) => { for (const file of files) readAttachment(file); };
+  return <div className="sol-chat" data-eyt-frame
+    onPaste={e => { if (state.ready && e.clipboardData.files.length) { e.preventDefault(); attach(e.clipboardData.files); } }}
+    onDragOver={e => { if (state.ready && e.dataTransfer.types.includes('Files')) e.preventDefault(); }}
+    onDrop={e => { e.preventDefault(); if (state.ready) attach(e.dataTransfer.files); }}>
     <header className="sol-chat-head">
       {!!state.messages.length && <EyeTracker className="eyt-inline" size={24} eyeScale={1.5} />}
       <strong>Sol AI</strong>
@@ -71,11 +77,13 @@ export default function SolChat() {
     </MessageScroller>
     {state.ready && state.autoApproveActions && <p className="sol-chat-permission" role="status">{t('Actions toujours autorisées · modifiable dans Paramètres → Sol AI', 'Actions always allowed · change in Settings → Sol AI')}</p>}
     {state.ready && state.voice?.available === true && state.voice.open && <Suspense fallback={null}><SolVoice state={state.voice} busy={state.busy} approval={!!state.agent?.approval} onUseText={setDraft} /></Suspense>}
+    {state.ready && <SolChatAttachments files={state.attachments ?? []} busy={state.busy} attaching={state.attaching} error={state.attachmentError} onSend={!draft.trim() ? () => send({ type: 'chat.send', input: '' }) : undefined} />}
     {state.ready
       ? <PromptInput className="sol-chat-input" value={draft} onValueChange={setDraft} minRows={1} maxRows={6} maxLength={20000}
           placeholder={t('Votre question…', 'Your question…')} aria-label={t('Question pour Sol AI', 'Question for Sol AI')}
+          disabled={state.attaching} leadingAction={<AttachmentActions disabled={state.busy || !!state.attaching} />}
           loading={state.busy} onStop={() => send({ type: 'chat.cancel' })}
-          onSubmit={value => { if (!value.trim() || state.busy) return; send({ type: 'chat.send', input: value }); setDraft(''); }} />
+          onSubmit={value => { if (!value.trim() || state.busy || state.attaching) return; send({ type: 'chat.send', input: value }); setDraft(''); }} />
       : <div className="sol-chat-connect"><p>{state.error ? aiError(state.error) : t('Connectez votre compte ChatGPT pour discuter avec Sol AI.', 'Connect your ChatGPT account to chat with Sol AI.')}</p>
           {state.signingIn
             ? <><p role="status">{t('Terminez la connexion dans le navigateur…', 'Finish signing in through the browser…')}</p><button className="pill-action" onClick={() => send({ type: 'ai.connect.cancel' })}>{t('Annuler', 'Cancel')}</button></>

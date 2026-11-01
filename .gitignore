@@ -6,3 +6,8 @@ dist/
 src/Browser.App/extensions/
 release/
 landing/
+
+# Neon : identifiants et secrets locaux
+.neon
+.env
+.env.*

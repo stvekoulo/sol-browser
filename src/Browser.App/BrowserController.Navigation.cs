@@ -11,7 +11,9 @@ public sealed partial class BrowserController
     private Tab OpenLink(string source, string url, bool activate = true)
     {
         var tab = _tabs.Tabs.FirstOrDefault(t => t.Id == source);
-        var linked = Open(url, activate: activate, sessionId: tab?.SessionId, isPrivate: tab?.Private);
+        // Un lien vers un autre site repart de la session actuelle ; une connexion doit garder celle qui l'a demandée.
+        var session = tab is { SessionId.Length: > 0 } && (_sessions.Belongs(tab.SessionId, url) || TabSessions.IsSignIn(url)) ? tab.SessionId : "";
+        var linked = Open(url, activate: activate, sessionId: session, isPrivate: tab?.Private);
         return KeepInSourceGroup(linked, tab);
     }
     private void ChangeSession(string tabId, string sessionId)
@@ -30,6 +32,13 @@ public sealed partial class BrowserController
         { if (asleep) _pages.AddAsleep(changed); else _pages.Add(changed); }
         _pinnedExtensions = []; _pinsInitialized = false; _pinProfileName = null;
         Refresh();
+    }
+    // Adresse saisie : un autre site quitte la session de l'onglet. Les redirections et connexions, elles, y restent.
+    private void GoTo(string id, string url)
+    {
+        if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { SessionId.Length: > 0 } tab && TabSessions.SiteOf(url) is not null
+            && !_sessions.Belongs(tab.SessionId, url) && !TabSessions.IsSignIn(url)) ChangeSession(id, "");
+        _pages.Navigate(id, url);
     }
     private async Task DeleteSessionAsync(string sessionId)
     {
@@ -53,7 +62,8 @@ public sealed partial class BrowserController
     private Tab Open(string url, bool activate = true, bool pinned = false, bool asleep = false, string? sessionId = null, bool? isPrivate = null)
     {
         var privateTab = AppPaths.Private || (isPrivate ?? PrivateActive);
-        var session = privateTab ? "" : sessionId ?? _tabs.Tabs.FirstOrDefault(t => t.Id == _tabs.ActiveId)?.SessionId ?? "";
+        var inherited = _tabs.Tabs.FirstOrDefault(t => t.Id == _tabs.ActiveId)?.SessionId ?? "";
+        var session = privateTab ? "" : sessionId ?? (_sessions.Belongs(inherited, url) ? inherited : "");
         // Une identité manquante ne doit jamais charger un site avec les connexions de la session principale.
         if (session.Length > 0 && (_sessions.Resolve(session).Length == 0 || session == _deletingSession))
         { url = Settings.DefaultHomePage; session = ""; }
@@ -61,6 +71,28 @@ public sealed partial class BrowserController
         if (asleep) _pages.AddAsleep(tab);
         else _pages.Add(tab);
         return tab;
+    }
+
+    // Le moteur entier est mort (mise à jour de WebView2, plantage) : aucune vue ne peut revivre dans ce processus.
+    private bool _restarting;
+    private void RestartAfterEngineLoss()
+    {
+        if (_restarting || _closingWindow) return;
+        _restarting = true;
+        DebugLog.Write("engine.lost");
+        _window.DispatcherQueue.TryEnqueue(() =>
+        {
+            var uptime = DateTime.Now - System.Diagnostics.Process.GetCurrentProcess().StartTime;
+            // Un moteur qui meurt dès le démarrage ne doit pas relancer Sol en boucle.
+            if (!AppPaths.Private && uptime > TimeSpan.FromSeconds(30) && Environment.ProcessPath is { } exe)
+            {
+                var start = new System.Diagnostics.ProcessStartInfo(exe, $"--profile={AppPaths.Profile} --after={Environment.ProcessId}") { UseShellExecute = false };
+                foreach (var (name, value) in App.LaunchEnvironment) start.Environment[name] = value;
+                try { System.Diagnostics.Process.Start(start); }
+                catch (System.ComponentModel.Win32Exception) { DebugLog.Write("engine.restart.failed"); }
+            }
+            _window.Close();
+        });
     }
 
     private void Close(string id)
@@ -86,6 +118,8 @@ public sealed partial class BrowserController
                 if ((others.FirstOrDefault(t => !_pages.IsAsleep(t.Id)) ?? others.FirstOrDefault()) is { } next) Activate(next.Id);
                 else Open(_settings.HomePage);
             }
+            // Fermer la vue d'origine interromprait son téléchargement : elle reste masquée jusqu'à sa fin.
+            if (_downloads.Any(d => d.TabId == id && DownloadPending(d.Id, d.Op))) return;
             _pages.Remove(id);
             _pages.AddAsleep(kept);
             _restored.Add(id); // son rechargement ne sera pas une nouvelle visite
@@ -96,7 +130,7 @@ public sealed partial class BrowserController
         if (!_tabs.Close(id)) return;
         _recentTabs.Remove(id);
         _restored.Remove(id);
-        _pages.Remove(id);
+        if (!_downloads.Any(d => d.TabId == id && DownloadPending(d.Id, d.Op))) _pages.Remove(id);
         if (!_tabs.Tabs.Any(t => t.Private)) _privatePermissions.Clear();
         _favicons.Remove(id);
         _translationOriginals.Remove(id);
