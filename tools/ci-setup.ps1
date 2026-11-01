@@ -9,7 +9,7 @@ if ((Test-Path -LiteralPath $localDotnet) -and (& $localDotnet --list-sdks | Whe
 } else {
     Invoke-WebRequest https://dot.net/v1/dotnet-install.ps1 -OutFile "$env:TEMP\dotnet-install.ps1" -TimeoutSec 120
     & "$env:TEMP\dotnet-install.ps1" -Channel 10.0 -InstallDir "$projectRoot\.dotnet"
-    if ($LASTEXITCODE -ne 0) { throw '.NET SDK installation failed' }
+    # Its exit code can be left over from an internal command even on success: the SDK is checked below instead.
     $env:DOTNET_ROOT = "$projectRoot\.dotnet"
 }
 $toolHome = if ($env:DOTNET_CLI_HOME) { $env:DOTNET_CLI_HOME } else { $env:USERPROFILE }
