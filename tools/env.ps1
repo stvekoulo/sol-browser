@@ -1,6 +1,6 @@
-# À charger dans chaque shell de dev : . D:\projet-navigateur\tools\env.ps1
-# Garde tous les outils, caches et données de dev hors de C: (disque plein).
-$dev = 'D:\dev'
+# À charger dans chaque shell de dev : . <projet>\tools\env.ps1
+# Garde tous les outils, caches et données de dev hors de C:, dans le dossier « dev » du disque qui porte le projet.
+$dev = Join-Path (Split-Path $PSScriptRoot -Qualifier) 'dev'
 foreach ($d in 'dotnet','dotnet-home','nuget-packages','npm-cache','tmp','webview2-data','navigateur-data') {
     New-Item -ItemType Directory -Force "$dev\$d" | Out-Null
 }
