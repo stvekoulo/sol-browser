@@ -3,17 +3,26 @@ param(
     [ValidateSet('x64', 'arm64', 'x86')][string[]]$Arch = @('x64', 'arm64', 'x86'),
     [string]$Out,
     [ValidatePattern('^[1-9][0-9]*\.[0-9]+\.[0-9]+\.0$')][string]$StoreVersion,
-    [switch]$SkipUiBuild
+    [switch]$SkipUiBuild,
+    [string]$SdkDirectory
 )
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-if (Test-Path 'D:\dev\dotnet') { . (Join-Path $PSScriptRoot 'env.ps1') }
+$devTools = Join-Path (Split-Path $root -Qualifier) 'dev\dotnet'
+if (Test-Path $devTools) { . (Join-Path $PSScriptRoot 'env.ps1') }
 if (-not $Out) { $Out = Join-Path $root ('bin\store-' + (Get-Date -Format 'yyyyMMdd-HHmmss')) }
 New-Item -ItemType Directory -Path $Out -ErrorAction Stop | Out-Null
 $Out = (Resolve-Path $Out).Path
-$sdk = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin' -Directory |
+$sdkRoots = @('C:\Program Files (x86)\Windows Kits\10\bin')
+if ($env:NUGET_PACKAGES) {
+    $sdkRoots += @(Get-ChildItem (Join-Path $env:NUGET_PACKAGES 'microsoft.windows.sdk.buildtools') -Directory -ErrorAction SilentlyContinue |
+        ForEach-Object { Join-Path $_.FullName 'bin' })
+}
+$sdk = if ($SdkDirectory) { Get-Item -LiteralPath $SdkDirectory } else {
+    $sdkRoots | Where-Object { Test-Path $_ } | ForEach-Object { Get-ChildItem -LiteralPath $_ -Directory } |
     Where-Object { $_.Name -match '^10\.' -and (Test-Path (Join-Path $_.FullName 'x64\makeappx.exe')) } |
     Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
+}
 if (-not $sdk) { throw 'MakeAppx du SDK Windows est requis.' }
 $makeappx = Join-Path $sdk.FullName 'x64\makeappx.exe'
 if (-not $SkipUiBuild) {

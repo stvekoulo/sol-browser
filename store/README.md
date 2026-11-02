@@ -15,6 +15,8 @@ Les propriétés et les descriptions française et anglaise sont enregistrées :
 
 Depuis PowerShell : `./tools/package-store.ps1`. Le script compile l’interface puis chaque architecture et utilise MakeAppx du SDK Windows installé, avec validation activée. Les sorties uniques et leurs journaux/empreintes sont placés dans `bin/store-<horodatage>/`. Pour x64 seulement : `./tools/package-store.ps1 -Arch x64`.
 
+Le script charge les outils du disque du dépôt et trouve également le SDK officiel restauré dans `NUGET_PACKAGES/microsoft.windows.sdk.buildtools`. `-SdkDirectory` permet d'indiquer explicitement le dossier versionné contenant `x64/makeappx.exe` et `x64/makepri.exe` lorsque le SDK n'est pas installé à son emplacement Windows habituel.
+
 `-StoreVersion 1.1.2.0` permet une révision du paquet Store indépendante de la version de l’exécutable. Le dernier nombre reste zéro, conformément aux règles du Store. Le script renomme l’index WinUI `Sol.pri` en `resources.pri`, requis sous identité MSIX, puis exécute `tools/check-store-package.ps1` sur chaque paquet.
 
 `tools/prepare-store-icons.ps1` fournit les variantes `targetsize` normales, `altform-unplated` et `altform-lightunplated` aux 14 tailles Windows. MakePRI fusionne leur index avec les ressources WinUI existantes. Sans ces variantes indexées, Windows peut ajouter une plaque bleue même si le PNG et le manifeste sont transparents. Le paquet final x64 1.1.2.0 a été installé et activé sans élévation ; le Welcome et l’icône sans plaque ont été vérifiés visuellement. Captures : `bin/store-certification-20261026/final-installed-welcome.png` et `taskbar-transparent.png`.
