@@ -15,6 +15,15 @@ public sealed class ChatGptAccountTests : IDisposable
     private static ChatGptTokens Tokens(bool expired = false) => new("oaiapp_test", "test-sub", "test@example.invalid", "verified-before-test",
         "old-access", "old-refresh", DateTimeOffset.UtcNow.AddHours(expired ? -1 : 1), ChatGptOAuth.PlanScope);
 
+    // La protection de Windows par compte (DPAPI) n'existe pas pour un compte de service sans profil chargé, comme
+    // celui des machines d'intégration continue : ces tests n'y vérifient rien.
+    private static readonly bool Dpapi = CanProtect();
+    private static bool CanProtect()
+    {
+        try { ProtectedData.Protect([1], null, DataProtectionScope.CurrentUser); return true; }
+        catch (CryptographicException) { return false; }
+    }
+
     public ChatGptAccountTests() => Directory.CreateDirectory(_directory);
     private void Save(ChatGptTokens tokens) => File.WriteAllBytes(TokenFile, ProtectedData.Protect(
         JsonSerializer.SerializeToUtf8Bytes(tokens), "Sol.ChatGPT"u8.ToArray(), DataProtectionScope.CurrentUser));
@@ -37,6 +46,7 @@ public sealed class ChatGptAccountTests : IDisposable
     [Fact]
     public async Task RevokedPermissionIsRecheckedFromDiskBeforeInference()
     {
+        if (!Dpapi) return;
         Save(Tokens());
         using var server = new Server(_ => throw new Exception("HTTP must not be called"));
         using var http = new HttpClient(server);
@@ -52,6 +62,7 @@ public sealed class ChatGptAccountTests : IDisposable
     [Fact]
     public async Task InvalidRefreshedIdentityIsNeverSavedAsUsableAccess()
     {
+        if (!Dpapi) return;
         Save(Tokens(expired: true));
         using var server = new Server(r => r.RequestUri!.AbsolutePath switch
         {
@@ -74,6 +85,7 @@ public sealed class ChatGptAccountTests : IDisposable
     [InlineData(false)]
     public async Task RefreshRotatesCredentialsAndOnlyCompletedStreamSucceeds(bool completed)
     {
+        if (!Dpapi) return;
         Save(Tokens(expired: true));
         using var server = new Server(r => r.RequestUri!.AbsolutePath switch
         {
@@ -97,6 +109,7 @@ public sealed class ChatGptAccountTests : IDisposable
     [Fact]
     public async Task RunsBrowserWorkspaceToolsThroughTheResponsesLoop()
     {
+        if (!Dpapi) return;
         Save(Tokens());
         var browser = new BrowserController();
         var round = 0;
