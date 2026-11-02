@@ -1,6 +1,6 @@
 # Politique de confidentialité de Sol Navigateur
 
-Date : 23 octobre 2026. Éditeur : Steven KOULO.
+Date : 2 novembre 2026. Éditeur : Steven KOULO.
 Contact : contact@stevencrdkoulo.space.
 
 Sol Navigateur est un navigateur Windows reposant sur Microsoft WebView2. Cette politique décrit les traitements propres à Sol. Les sites visités, extensions installées et services externes appliquent également leurs propres politiques.
@@ -16,6 +16,16 @@ Vous pouvez effacer l’historique et les données de sites depuis les réglages
 Les adresses consultées et les données saisies dans les sites sont transmises aux services concernés. Votre moteur de recherche reçoit vos recherches. Si les suggestions en ligne sont activées, les caractères saisis dans la barre d’adresse sont envoyés au service de suggestions configuré ; cette option est activée par défaut et peut être désactivée. Google est le moteur et le service de suggestions par défaut.
 
 La traduction d’une page par Google transmet son adresse à Google Traduction. Les fonds d’écran en ligne sont téléchargés depuis Picsum Photos lorsque vous utilisez cette fonction. L’installation d’extensions peut contacter leurs services de distribution et les extensions disposent des accès que vous leur accordez. Microsoft WebView2 et les services Windows peuvent réaliser leurs propres traitements selon vos paramètres Microsoft. L’édition Microsoft Store confie ses mises à jour au Microsoft Store.
+
+## Compte Sol et sauvegarde en ligne facultatifs
+
+La création d'un compte Sol et la sauvegarde en ligne sont facultatives. Le service d'authentification Neon reçoit votre adresse e-mail et votre mot de passe de compte pour gérer la connexion. Sol conserve localement la session de connexion, protégée par le chiffrement Windows lié à votre compte utilisateur.
+
+Avant leur envoi au stockage Neon, les sauvegardes sont compressées et chiffrées sur votre appareil avec une clé de sauvegarde distincte du mot de passe du compte. Elles peuvent contenir vos réglages, onglets, favoris, historique, notes et pièces jointes, mots de passe exportables, extensions et autorisations. La clé de sauvegarde n'est pas envoyée au service. Sans cette clé, Sol ne peut pas déchiffrer une sauvegarde ni vous aider à récupérer son contenu.
+
+Le service conserve le fichier chiffré et des métadonnées : identifiant du compte, nom de l'appareil, date et taille. Les cinq sauvegardes les plus récentes sont conservées par compte ; les anciennes et les envois abandonnés sont retirés par le nettoyage du service. Vous pouvez supprimer les sauvegardes depuis les réglages de Sol.
+
+Si vous activez la sauvegarde automatique, Sol conserve sa clé sur cet appareil, protégée par Windows pour votre compte, et tente une sauvegarde toutes les 24 heures. Vous pouvez désactiver cette fonction ou vous déconnecter. La déconnexion supprime la session et la clé automatique enregistrées localement ; elle ne supprime pas les sauvegardes déjà envoyées. Pour une demande concernant les données de votre compte Sol, utilisez le contact indiqué dans cette politique.
 
 ## Assistant facultatif connecté à ChatGPT
 
