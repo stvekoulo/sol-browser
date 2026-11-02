@@ -40,8 +40,10 @@ const releaseScript=await readFile('tools/ci-release.ps1','utf8');
 const command=releaseScript.split('\n').map(line=>line.trim()).find(line=>line.startsWith('./tools/ci-upload.ps1 '));
 assert.ok(command,'release script invokes the actual upload command');
 const quote=value=>"'"+value.replaceAll("'","''")+"'";
+// Windows PowerShell 5.1 runs the GitLab job; CI_UPLOAD_SHELL=pwsh checks PowerShell 7 too.
+const shell=process.env.CI_UPLOAD_SHELL??'powershell';
 const run=async(mode,delay=0)=>{
-  const app=spawn('pwsh',['-NoProfile','-Command',
+  const app=spawn(shell,['-NoProfile','-Command',
     `$ErrorActionPreference='Stop'; $files=@(Get-Item -LiteralPath ${Object.keys(payloads).map(name=>quote(resolve(dir,name))).join(',')}); `+
     `$headers=@{'JOB-TOKEN'='fixture'}; $base=${quote(origin+'/'+mode)}; ${command} -RetryDelaySeconds ${delay}; Write-Host 'UPLOAD_COMPLETE'`
   ],{windowsHide:true});

@@ -6,6 +6,8 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+# PowerShell 7 retries on its own unless told not to; Windows PowerShell 5.1 has no such parameter and never retries.
+$noRetry = if ($PSVersionTable.PSVersion.Major -ge 7) { @{ MaximumRetryCount = 0 } } else { @{} }
 
 foreach ($file in $Files) {
     $uri = "$($BaseUri.TrimEnd('/'))/$([uri]::EscapeDataString($file.Name))"
@@ -17,14 +19,14 @@ foreach ($file in $Files) {
             # (v1.0.14: three 900 s attempts stalled on the first file). At ~1.2 MB/s the largest file takes
             # about 95 s. ponytail: a fixed limit, raise it if uploads get slower than ~400 KB/s.
             Invoke-RestMethod -Method Put -InFile $file.FullName -ContentType 'application/octet-stream' `
-                -Headers $Headers -Uri $uri -MaximumRetryCount 0 -TimeoutSec 300 | Out-Null
+                -Headers $Headers -Uri $uri -TimeoutSec 300 @noRetry | Out-Null
             break
         } catch {
             $exception = $_.Exception
             $status = if ($exception.Response) { [int]$exception.Response.StatusCode } else { 0 }
-            $transport = $exception -is [Net.Http.HttpRequestException] -or
-                $exception -is [Net.Http.HttpIOException] -or $exception -is [Net.WebException] -or
-                $exception -is [OperationCanceledException]
+            # Type names, not type literals: HttpIOException does not exist in Windows PowerShell 5.1, which runs the job.
+            $transport = $exception.GetType().FullName -in 'System.Net.Http.HttpRequestException',
+                'System.Net.Http.HttpIOException', 'System.Net.WebException' -or $exception -is [OperationCanceledException]
             $retryable = $status -in 408, 429, 500, 502, 503, 504 -or ($status -eq 0 -and $transport)
             if (-not $retryable -or $attempt -eq 5) { throw }
             $delay = [math]::Min(120, $RetryDelaySeconds * [math]::Pow(2, $attempt - 1))
@@ -32,6 +34,14 @@ foreach ($file in $Files) {
             if ($retryAfter.Delta) { $delay = [math]::Max($delay, $retryAfter.Delta.TotalSeconds) }
             if ($retryAfter.Date) {
                 $delay = [math]::Max($delay, ($retryAfter.Date - [DateTimeOffset]::UtcNow).TotalSeconds)
+            }
+            # Windows PowerShell 5.1 exposes the header as plain text: seconds or an HTTP date.
+            if ($exception.Response -is [Net.WebResponse] -and ($value = $exception.Response.Headers['Retry-After'])) {
+                $seconds = 0; $date = [DateTimeOffset]::MinValue
+                if ([int]::TryParse($value, [ref]$seconds)) { $delay = [math]::Max($delay, $seconds) }
+                elseif ([DateTimeOffset]::TryParse($value, [ref]$date)) {
+                    $delay = [math]::Max($delay, ($date - [DateTimeOffset]::UtcNow).TotalSeconds)
+                }
             }
             $reason = if ($status) { "HTTP $status" } else { 'transport connection interrupted' }
             Write-Warning "$($file.Name): $reason; retrying in $([math]::Ceiling($delay)) seconds"
