@@ -60,4 +60,25 @@ assert.equal((await (await call(a, '/backups')).json()).backups.length, 5); ok('
 assert.equal((await call(a, `/backups/${id}`)).status, 404); ok('la plus ancienne est bien retirée');
 const latest = (await (await call(a, '/backups')).json()).backups[0].id;
 assert.equal((await call(a, `/backups/${latest}`, { method: 'DELETE' })).status, 204); ok('suppression');
+// Au-delà de ~10 Mo, la passerelle refuse le corps : la sauvegarde passe par une adresse signée vers le stockage.
+const json = body => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+const big = Buffer.concat([Buffer.from('SOLBACKUP1'), randomBytes(24 * 1024 * 1024)]);
+assert.equal((await call(a, '/backups', { method: 'POST', body: big })).status, 413); ok('24 Mo en direct : refusé par la passerelle');
+assert.equal((await call(a, '/backups/uploads', json({ bytes: 300 * 1024 * 1024 }))).status, 413); ok('au-delà de 256 Mo : refusé avant envoi');
+const slot = await (await call(a, '/backups/uploads', json({ bytes: big.length }))).json();
+assert.equal((await fetch(slot.url, { method: 'PUT', body: big.subarray(0, 1000), headers: { 'Content-Type': 'application/octet-stream' } })).status >= 400, true); ok('adresse signée : une autre taille est refusée');
+const put = await fetch(slot.url, { method: 'PUT', body: big, headers: { 'Content-Type': 'application/octet-stream' } });
+assert.equal(put.status, 200, await put.clone().text());
+assert.equal((await call(b, `/backups/uploads/${slot.id}`, json({ device: 'Autre' }))).status, 404); ok('un autre compte ne peut pas valider cet envoi');
+const done = await call(a, `/backups/uploads/${slot.id}`, json({ device: 'Grand PC' }));
+assert.equal(done.status, 201, await done.clone().text()); ok('24 Mo envoyés directement au stockage et validés');
+const listed = (await (await call(a, '/backups')).json()).backups.find(x => x.id === slot.id);
+assert.equal(listed.bytes, big.length); assert.equal(listed.device, 'Grand PC');
+const { url } = await (await call(a, `/backups/${slot.id}/url`)).json();
+assert(Buffer.from(await (await fetch(url)).arrayBuffer()).equals(big)); ok('restauration de 24 Mo identique à l’octet près');
+assert.equal((await call(b, `/backups/${slot.id}/url`)).status, 404); ok('un autre compte n’obtient pas d’adresse de lecture');
+const fake = await (await call(a, '/backups/uploads', json({ bytes: 4096 }))).json();
+await fetch(fake.url, { method: 'PUT', body: randomBytes(4096), headers: { 'Content-Type': 'application/octet-stream' } });
+assert.equal((await call(a, `/backups/uploads/${fake.id}`, json({}))).status, 400); ok('un fichier qui n’est pas une sauvegarde est refusé et effacé');
+assert.equal((await call(a, `/backups/uploads/${fake.id}`, json({}))).status, 404);
 console.log('PASS cloud backup');

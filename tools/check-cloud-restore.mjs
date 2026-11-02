@@ -22,6 +22,8 @@ try{
   // Un profil avec une extension et des données hors de la base : tout doit revenir après la restauration.
   mkdirSync(resolve(host.profile,'extensions','testextension','js'),{recursive:true});
   writeFileSync(resolve(host.profile,'extensions','testextension','js','main.js'),'extension-marker');
+  // 14 Mo incompressibles : la sauvegarde dépasse la limite de ~10 Mo de la passerelle et passe par l'adresse signée.
+  const heavy=randomBytes(14*1024*1024);writeFileSync(resolve(host.profile,'extensions','testextension','heavy.bin'),heavy);
   writeFileSync(resolve(host.profile,'workspaces.json'),'"workspace-marker"');
   writeFileSync(resolve(host.profile,'extension-state.json'),'{"testextension":true}');
   const ui=await host.launch(850,1200);
@@ -40,6 +42,7 @@ try{
   // Sol ferme les paramètres pendant l'envoi : ils sont rouverts pour lire le résultat.
   await host.wait(async()=>{await openSettings();const c=await cloud();return !c?.busy&&c?.auto&&c.last&&c.backups.length===1;},'automatic backup sent',150000);
   const backup=(await cloud()).backups[0];
+  assert(backup.bytes>10*1024*1024,'the backup is above the gateway limit');
   ok(`sauvegarde automatique activée et envoyée (${backup.bytes} octets)`);
   // Les données disparaissent du PC : seule la sauvegarde peut les rendre.
   rmSync(resolve(host.profile,'extensions'),{recursive:true,force:true});
@@ -58,6 +61,7 @@ try{
   for(let i=0;i<150&&!existsSync(resolve(host.profile,'workspaces.json'));i++)await delay(200);
   assert.equal(readFileSync(resolve(host.profile,'extensions','testextension','js','main.js'),'utf8'),'extension-marker');
   assert.equal(readFileSync(resolve(host.profile,'workspaces.json'),'utf8'),'"workspace-marker"');
+  assert(readFileSync(resolve(host.profile,'extensions','testextension','heavy.bin')).equals(heavy),'large extension file restored byte for byte');
   assert(!existsSync(resolve(host.profile,'restore')),'staging folder consumed');
   ok('extension et données restaurées au redémarrage');
   await delay(3000);

@@ -1,6 +1,7 @@
 // API de sauvegarde de Sol. Elle ne reçoit que des fichiers déjà chiffrés sur l'appareil : ni la clé de sauvegarde,
 // ni aucune donnée lisible ne passent jamais par ici. Chaque route est limitée au compte du jeton vérifié.
-import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { attachDatabasePool } from "@neon/functions";
 import { Hono } from "hono";
 import { createRemoteJWKSet, jwtVerify } from "jose";
@@ -61,17 +62,64 @@ app.post("/backups", async c => {
   if (body.length > MAX_BYTES) return c.json({ error: "too-large" }, 413);
   // Refuse tout ce qui n'est pas une sauvegarde chiffrée de Sol : le service ne sert pas d'espace de stockage libre.
   if (body.length < MAGIC.length || !body.subarray(0, MAGIC.length).equals(MAGIC)) return c.json({ error: "not-a-backup" }, 400);
-  const device = (c.req.query("device") ?? "").replace(/[\p{Cc}]/gu, "").slice(0, 60) || "Sol";
   const id = crypto.randomUUID();
   await s3.send(new PutObjectCommand({ Bucket: BUCKET, Key: objectKey(userId, id), Body: body, ContentType: "application/octet-stream" }));
-  await pool.query("INSERT INTO backups (id, user_id, device, bytes) VALUES ($1, $2, $3, $4)", [id, userId, device, body.length]);
-  // Les plus anciennes sortent pour borner l'espace utilisé par compte.
-  const { rows } = await pool.query(
-    "DELETE FROM backups WHERE user_id = $1 AND id NOT IN (SELECT id FROM backups WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2) RETURNING id",
-    [userId, KEEP_PER_USER]);
-  for (const old of rows) await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: objectKey(userId, old.id) }));
+  await register(userId, id, deviceOf(c.req.query("device")), body.length);
   return c.json({ id, bytes: body.length }, 201);
 });
+
+// La passerelle des Functions refuse les corps de plus de ~10 Mo : une sauvegarde passe donc directement de l'appareil au
+// stockage, par une adresse signée valable 15 minutes pour ce seul fichier et cette seule taille, puis elle est validée ici.
+app.post("/backups/uploads", async c => {
+  const { bytes } = await c.req.json().catch(() => ({ bytes: 0 }));
+  if (!Number.isSafeInteger(bytes) || bytes <= MAGIC.length) return c.json({ error: "not-a-backup" }, 400);
+  if (bytes > MAX_BYTES) return c.json({ error: "too-large", max: MAX_BYTES }, 413);
+  const id = crypto.randomUUID();
+  const url = await getSignedUrl(s3, new PutObjectCommand({ Bucket: BUCKET, Key: objectKey(c.get("userId"), id), ContentLength: bytes, ContentType: "application/octet-stream" }), { expiresIn: 900 });
+  return c.json({ id, url }, 201);
+});
+
+app.post("/backups/uploads/:id", async c => {
+  const userId = c.get("userId"), id = c.req.param("id");
+  if (!/^[0-9a-f-]{36}$/.test(id)) return c.json({ error: "not-found" }, 404);
+  const key = objectKey(userId, id);
+  const head = await s3.send(new HeadObjectCommand({ Bucket: BUCKET, Key: key })).catch(() => null);
+  if (!head?.ContentLength) return c.json({ error: "not-found" }, 404);
+  const start = await s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: key, Range: `bytes=0-${MAGIC.length - 1}` }));
+  // Refuse tout ce qui n'est pas une sauvegarde chiffrée de Sol, même arrivé par l'adresse signée.
+  if (head.ContentLength > MAX_BYTES || !Buffer.from(await start.Body!.transformToByteArray()).equals(MAGIC)) {
+    await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
+    return c.json({ error: "not-a-backup" }, 400);
+  }
+  const { device } = await c.req.json().catch(() => ({ device: "" }));
+  const { rowCount } = await pool.query("SELECT 1 FROM backups WHERE id = $1", [id]);
+  if (!rowCount) await register(userId, id, deviceOf(device), head.ContentLength);
+  return c.json({ id, bytes: head.ContentLength }, 201);
+});
+
+app.get("/backups/:id/url", async c => {
+  const userId = c.get("userId"), id = c.req.param("id");
+  if (!/^[0-9a-f-]{36}$/.test(id)) return c.json({ error: "not-found" }, 404);
+  const { rowCount } = await pool.query("SELECT 1 FROM backups WHERE id = $1 AND user_id = $2", [id, userId]);
+  if (!rowCount) return c.json({ error: "not-found" }, 404);
+  return c.json({ url: await getSignedUrl(s3, new GetObjectCommand({ Bucket: BUCKET, Key: objectKey(userId, id) }), { expiresIn: 900 }) });
+});
+
+const deviceOf = (value: unknown) => String(value ?? "").replace(/[\p{Cc}]/gu, "").slice(0, 60) || "Sol";
+
+async function register(userId: string, id: string, device: string, bytes: number) {
+  await pool.query("INSERT INTO backups (id, user_id, device, bytes) VALUES ($1, $2, $3, $4)", [id, userId, device, bytes]);
+  // Les plus anciennes sortent pour borner l'espace utilisé par compte, avec les envois jamais validés depuis une heure
+  // (un envoi en cours sur un autre appareil n'est pas touché).
+  await pool.query(
+    "DELETE FROM backups WHERE user_id = $1 AND id NOT IN (SELECT id FROM backups WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2)",
+    [userId, KEEP_PER_USER]);
+  const { rows } = await pool.query("SELECT id FROM backups WHERE user_id = $1", [userId]);
+  const kept = new Set(rows.map(r => objectKey(userId, r.id)));
+  const listed = await s3.send(new ListObjectsV2Command({ Bucket: BUCKET, Prefix: `${userId}/` }));
+  for (const object of listed.Contents ?? [])
+    if (object.Key && !kept.has(object.Key) && (object.LastModified?.getTime() ?? 0) < Date.now() - 3_600_000) await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: object.Key }));
+}
 
 app.get("/backups/:id", async c => {
   const userId = c.get("userId"), id = c.req.param("id");

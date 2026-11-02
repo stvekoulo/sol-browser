@@ -51,18 +51,39 @@ public sealed class CloudAccount(HttpClient http, string authUrl, string apiUrl)
             b.GetProperty("id").GetString()!, b.GetProperty("device").GetString()!, b.GetProperty("bytes").GetInt64(), b.GetProperty("createdAt").GetDateTimeOffset())).ToList();
     }
 
+    /// <summary>Plus grande sauvegarde acceptée par le service.</summary>
+    public const long MaxBytes = 256L * 1024 * 1024;
+
+    // La passerelle du service refuse les corps de plus de ~10 Mo : le fichier scellé part directement au stockage par une
+    // adresse signée pour lui seul, puis le service le valide et l'ajoute à la liste du compte.
     public async Task UploadAsync(string session, byte[] sealedFile, string device, CancellationToken ct = default)
     {
-        using var content = new ByteArrayContent(sealedFile);
-        content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-        using var _ = await ApiAsync(session, HttpMethod.Post, "/backups?device=" + Uri.EscapeDataString(device), content, ct);
+        if (sealedFile.Length > MaxBytes) throw new CloudException("too-large");
+        string id, url;
+        using (var response = await ApiAsync(session, HttpMethod.Post, "/backups/uploads", Json(new { bytes = sealedFile.Length }), ct))
+        using (var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct)))
+        { id = doc.RootElement.GetProperty("id").GetString()!; url = doc.RootElement.GetProperty("url").GetString()!; }
+        using (var content = new ByteArrayContent(sealedFile))
+        {
+            content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+            using var put = await SendAsync(new HttpRequestMessage(HttpMethod.Put, url) { Content = content }, ct);
+            if (!put.IsSuccessStatusCode) throw new CloudException("server");
+        }
+        using var _ = await ApiAsync(session, HttpMethod.Post, "/backups/uploads/" + Uri.EscapeDataString(id), Json(new { device }), ct);
     }
 
     public async Task<byte[]> DownloadAsync(string session, string id, CancellationToken ct = default)
     {
-        using var response = await ApiAsync(session, HttpMethod.Get, "/backups/" + Uri.EscapeDataString(id), null, ct);
-        return await response.Content.ReadAsByteArrayAsync(ct);
+        string url;
+        using (var response = await ApiAsync(session, HttpMethod.Get, "/backups/" + Uri.EscapeDataString(id) + "/url", null, ct))
+        using (var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct)))
+            url = doc.RootElement.GetProperty("url").GetString()!;
+        using var file = await SendAsync(new HttpRequestMessage(HttpMethod.Get, url), ct);
+        if (!file.IsSuccessStatusCode) throw new CloudException("server");
+        return await file.Content.ReadAsByteArrayAsync(ct);
     }
+
+    private static StringContent Json(object value) => new(JsonSerializer.Serialize(value), Encoding.UTF8, "application/json");
 
     public async Task DeleteAsync(string session, string id, CancellationToken ct = default)
     {
