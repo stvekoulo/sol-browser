@@ -69,11 +69,25 @@ public partial class App : Application
             Environment.SetEnvironmentVariable(WebDataVariable, AppPaths.WebData);
 
         // Sauvegarde restaurée pendant la session précédente : ses fichiers prennent la place de ceux du profil.
-        if (!AppPaths.Private) Backup.ApplyStaged(AppPaths.DataDir);
-
-        // Mots de passe repris d'un autre navigateur pendant la session précédente : écrits avant que le moteur ne s'ouvre.
         if (!AppPaths.Private)
-            PasswordImport.ApplyPending(AppPaths.PendingPasswords, Path.Combine(Environment.GetEnvironmentVariable(WebDataVariable)!, "EBWebView"));
+        {
+            try
+            {
+                Backup.ApplyStaged(AppPaths.DataDir);
+                // Écrits avant l'ouverture du moteur, avec arrêt visible si l'attente est illisible.
+                PasswordImport.ApplyPending(AppPaths.PendingPasswords, Path.Combine(Environment.GetEnvironmentVariable(WebDataVariable)!, "EBWebView"));
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidDataException
+                or System.Text.Json.JsonException or System.Security.Cryptography.CryptographicException)
+            {
+                DebugLog.Write($"restore.startup {e}");
+                var english = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "en";
+                RestoreError(0, (english ? "Sol could not finish restoring your data. Your profile will remain closed."
+                    : "Sol ne peut pas terminer la restauration. Le profil ne sera pas ouvert.") + $"\n\n{e.Message}",
+                    english ? "Sol — restore interrupted" : "Sol — restauration interrompue", 0x10);
+                Environment.Exit(1);
+            }
+        }
 
         // Options du moteur, ajoutées à celles déjà demandées par l'environnement :
         // - barres de défilement fines qui n'apparaissent qu'au défilement (quand le réglage les affiche) ;
@@ -94,6 +108,9 @@ public partial class App : Application
         held.Dispose();
         return true;
     }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "MessageBoxW", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern int RestoreError(nint window, string text, string caption, uint type);
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {

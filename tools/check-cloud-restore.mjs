@@ -7,12 +7,13 @@ import {existsSync,mkdirSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {sidebarHost} from './sidebar-check-host.mjs';
+import {readCloudEnv,verifyCloudTestEnv} from './cloud-test-guard.mjs';
 
 const exe=process.argv[2]??'src/Browser.App/bin/x64/Release/net10.0-windows10.0.19041.0/win-x64/Sol.exe';
-const env=Object.fromEntries(readFileSync(process.argv[3]??'.env.local','utf8').split(/\r?\n/).filter(l=>l.includes('=')).map(l=>{const at=l.indexOf('=');return [l.slice(0,at),l.slice(at+1).replace(/^"|"$/g,'')];}));
-assert.notEqual(env.NEON_BRANCH,'production','test accounts never go on production');
-process.env.NAVIGATEUR_CLOUD_AUTH=env.NEON_AUTH_BASE_URL;
-process.env.NAVIGATEUR_CLOUD_API=env.NEON_FUNCTION_BACKUP_BASE_URL.replace(/\/$/,'');
+const env=readCloudEnv(process.argv[3]??'.env.local');
+const {auth,api}=await verifyCloudTestEnv(env);
+process.env.NAVIGATEUR_CLOUD_AUTH=auth;
+process.env.NAVIGATEUR_CLOUD_API=api;
 const ok=label=>console.log(`ok - ${label}`);
 const host=await sidebarHost(exe);
 const profileName=host.profile.split(/[\\/]/).pop();

@@ -33,7 +33,7 @@ public class BackupTests : IDisposable
         File.WriteAllText(Path.Combine(_dir, "browser.db-wal"), "journal de l'ancienne base");
         Assert.False(Backup.ApplyStaged(_dir));
 
-        Backup.Stage(_dir, Backup.Open(Backup.Seal(Files, "clé de sauvegarde"), "clé de sauvegarde")!);
+        Backup.Stage(_dir, Backup.Open(Backup.Seal(Files.Where(item => item.Key != Backup.Passwords).ToDictionary(), "clé de sauvegarde"), "clé de sauvegarde")!);
         Assert.Equal("ancien", File.ReadAllText(Path.Combine(_dir, "settings.json")));
 
         Assert.True(Backup.ApplyStaged(_dir));
@@ -51,7 +51,7 @@ public class BackupTests : IDisposable
         File.WriteAllText(Path.Combine(source, "tab-sessions.json"), "sessions");
         File.WriteAllText(Path.Combine(source, "debug.log"), "pas sauvegardé");
         var files = Backup.Collect(source);
-        Assert.Equal(["extensions/abc/js/main.js", "tab-sessions.json"], files.Keys.Order());
+        Assert.Equal(["extensions/abc/js/main.js", "profile-manifest.json", "tab-sessions.json"], files.Keys.Order());
         // Une sauvegarde forgée ne peut rien écrire hors des dossiers connus du profil.
         files["extensions/../../evil.txt"] = [1]; files["notes/x.txt"] = [1]; files["extensions/C:x.txt"] = [1];
         var target = Path.Combine(_dir, "target");

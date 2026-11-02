@@ -68,9 +68,7 @@ public sealed partial class BrowserController
         var bytes = await Cloud.DownloadAsync(_cloud!.Cookie, id);
         var files = await Task.Run(() => Backup.Open(bytes, key));
         if (files is null) { _cloudError = "key"; return; }
-        Backup.Stage(AppPaths.DataDir, files);
-        if (files.TryGetValue(Backup.Passwords, out var json) && JsonSerializer.Deserialize<List<ImportedLogin>>(json) is { } logins)
-            PasswordImport.Queue(AppPaths.PendingPasswords, logins);
+        await Task.Run(() => Backup.Stage(AppPaths.DataDir, files));
         // La même clé continue les sauvegardes automatiques sur ce PC.
         _cloud = _cloud with { AutoKey = key, LastBackup = DateTimeOffset.UtcNow };
         SaveCloud();

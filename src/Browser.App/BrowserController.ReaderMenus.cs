@@ -223,9 +223,9 @@ public sealed partial class BrowserController
             var (sealedFile, passwords) = await SealProfileAsync(key);
             await File.WriteAllBytesAsync(target.Path, sealedFile);
             Notice(T("Sauvegarde exportée", "Backup exported"),
-                T($"Réglages, onglets, favoris, historique et {passwords} mot{(passwords > 1 ? "s" : "")} de passe. Gardez le fichier et sa clé.", $"Settings, tabs, bookmarks, history and {passwords} password{(passwords == 1 ? "" : "s")}. Keep the file and its key."));
+                T("Réglages, onglets, favoris et historique. Gardez le fichier et sa clé.", "Settings, tabs, bookmarks and history. Keep the file and its key.") + " " + PasswordBackupSummary(passwords));
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException)
+        catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException or JsonException or System.Security.Cryptography.CryptographicException or Microsoft.Data.Sqlite.SqliteException)
         {
             Notice(T("Export impossible", "Export failed"), e.Message);
         }
@@ -240,11 +240,23 @@ public sealed partial class BrowserController
         AskBackupKey(export: false);
     }
 
-    private void RestoreBackup(string key)
+    private void RestoreBackup(string key) => _ = RestoreBackupAsync(key);
+
+    private async Task RestoreBackupAsync(string key)
     {
         if (AppPaths.Private || _restoreFile is not { } file) return;
         Dictionary<string, byte[]>? files = null;
-        try { files = Backup.Open(File.ReadAllBytes(file), key); }
+        try
+        {
+            files = await Task.Run(() =>
+            {
+                using var stream = File.OpenRead(file);
+                if (stream.Length > Backup.MaxSealedBytes) return null;
+                var bytes = new byte[checked((int)stream.Length)];
+                stream.ReadExactly(bytes);
+                return Backup.Open(bytes, key);
+            });
+        }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         if (files is null)
         {
@@ -256,11 +268,9 @@ public sealed partial class BrowserController
         if (Path.GetFileName(file).StartsWith("cloud-", StringComparison.Ordinal)) try { File.Delete(file); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         try
         {
-            Backup.Stage(AppPaths.DataDir, files);
-            if (files.TryGetValue(Backup.Passwords, out var json) && JsonSerializer.Deserialize<List<ImportedLogin>>(json) is { } logins)
-                PasswordImport.Queue(AppPaths.PendingPasswords, logins);
+            await Task.Run(() => Backup.Stage(AppPaths.DataDir, files));
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException)
+        catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException or JsonException or System.Security.Cryptography.CryptographicException)
         {
             Notice(T("Restauration impossible", "Restore failed"), e.Message);
             return;

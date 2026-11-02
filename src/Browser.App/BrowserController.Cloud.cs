@@ -95,7 +95,7 @@ public sealed partial class BrowserController
             _cloudError = e.Code;
             if (e.Code == "signed-out") { _cloud = null; _cloudBackups = []; SaveCloud(); }
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException or Microsoft.Data.Sqlite.SqliteException)
+        catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException or JsonException or CryptographicException or InvalidOperationException or Microsoft.Data.Sqlite.SqliteException)
         { DebugLog.Write($"cloud.failed {e.GetType().Name} {e.Message}"); _cloudError = "server"; }
         finally { _cloudBusy = false; PostCloud(); }
     }
@@ -127,16 +127,20 @@ public sealed partial class BrowserController
     {
         if (CloudKeyProblem(key) is { } problem) { Notice(T("Clé refusée", "Key rejected"), problem); return; }
         if (!quiet) HidePopup();
+        PasswordBackupDocument? passwords = null;
         await CloudRunAsync(async () =>
         {
-            var (sealedFile, _) = await SealProfileAsync(key);
+            var result = await SealProfileAsync(key);
+            var sealedFile = result.File;
+            passwords = result.Passwords;
             await Cloud.UploadAsync(_cloud!.Cookie, sealedFile, Environment.MachineName);
             if (_cloud is { } session) { _cloud = session with { LastBackup = DateTimeOffset.UtcNow }; SaveCloud(); }
             await RefreshCloudAsync();
             _cloudNotice = "saved";
         });
+        if (quiet && passwords is { Unreadable: > 0 } && _cloudNotice == "saved") Notice(T("Sauvegarde automatique incomplète", "Incomplete automatic backup"), PasswordBackupSummary(passwords));
         if (quiet) { if (_cloudError is "signed-out") Notice(T("Sauvegarde automatique arrêtée", "Automatic backup stopped"), CloudErrorText("signed-out")); return; }
-        if (_cloudNotice == "saved") Notice(T("Sauvegarde envoyée", "Backup sent"), T("Réglages, onglets, favoris, historique, notes, mots de passe et extensions, chiffrés sur cet appareil avec votre clé.", "Settings, tabs, bookmarks, history, notes, passwords and extensions, encrypted on this device with your key."));
+        if (_cloudNotice == "saved") Notice(T("Sauvegarde envoyée", "Backup sent"), T("Réglages, onglets, favoris, historique, notes, mots de passe et extensions, chiffrés sur cet appareil avec votre clé.", "Settings, tabs, bookmarks, history, notes, passwords and extensions, encrypted on this device with your key.") + " " + PasswordBackupSummary(passwords!));
         else if (_cloudError is { } error) Notice(T("Sauvegarde impossible", "Backup failed"), CloudErrorText(error));
     }
 
@@ -158,7 +162,12 @@ public sealed partial class BrowserController
         _ => T("Le service a refusé la demande. Réessayez.", "The service rejected the request. Try again."),
     };
 
-    private async Task<(byte[] File, int Passwords)> SealProfileAsync(string key)
+    private static string PasswordBackupSummary(PasswordBackupDocument passwords) =>
+        T($"Mots de passe exportés : {passwords.Exported}. Illisibles et omis : {passwords.Unreadable}.",
+          $"Passwords exported: {passwords.Exported}. Unreadable and omitted: {passwords.Unreadable}.")
+        + (passwords.Unreadable > 0 ? T(" Exportez les entrées manquantes en CSV depuis leur navigateur puis importez-les dans Sol.", " Export the missing entries as CSV from their browser, then import them into Sol.") : "");
+
+    private async Task<(byte[] File, PasswordBackupDocument Passwords)> SealProfileAsync(string key)
     {
         SaveSession();
         JsonFileStore.Save(AppPaths.Settings, _settings);
@@ -168,12 +177,17 @@ public sealed partial class BrowserController
         _db.BackupTo(copy);
         return await Task.Run(() =>
         {
-            var files = Backup.Collect(AppPaths.DataDir);
-            files["browser.db"] = File.ReadAllBytes(copy);
-            File.Delete(copy);
-            var logins = PasswordImport.Read(EngineData, Path.Combine(EngineData, "Default"), temp).Logins;
-            files[Backup.Passwords] = JsonSerializer.SerializeToUtf8Bytes(logins);
-            return (Backup.Seal(files, key), logins.Count);
+            try
+            {
+                var files = Backup.Collect(AppPaths.DataDir);
+                files["browser.db"] = File.ReadAllBytes(copy);
+                var sessions = files.TryGetValue("tab-sessions.json", out var sessionJson)
+                    ? JsonSerializer.Deserialize<List<TabSession>>(sessionJson) ?? [] : [];
+                var passwords = PasswordBackup.Collect(EngineData, sessions, temp, AppPaths.PendingPasswords);
+                files[Backup.Passwords] = JsonSerializer.SerializeToUtf8Bytes(passwords);
+                return (Backup.Seal(files, key), passwords);
+            }
+            finally { File.Delete(copy); }
         });
     }
 }

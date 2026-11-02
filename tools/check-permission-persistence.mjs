@@ -8,7 +8,7 @@ const executable=process.argv[2]??'src/Browser.App/bin/x64/Release/net10.0-windo
 const host=await sidebarHost(executable,{media:true});
 const command=(ui,object)=>ui.evaluate(`chrome.webview.postMessage(${JSON.stringify(JSON.stringify(object))})`);
 const state=page=>page.evaluate('Promise.all(["camera","microphone"].map(name=>navigator.permissions.query({name}).then(p=>p.state)))');
-const ready=page=>host.wait(()=>page.evaluate('document.readyState==="complete"').catch(()=>false),'media page ready');
+const ready=page=>host.wait(()=>page.evaluate(`location.origin===${JSON.stringify(host.origin)}&&document.readyState==="complete"&&!!navigator.mediaDevices?.getUserMedia`).catch(()=>false),'media page ready at fixture origin');
 async function request(ui,page,popup,kind,allow=true){
   await popup.evaluate('window.__permissionRequests=[];if(!window.__permissionWatch){window.__permissionWatch=true;chrome.webview.addEventListener("message",e=>{if(e.data?.popup==="permission")window.__permissionRequests.push(e.data)})}');
   await page.evaluate(`window.__mediaOutcome=null;navigator.mediaDevices.getUserMedia(${JSON.stringify(kind==='both'?{audio:true,video:true}:kind==='audio'?{audio:true}:{video:true})}).then(s=>{s.getTracks().forEach(t=>t.stop());window.__mediaOutcome='ok'},e=>window.__mediaOutcome=e.name);void 0`);

@@ -2,14 +2,11 @@
 // À lancer sur une branche jetable uniquement : `node cloud/e2e.mjs <fichier .env>`. Les comptes créés partent avec la branche.
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import {readCloudEnv, verifyCloudTestEnv} from '../tools/cloud-test-guard.mjs';
 import pg from 'pg';
 
-const env = Object.fromEntries(readFileSync(process.argv[2] ?? '.env.local', 'utf8').split(/\r?\n/).filter(l => l.includes('=') && !l.startsWith('#')).map(l => {
-  const at = l.indexOf('='); return [l.slice(0, at), l.slice(at + 1).replace(/^"|"$/g, '')];
-}));
-assert.notEqual(env.NEON_BRANCH, 'production', 'test accounts never go on production');
-const auth = env.NEON_AUTH_BASE_URL, api = env.NEON_FUNCTION_BACKUP_BASE_URL.replace(/\/$/, '');
+const env = readCloudEnv(process.argv[2] ?? '.env.local');
+const {auth, api} = await verifyCloudTestEnv(env);
 const ORIGIN = 'https://ui.navigateur';
 const ok = label => console.log(`ok - ${label}`);
 
@@ -81,4 +78,9 @@ const fake = await (await call(a, '/backups/uploads', json({ bytes: 4096 }))).js
 await fetch(fake.url, { method: 'PUT', body: randomBytes(4096), headers: { 'Content-Type': 'application/octet-stream' } });
 assert.equal((await call(a, `/backups/uploads/${fake.id}`, json({}))).status, 400); ok('un fichier qui n’est pas une sauvegarde est refusé et effacé');
 assert.equal((await call(a, `/backups/uploads/${fake.id}`, json({}))).status, 404);
+// Un compte peut abandonner ses envois, mais ne peut jamais obtenir un nombre illimité d'adresses.
+const abandoned = await Promise.all(Array.from({length: 8}, () => call(b, '/backups/uploads', json({bytes: sealed.length}))));
+assert.equal(abandoned.filter(r => r.status === 201).length, 5);
+assert.equal(abandoned.filter(r => r.status === 429).length, 3);
+ok('envois abandonnés simultanés : cinq réservations maximum, surplus refusé');
 console.log('PASS cloud backup');

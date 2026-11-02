@@ -38,3 +38,9 @@ Le paquet de test, son profil et son certificat temporaire ont été retirés ; 
 Les trois paquets `1.1.2.0` ont remplacé les paquets refusés dans Partner Center le 26 octobre 2026. La soumission a été renvoyée ; le portail affiche **En cours de certification**, avec prétraitement actif. Cela ne constitue pas une certification réussie. Preuve : `bin/store-certification-20261026/store-resubmitted.png`. Les notes Microsoft détaillent la cause, la correction et les limites des tests matériels.
 
 Références : [MSIX dans le Store](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/package-version-numbering), [extensions des applications empaquetées](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/desktop-to-uwp-extensions), [licence des polices Apple](https://developer.apple.com/fonts/).
+
+## Rapport suivant : 27 octobre 2026
+
+Le rapport `e908135e-ebca-46aa-b937-dad73ab492dc`, consulté le 2 novembre, refuse la soumission pour **10.1.1.3 Inaccurate Representation** : les images de métadonnées ne sont pas des captures directes du produit. Ce rapport ne signale plus le crash au démarrage précédent.
+
+`tools/check-store-screenshots.mjs` et `tools/capture-store-window.ps1` produisent maintenant des PNG directs de la fenêtre native de Sol, sans composition ni retouche, en français et en anglais. Ils utilisent un profil jetable hors écran, nettoyé à la fin. Les captures doivent être examinées avant d'être envoyées ; remplacer les images refusées dans les deux langues et joindre les paquets de la version courante. Une compilation ou une mise à jour des images ne vaut pas acceptation de la soumission par Microsoft.

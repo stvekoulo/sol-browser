@@ -11,6 +11,11 @@ export default defineConfig({
   buckets: {
     backups: { access: "private" },
   },
+  triggers: {
+    "backup-cleanup": {
+      type: "schedule", function: "backup", cron: "*/15 * * * *", functionPath: "/internal/cleanup",
+    },
+  },
   // Branch policy: per-branch tuning
   branch: (branch) => {
     if (branch.isDefault) {
