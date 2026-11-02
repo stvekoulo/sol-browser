@@ -16,3 +16,5 @@
 .sol-cloud-note { display:flex; gap:8px; margin:0; }
 .sol-cloud-note svg { flex:none; margin-top:2px; }
 .sol-cloud-error { margin:0; color:var(--danger, #b3261e); }
+.sol-cloud-auto { display:flex; align-items:center; gap:12px; }
+.sol-cloud-auto .setting-text { flex:1; min-width:0; }

@@ -31,7 +31,7 @@ export type Content =
   | { popup: 'notice'; title: string; hint: string }
   | { popup: 'site-reset'; site: string; session: string }
   | { popup: 'extension-confirm'; id: string; name: string; version: string; icon: string | null; update: boolean; access: string[] }
-  | { popup: 'extensions'; session: string; inSessions: boolean; inSessionTab: boolean; updates: '' | 'checking' | 'current' | 'updated' | 'failed'; installed: { id: string; name: string; version: string; enabled: boolean; page: boolean; options: boolean; pinned: boolean; inSessions: boolean; icon: string | null; store: boolean; update: string | null }[]; available: { id: string; name: string; version: string; from: string }[] };
+  | { popup: 'extensions'; session: string; updates: '' | 'checking' | 'current' | 'updated' | 'failed'; installed: { id: string; name: string; version: string; enabled: boolean; page: boolean; options: boolean; pinned: boolean; icon: string | null; store: boolean; update: string | null }[]; available: { id: string; name: string; version: string; from: string }[] };
 
 export type Profile = { id: string; name: string; current: boolean; renamable: boolean; deletable: boolean };
 

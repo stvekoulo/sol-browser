@@ -16,6 +16,12 @@ public sealed partial class BrowserController
         var linked = Open(url, activate: activate, sessionId: session, isPrivate: tab?.Private);
         return KeepInSourceGroup(linked, tab);
     }
+    // Session neuve : ses connexions de départ sont copiées avant que son premier onglet ne s'ouvre.
+    private async Task StartSessionAsync(string tabId, string sessionId)
+    {
+        await _pages.SeedSessionAsync(tabId, sessionId);
+        ChangeSession(tabId, sessionId);
+    }
     private void ChangeSession(string tabId, string sessionId)
     {
         if (_tabs.Tabs.FirstOrDefault(t => t.Id == tabId) is not { } tab || tab.Private || sessionId == _deletingSession
@@ -84,15 +90,21 @@ public sealed partial class BrowserController
         {
             var uptime = DateTime.Now - System.Diagnostics.Process.GetCurrentProcess().StartTime;
             // Un moteur qui meurt dès le démarrage ne doit pas relancer Sol en boucle.
-            if (!AppPaths.Private && uptime > TimeSpan.FromSeconds(30) && Environment.ProcessPath is { } exe)
-            {
-                var start = new System.Diagnostics.ProcessStartInfo(exe, $"--profile={AppPaths.Profile} --after={Environment.ProcessId}") { UseShellExecute = false };
-                foreach (var (name, value) in App.LaunchEnvironment) start.Environment[name] = value;
-                try { System.Diagnostics.Process.Start(start); }
-                catch (System.ComponentModel.Win32Exception) { DebugLog.Write("engine.restart.failed"); }
-            }
-            _window.Close();
+            if (uptime > TimeSpan.FromSeconds(30)) Relaunch(); else _window.Close();
         });
+    }
+
+    /// <summary>Ferme cette fenêtre et rouvre Sol sur le même profil, une fois celle-ci partie.</summary>
+    private void Relaunch()
+    {
+        if (!AppPaths.Private && Environment.ProcessPath is { } exe)
+        {
+            var start = new System.Diagnostics.ProcessStartInfo(exe, $"--profile={AppPaths.Profile} --after={Environment.ProcessId}") { UseShellExecute = false };
+            foreach (var (name, value) in App.LaunchEnvironment) start.Environment[name] = value;
+            try { System.Diagnostics.Process.Start(start); }
+            catch (System.ComponentModel.Win32Exception) { DebugLog.Write("sol.restart.failed"); }
+        }
+        _window.Close();
     }
 
     private void Close(string id)

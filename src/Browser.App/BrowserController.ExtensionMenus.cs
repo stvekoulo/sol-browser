@@ -36,19 +36,6 @@ public sealed partial class BrowserController
     }
     private Microsoft.Web.WebView2.Core.CoreWebView2Profile? EngineProfile => _tabs.ActiveId is { } active ? _pages.CoreOf(active)?.Profile : null;
 
-    private async Task ToggleExtensionInSessionsAsync(string id)
-    {
-        if (!_settings.SessionExtensions.Remove(id) && ExtensionCatalog.IsId(id)) _settings.SessionExtensions.Add(id);
-        JsonFileStore.Save(AppPaths.Settings, _settings);
-        await ApplyExtensionsInSessionsAsync();
-    }
-    private async Task ApplyExtensionsInSessionsAsync()
-    {
-        await _pages.SyncExtensionsAsync();
-        await RefreshExtensionsAsync();
-        Refresh();
-    }
-
     private async Task<string> ExtensionsJsonAsync()
     {
         var installed = new List<object>();
@@ -61,7 +48,7 @@ public sealed partial class BrowserController
                 if (enabled is null || !ExtensionCatalog.IsId(id) || ExtensionCatalog.Read(ExtensionFolder(id), id) is not { } info) continue;
                 have.Add(id);
                 installed.Add(new { id, name = info.Name, version = info.Version, enabled = enabled.Value, page = true, options = info.Options is not null,
-                    pinned = _settings.PinnedExtensions.Contains(id), inSessions = _settings.SessionExtensions.Contains(id), icon = ExtensionCatalog.Icon(info.Folder),
+                    pinned = _settings.PinnedExtensions.Contains(id), icon = ExtensionCatalog.Icon(info.Folder),
                     store = info.Store, update = _extensionUpdates.GetValueOrDefault(id) });
             }
         }
@@ -75,7 +62,6 @@ public sealed partial class BrowserController
         {
             popup = "extensions",
             session = _tabs.Tabs.FirstOrDefault(t => t.Id == _tabs.ActiveId)?.SessionId is { Length: > 0 } session ? _sessions.Name(session) : T("Principale", "Main"),
-            inSessions = _settings.ExtensionsInSessions, inSessionTab = _tabs.Tabs.FirstOrDefault(t => t.Id == _tabs.ActiveId)?.SessionId is { Length: > 0 },
             updates = _extensionCheck,
             installed,
             available = _extensionOffers.Values.OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase).Select(e => new { id = e.Id, name = e.Name, version = e.Version, from = e.From }),

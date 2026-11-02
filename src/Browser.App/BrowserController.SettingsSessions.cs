@@ -44,6 +44,7 @@ public sealed partial class BrowserController
         {
             welcome = "state",
             first = !_settings.Onboarded,
+            cloud = AppPaths.Private ? null : CloudJson(),
             name = _settings.ProfileName,
             theme = Math.Max(0, Array.IndexOf(Themes, _settings.Theme)),
             font = Math.Max(0, Array.IndexOf(Fonts, _settings.Font)),

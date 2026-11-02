@@ -7,9 +7,6 @@ namespace Browser.App;
 internal static class SharedExtensions
 {
     private static readonly SemaphoreSlim Gate = new(1, 1);
-    /// <summary>Le moteur isole les extensions par session : sans ce choix, seule la session principale les fait tourner.</summary>
-    public static bool InSessions { get; set; }
-    public static IReadOnlyCollection<string> ChosenForSessions { get; set; } = [];
     private static Dictionary<string, bool?>? _state;
     private static string StateFile => Path.Combine(AppPaths.DataDir, "extension-state.json");
     private static Dictionary<string, bool?> State => _state!;
@@ -59,7 +56,6 @@ internal static class SharedExtensions
         {
             _state ??= await Task.Run(LoadState);
             var installed = (await profile.GetBrowserExtensionsAsync()).ToDictionary(e => e.Id);
-            var tabSession = !InSessions && profile.ProfileName.StartsWith("sol-", StringComparison.Ordinal);
             var changed = false;
             // Migration des installations existantes, sans ressusciter celles supprimées depuis la migration.
             foreach (var extension in installed.Values)
@@ -80,9 +76,8 @@ internal static class SharedExtensions
                         continue;
                     }
                     // Ne pas lancer le service worker d'une extension désactivée dans une nouvelle session.
-                    // Hors de la session principale, seules les extensions choisies tournent ; les autres sont à l'arrêt,
-                    // pas supprimées : leurs réglages dans cette session reviennent si le choix change.
-                    var run = enabled.Value && (!tabSession || ChosenForSessions.Contains(id));
+                    // Installée une fois dans Sol, une extension est là dans toutes les sessions d'onglets.
+                    var run = enabled.Value;
                     if (extension is null && !run) continue;
                     var folder = Folder(id);
                     if (ExtensionCatalog.Read(folder, id) is null) continue;

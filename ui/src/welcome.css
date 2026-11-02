@@ -1,25 +1,60 @@
 /* Configuration Sol : identité monochrome, aucune capture ou couleur de site. */
 .welcome-body { overflow: hidden; background: #080808; }
 .welcome-body #root { height: calc(100vh / var(--ui-scale, 1)); }
-.welcome { --text:#171717; --text-dim:#727272; --accent:#171717; --bg-pill-solid:#fff; --bg-tab-hover:#efefed; --border-card:#dededb; --border-strong:#d5d5d2; --bg-popup:#f7f7f4; --bg-pill:#e9e9e6; display:grid; grid-template-columns:minmax(340px,46%) minmax(0,1fr); height:100%; background:#f7f7f4; color:#171717; font-family:Inter,'Segoe UI',sans-serif; }
-.welcome-identity { grid-area:1 / 1; position:relative; overflow:hidden; background:#000; color:#fff; padding:38px 46px 26px; display:flex; flex-direction:column; }
-.welcome-wordmark { display:flex; align-items:center; gap:9px; z-index:1; }
-.welcome-wordmark img { width:36px; height:36px; }
-.welcome-wordmark > span { font-size:31px; font-weight:550; letter-spacing:-.07em; }
-.welcome-wordmark small { margin-left:auto; font-size:9px; letter-spacing:.16em; color:#8a8a8a; }
-.welcome-emblem { position:absolute; width:min(84%,440px); aspect-ratio:1; top:5%; right:-8%; pointer-events:none; opacity:.9; }
-.welcome-emblem img { width:100%; height:100%; object-fit:contain; }
-.welcome-manifesto { margin-top:auto; padding-top:220px; z-index:1; }
-.welcome-manifesto > span { font-size:9px; letter-spacing:.17em; color:#969696; }
-.welcome-manifesto h2 { font-size:clamp(32px,3.8vw,58px); line-height:1.08; letter-spacing:-.055em; font-weight:450; white-space:pre-line; margin:14px 0 28px; }
-.welcome-journey { padding:0; margin:0; list-style:none; display:flex; flex-direction:column; }
-.welcome-journey li { display:flex; align-items:center; gap:14px; min-height:34px; color:#777; font-size:11px; }
-.welcome-journey li > span { font-size:9px; font-variant-numeric:tabular-nums; width:18px; }
-.welcome-journey .current { color:#fff; }
-.welcome-journey .complete { color:#b9b9b9; }
-.welcome-journey li i { flex:1; height:1px; margin-left:10px; background:#262626; }
-.welcome-journey .current i { background:#dedede; }
-.welcome-signature { font-size:9px; color:#707070; margin:30px 0 0; }
+/* Une seule police sur tout l'accueil, quel que soit le choix fait à l'étape du style. */
+.welcome,.welcome-intro { --font:"Inter Variable","Segoe UI",sans-serif; --font-sans:var(--font); font-family:var(--font); }
+.welcome { --text:#171717; --text-dim:#727272; --accent:#171717; --bg-pill-solid:#fff; --bg-tab-hover:#efefed; --border-card:#dededb; --border-strong:#d5d5d2; --bg-popup:#f7f7f4; --bg-pill:#e9e9e6; display:grid; grid-template-columns:minmax(340px,46%) minmax(0,1fr); height:100%; background:#f7f7f4; color:#171717; }
+/* Bord festonné côté formulaire : des demi-cercles creusés tous les 18 px. */
+.welcome-identity { grid-area:1 / 1; position:relative; overflow:hidden; color:#151515; padding:34px 46px 30px 40px; display:flex; flex-direction:column; background:#e2dcfc; -webkit-mask:radial-gradient(circle 7px at 100% 50%,#0000 96%,#000) right / 100% 18px repeat-y; mask:radial-gradient(circle 7px at 100% 50%,#0000 96%,#000) right / 100% 18px repeat-y; }
+.welcome-wordmark { display:flex; align-items:center; gap:9px; }
+.welcome-wordmark img { width:32px; height:32px; filter:brightness(.3) contrast(1.4); }
+.welcome-preview.bright .welcome-preview-page img { filter:brightness(.3) contrast(1.4); }
+.welcome-wordmark > span { font-size:28px; font-weight:550; letter-spacing:-.07em; }
+.welcome-preview { align-self:center; width:min(100%,420px); border-radius:14px; overflow:hidden; background:#151515; color:#f4f4f4; box-shadow:0 18px 40px -18px rgba(40,30,80,.35),0 0 0 1px rgba(20,20,40,.08); transition:background .4s,color .4s; animation:welcome-float 6s ease-in-out infinite; }
+.welcome-preview { border-radius:18px; }
+.welcome-preview.bright { background:#fafafa; color:#141414; }
+.welcome-preview-bar { display:flex; align-items:center; gap:6px; padding:10px 12px; background:rgba(127,127,127,.12); }
+.welcome-preview-bar i { width:9px; height:9px; border-radius:50%; background:rgba(127,127,127,.4); }
+.welcome-preview-bar span { flex:1; margin-left:8px; padding:6px 10px; border-radius:8px; background:rgba(127,127,127,.14); font-size:11px; opacity:.75; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.welcome-preview-marks { display:flex; gap:6px; padding:8px 12px 0; }
+.welcome-preview-marks i { height:16px; flex:0 0 52px; border-radius:6px; background:#a594f2; animation:welcome-mark .5s backwards; }
+.welcome-preview-marks i:nth-child(2) { animation-delay:.08s; } .welcome-preview-marks i:nth-child(3) { animation-delay:.16s; } .welcome-preview-marks i:nth-child(4) { animation-delay:.24s; }
+.welcome-preview-page { display:flex; flex-direction:column; align-items:center; gap:8px; padding:42px 20px 48px; text-align:center; }
+.welcome-preview-page img { width:34px; height:34px; filter:drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
+.welcome-preview-page strong { font-size:26px; font-weight:600; letter-spacing:-.03em; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.welcome-preview-page small { font-size:11px; opacity:.6; }
+/* Phrase de l'étape au-dessus de la fenêtre miniature : elle change avec l'étape, l'aperçu aussi. */
+.welcome-scene { margin:auto 0; display:flex; flex-direction:column; gap:10px; animation:welcome-rise .5s cubic-bezier(.2,.8,.2,1); }
+.welcome-scene h2 { margin:0; font-size:clamp(28px,3vw,40px); line-height:1.08; letter-spacing:-.045em; font-weight:650; text-wrap:balance; }
+.welcome-scene p { margin:0 0 22px; max-width:380px; font-size:13.5px; line-height:1.5; color:rgba(21,21,21,.66); }
+.welcome-preview-list { list-style:none; margin:0; padding:18px 22px 22px; display:flex; flex-direction:column; gap:10px; font-size:13px; }
+.welcome-preview-list li { display:flex; align-items:center; gap:10px; }
+.welcome-preview-list b { width:18px; height:18px; border-radius:50%; display:grid; place-items:center; font-size:10px; background:#a594f2; color:#fff; }
+.welcome-preview-list .welcome-preview-lock { margin-top:6px; font-size:11px; opacity:.6; }
+.welcome-preview-list.rows li i { width:26px; height:26px; border-radius:7px; background:rgba(127,127,127,.18); }
+.welcome-preview-aa { font-size:64px !important; font-weight:600; letter-spacing:-.04em; }
+.welcome-preview-search { width:78%; padding:12px 16px; border-radius:12px; background:rgba(127,127,127,.16); font-size:13px; text-align:left; opacity:.85; }
+.welcome-preview-pip { align-self:flex-end; margin-top:14px; width:96px; height:56px; border-radius:8px; background:#a594f2; display:grid; place-items:center; box-shadow:0 8px 18px rgba(0,0,0,.3); }
+.welcome-preview-pip i { width:0; height:0; border-left:12px solid #fff; border-top:8px solid transparent; border-bottom:8px solid transparent; }
+.welcome-progress > span { font-size:10px; letter-spacing:.14em; color:rgba(21,21,21,.6); font-variant-numeric:tabular-nums; }
+.welcome-progress strong { display:block; font-size:22px; line-height:1.1; letter-spacing:-.03em; font-weight:600; margin:6px 0 14px; }
+.welcome-progress ol { display:flex; gap:6px; padding:0; margin:0; list-style:none; }
+.welcome-progress li { flex:1; height:3px; border-radius:2px; background:rgba(21,21,21,.14); transition:background .5s; }
+.welcome-progress li.on { background:#151515; }
+/* Dernière étape : la carte de membre, à la manière de la carte Arc. */
+.welcome-pass { margin:auto 0; align-self:center; width:min(78%,290px); padding:14px 14px 12px; border-radius:16px; background:#fffcef; color:#8a5a00; box-shadow:0 22px 50px -20px rgba(120,80,0,.45),0 0 0 1px rgba(120,80,0,.12); display:flex; flex-direction:column; animation:welcome-float 6s ease-in-out infinite, welcome-rise .6s cubic-bezier(.2,.8,.2,1); }
+.welcome-pass-art { display:flex; flex-direction:column; gap:10px; }
+.welcome-pass-art i { height:96px; border-radius:6px; background:linear-gradient(120deg,#f2c94c,#d08a3c 60%,#e3a07a); }
+.welcome-pass-art i:first-child { border-radius:6px 6px 50% 50% / 6px 6px 22px 22px; }
+.welcome-pass-art i:last-child { height:74px; border-radius:50% 50% 6px 6px / 22px 22px 6px 6px; filter:hue-rotate(-12deg); }
+.welcome-pass strong { font-size:26px; font-weight:650; letter-spacing:-.03em; margin-top:16px; color:#a86400; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.welcome-pass small { font-size:11px; line-height:1.4; }
+.welcome-pass footer { display:flex; justify-content:space-between; margin-top:34px; font-size:9px; font-weight:600; letter-spacing:.12em; }
+.welcome-pass footer span:first-child { border:1px solid currentColor; border-radius:3px; padding:1px 6px; }
+@keyframes welcome-float { 50% { transform:translateY(-6px); } }
+@keyframes welcome-rise { from { opacity:0; transform:translateY(10px); } }
+@keyframes welcome-mark { from { opacity:0; transform:scale(.6); } }
+@media(prefers-reduced-motion:reduce) { .welcome-preview,.welcome-scene,.welcome-preview-marks i,.welcome-pass { animation:none; } }
 .welcome-card { grid-area:1 / 2; min-width:0; min-height:0; padding:42px clamp(28px,5.5vw,88px) 34px; display:flex; flex-direction:column; }
 .welcome-step-count { display:flex; justify-content:space-between; align-items:center; font-size:9px; letter-spacing:.16em; color:#777; margin-bottom:34px; }
 .welcome-step-count span { letter-spacing:.08em; font-variant-numeric:tabular-nums; }
@@ -67,9 +102,9 @@
 .welcome-dots span { width:4px; height:4px; background:#ccc; border-radius:50%; }
 .welcome-dots .on { background:#171717; }
 @keyframes welcome-in { from { opacity:0; transform:translateY(8px); } }
-@media(max-width:800px) { .welcome { grid-template-columns:34% minmax(0,1fr); } .welcome-identity { padding:30px 22px; } .welcome-wordmark small,.welcome-manifesto > span,.welcome-signature { display:none; } .welcome-emblem { width:160%; top:16%; right:-45%; } .welcome-manifesto h2 { font-size:30px; } .welcome-card { padding:32px 24px; } }
+@media(max-width:800px) { .welcome { grid-template-columns:34% minmax(0,1fr); } .welcome-identity { padding:30px 22px; } .welcome-preview-page { padding:28px 12px 32px; } .welcome-preview-page strong { font-size:19px; } .welcome-card { padding:32px 24px; } }
 @media(max-width:550px) { .welcome { grid-template-columns:minmax(0,1fr); } .welcome-identity { display:none; } .welcome-card { grid-area:1 / 1; padding:26px 22px; } .welcome-step-count { margin-bottom:24px; } .welcome-step { gap:15px; } .welcome h1 { font-size:36px; } .welcome-foot { padding-top:20px; } }
-@media(max-height:650px) { .welcome-identity { padding-top:24px; } .welcome-emblem { width:60%; top:8%; } .welcome-manifesto { padding-top:115px; } .welcome-manifesto h2 { margin-bottom:14px; font-size:36px; } .welcome-signature { margin-top:12px; } .welcome-card { padding-block:24px; } .welcome-step-count { margin-bottom:20px; } .welcome-step { gap:12px; } .welcome-foot { padding-top:18px; margin-top:16px; } }
+@media(max-height:650px) { .welcome-identity { padding-top:24px; } .welcome-preview-page { padding:24px 16px 28px; } .welcome-card { padding-block:24px; } .welcome-step-count { margin-bottom:20px; } .welcome-step { gap:12px; } .welcome-foot { padding-top:18px; margin-top:16px; } }
 @media(prefers-reduced-motion:reduce) { .welcome-step > * { animation:none; } .welcome .pill-action:active { transform:none; } }
 /* Composants beUI : adaptations de surface, sans modifier leurs comportements. */
 .welcome { --border:#d9d9d5; }
@@ -108,3 +143,13 @@
 .welcome-font-more:hover { color:#111; }
 .welcome-font-more > span { font-size:16px; }
 @media(max-width:360px) { .welcome-font-options { grid-template-columns:minmax(0,1fr); } }
+.welcome-cloud { display:flex; flex-direction:column; gap:14px; }
+.welcome-cloud-submit { align-self:flex-start; }
+
+/* Écran d'ouverture : noir, le logo, une phrase, une flèche. */
+.welcome-intro { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:26px; color:#fff; text-align:center; background:radial-gradient(50% 45% at 50% 40%,rgba(255,255,255,.07),transparent 70%),#050505; }
+.welcome-intro img { width:104px; height:104px; filter:drop-shadow(0 0 18px rgba(255,255,255,.18)); animation:welcome-rise .7s cubic-bezier(.2,.8,.2,1); }
+.welcome-intro h1 { margin:0; font-size:clamp(40px,6vw,76px); line-height:1.02; letter-spacing:-.05em; font-weight:650; white-space:pre-line; animation:welcome-rise .8s .1s cubic-bezier(.2,.8,.2,1) backwards; }
+.welcome-intro .welcome-intro-go { min-width:46px; height:34px; border-radius:10px; color:#fff; background:rgba(255,255,255,.12); box-shadow:inset 0 0 0 1px rgba(255,255,255,.16); animation:welcome-rise .8s .25s cubic-bezier(.2,.8,.2,1) backwards; }
+.welcome-intro .welcome-intro-go:hover { background:rgba(255,255,255,.2); }
+@media(prefers-reduced-motion:reduce) { .welcome-intro,.welcome-intro img,.welcome-intro h1,.welcome-intro .welcome-intro-go { animation:none; } }

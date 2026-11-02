@@ -43,6 +43,28 @@ public class BackupTests : IDisposable
     }
 
     [Fact]
+    public void Extensions_and_session_data_round_trip_and_cannot_escape_the_profile()
+    {
+        var source = Path.Combine(_dir, "source");
+        Directory.CreateDirectory(Path.Combine(source, "extensions", "abc", "js"));
+        File.WriteAllText(Path.Combine(source, "extensions", "abc", "js", "main.js"), "extension");
+        File.WriteAllText(Path.Combine(source, "tab-sessions.json"), "sessions");
+        File.WriteAllText(Path.Combine(source, "debug.log"), "pas sauvegardé");
+        var files = Backup.Collect(source);
+        Assert.Equal(["extensions/abc/js/main.js", "tab-sessions.json"], files.Keys.Order());
+        // Une sauvegarde forgée ne peut rien écrire hors des dossiers connus du profil.
+        files["extensions/../../evil.txt"] = [1]; files["notes/x.txt"] = [1]; files["extensions/C:x.txt"] = [1];
+        var target = Path.Combine(_dir, "target");
+        Directory.CreateDirectory(Path.Combine(target, "extensions", "old"));
+        Backup.Stage(target, Backup.Open(Backup.Seal(files, "clé de sauvegarde"), "clé de sauvegarde")!);
+        Assert.True(Backup.ApplyStaged(target));
+        Assert.Equal("extension", File.ReadAllText(Path.Combine(target, "extensions", "abc", "js", "main.js")));
+        Assert.False(Directory.Exists(Path.Combine(target, "extensions", "old")));
+        Assert.Equal("sessions", File.ReadAllText(Path.Combine(target, "tab-sessions.json")));
+        Assert.False(File.Exists(Path.Combine(_dir, "evil.txt")));
+        Assert.False(Directory.Exists(Path.Combine(target, "notes")));
+    }
+    [Fact]
     public void Passwords_are_read_from_an_exported_csv()
     {
         var csv = "name,url,username,password,note\r\nExemple,https://exemple.test/login,ada,\"a,b \"\"c\"\"\",\r\nSans,https://vide.test/,bob,,\r\nApp,android://x/,eve,z,\r\n\"Multi\nligne\",http://autre.test:8080/a?b=1,,p2,note\n";

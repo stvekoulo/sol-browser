@@ -34,6 +34,7 @@ public sealed partial class PageHost
         WatchGitLabSession(view.CoreWebView2);
         if (_sessionCookies.Remove(profile.ProfileName, out var cookies))
             foreach (var cookie in cookies) profile.CookieManager.AddOrUpdateCookie(cookie);
+        ApplySessionSeed(profile);
     }
     public async Task<bool> DeleteSessionAsync(string sessionId)
     {

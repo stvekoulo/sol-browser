@@ -3,6 +3,9 @@ import { fontLabels, onMessage, send } from './bridge';
 import { t, useLang } from './i18n';
 import { Icon } from './Icons';
 import { WelcomeIdentity } from './WelcomeIdentity';
+import logo from './assets/logo.png';
+import { WelcomeCloud } from './WelcomeCloud';
+import type { CloudState } from './SettingsCloud';
 import { Button } from '@/components/motion/button';
 import { Input } from '@/components/motion/input';
 import { Switch } from '@/components/motion/switch';
@@ -13,7 +16,7 @@ import {WelcomeFonts} from './WelcomeFonts';
 type Browser = { id: string; name: string; profiles: { folder: string; name: string }[] };
 type Setup = {
   first: boolean; name: string; theme: number; font: number; language: number; engine: number; engines: string[];
-   pip: boolean; browsers: Browser[];
+   pip: boolean; browsers: Browser[]; cloud: CloudState | null;
 };
 type Imported = Record<string, { bookmarks: number; history: number; passwords: number; locked: number; error?: string } | 'running'>;
 
@@ -26,6 +29,7 @@ export default function Welcome() {
   useLang();
   const [setup, setSetup] = useState<Setup | null>(null);
   const [step, setStep] = useState(0);
+  const [intro, setIntro] = useState(true);
   const [imported, setImported] = useState<Imported>({});
   const [name, setName] = useState('');
   const [csv, setCsv] = useState<number | null>(null);
@@ -35,6 +39,7 @@ export default function Welcome() {
     const off = onMessage(data => {
       const message = data as { welcome?: string; id?: string; folder?: string; bookmarks?: number; history?: number; passwords?: number; locked?: number; error?: string };
       if (message.welcome === 'reset') send({ type: 'welcome.ready' });
+      if (message.welcome === 'cloud') setSetup(current => current && { ...current, cloud: (data as { cloud: CloudState }).cloud });
       if (message.welcome === 'csv') { setCsv(message.passwords ?? 0); setCsvError(message.error ?? null); }
       if (message.welcome === 'state') {
         const next = data as unknown as Setup;
@@ -56,7 +61,7 @@ export default function Welcome() {
     setSetup({ ...setup, ...patch });
     send({ type: 'settings.set', id, index });
   };
-  const last = setup.first ? 4 : 1;
+  const last = setup.first ? (setup.cloud ? 5 : 4) : 1;
   const next = () => {
     if (step === 0) send({ type: 'welcome.name', title: name.trim() });
     if (step >= last) send({ type: 'welcome.done' });
@@ -140,12 +145,25 @@ export default function Welcome() {
       <p className="welcome-lead">{t('La configuration est terminée. Vous pouvez commencer à naviguer.', 'Setup is complete. You can start browsing.')}</p>
     </>,
   ];
+  // Compte Sol juste après le nom : une sauvegarde retrouvée rend l'import et les réglages inutiles.
+  if (setup.first && setup.cloud) steps.splice(1, 0, <WelcomeCloud cloud={setup.cloud} />);
+  // Étape du compte sans compte : le bouton principal propose de passer, l'action vit dans le formulaire.
+  const skipCloud = setup.first && !!setup.cloud && step === 1 && !setup.cloud.email;
+
+  // Première ouverture : un écran d'ouverture plein cadre, comme celui d'Arc, avant les étapes.
+  if (setup.first && intro) return (
+    <main className="welcome-intro">
+      <img src={logo} alt="" draggable={false} />
+      <h1>{t('Le web,\nà votre rythme.', 'The web,\nat your pace.')}</h1>
+      <Button variant="ghost" size="sm" pressScale={0.94} className="welcome-intro-go" autoFocus aria-label={t('Commencer la configuration', 'Start setup')} onClick={() => setIntro(false)}><Icon d="M3 8h10M9 4l4 4-4 4" size={16} /></Button>
+    </main>
+  );
 
   return (
     <main className="welcome">
       <section role="region" className="welcome-card" aria-label={t('Accueil de Sol', 'Sol welcome')}>
         {/* La clé rejoue l'apparition du contenu à chaque étape. */}
-        <div className="welcome-step-count">{t('CONFIGURATION', 'SETUP')}<span>{setup.first ? `0${step + 1} / 05` : t('IMPORTATION', 'IMPORT')}</span></div>
+        <div className="welcome-step-count">{t('CONFIGURATION', 'SETUP')}<span>{setup.first ? `0${step + 1} / 0${steps.length}` : t('IMPORTATION', 'IMPORT')}</span></div>
         <div key={step} className="welcome-step">{steps[step]}</div>
         <footer className="welcome-foot">
           {setup.first && (
@@ -155,12 +173,13 @@ export default function Welcome() {
           )}
           <span className="welcome-space" />
           {setup.first && step > 0 && <Button variant="ghost" size="sm" pressScale={0.96} className="pill-action" onClick={() => setStep(step - 1)}>{t('Retour', 'Back')}</Button>}
-          <Button variant="ghost" size="sm" pressScale={0.96} className="pill-action primary welcome-next" onClick={next}>
-            {step >= last ? (setup.first ? t('Commencer', 'Get started') : t('Terminer', 'Done')) : t('Continuer', 'Continue')}
+          <Button variant="ghost" size="sm" pressScale={0.96} className={`pill-action welcome-next${skipCloud ? '' : ' primary'}`} onClick={next}>
+            {step >= last ? (setup.first ? t('Commencer', 'Get started') : t('Terminer', 'Done'))
+              : skipCloud ? t('Passer cette étape', 'Skip this step') : t('Continuer', 'Continue')}
           </Button>
         </footer>
       </section>
-      <WelcomeIdentity step={step} />
+      <WelcomeIdentity step={step} first={setup.first} cloud={!!setup.cloud} name={name.trim()} theme={setup.theme} engine={setup.engines[setup.engine] ?? ''} />
     </main>
   );
 }

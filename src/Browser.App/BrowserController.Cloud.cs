@@ -13,7 +13,8 @@ public sealed partial class BrowserController
         Environment.GetEnvironmentVariable("NAVIGATEUR_CLOUD_AUTH") ?? "https://ep-plain-firefly-b84mlktb.neonauth.c-14.us-east-1.aws.neon.tech/neondb/auth",
         Environment.GetEnvironmentVariable("NAVIGATEUR_CLOUD_API") ?? "https://br-wispy-night-b89mzp5p-backup.compute.c-14.us-east-1.aws.neon.tech");
     private const int CloudKeyLength = 12; // le fichier est hors de la machine : la clé doit résister à une attaque hors ligne
-    private sealed record CloudSession(string Email, string Cookie, byte[] Salt, byte[] PasswordHash);
+    // AutoKey : la clé gardée pour la sauvegarde automatique, protégée comme le reste de ce fichier par Windows.
+    private sealed record CloudSession(string Email, string Cookie, byte[] Salt, byte[] PasswordHash, string? AutoKey = null, DateTimeOffset? LastBackup = null);
     private CloudSession? _cloud;
     private bool _cloudLoaded, _cloudBusy, _cloudUpload;
     private string? _cloudError, _cloudNotice;
@@ -25,7 +26,8 @@ public sealed partial class BrowserController
         LoadCloud();
         return new
         {
-            email = _cloud?.Email, busy = _cloudBusy, error = _cloudError, notice = _cloudNotice,
+            email = _cloud?.Email, busy = _cloudBusy, error = _cloudError, notice = _cloudNotice, auto = _cloud?.AutoKey is not null,
+            last = _cloud?.LastBackup?.LocalDateTime.ToString("g", System.Globalization.CultureInfo.GetCultureInfo(Language.Current)),
             backups = _cloudBackups.Select(b => new { id = b.Id, device = b.Device, bytes = b.Bytes, date = b.CreatedAt.LocalDateTime.ToString("g", System.Globalization.CultureInfo.GetCultureInfo(Language.Current)) }),
         };
     }
@@ -70,12 +72,17 @@ public sealed partial class BrowserController
                     T("Clé de sauvegarde", "Backup key"), T("Sauvegarder", "Back up"), "", "backup.export.key", secret: true);
                 break;
             case "cloud.restore": _ = CloudRunAsync(() => DownloadCloudAsync(c.Id!)); break;
+            case "cloud.auto" or "cloud.auto.key" or "cloud.restore.key": CloudAutoCommand(c); break;
             case "cloud.delete": _ = CloudRunAsync(async () => { await Cloud.DeleteAsync(_cloud!.Cookie, c.Id!); await RefreshCloudAsync(); }); break;
         }
         return true;
     }
 
-    private void PostCloud() { if (_settingsOpen) _popup.Post(SettingsJson()); }
+    private void PostCloud()
+    {
+        if (_settingsOpen) _popup.Post(SettingsJson());
+        if (_welcome.IsOpen) _welcome.Post(JsonSerializer.Serialize(new { welcome = "cloud", cloud = CloudJson() }));
+    }
 
     private async Task CloudRunAsync(Func<Task> work)
     {
@@ -115,18 +122,21 @@ public sealed partial class BrowserController
         return null;
     }
 
-    private async Task UploadCloudAsync(string key)
+    /// <param name="quiet">Sauvegarde automatique : aucun message si tout va bien.</param>
+    private async Task UploadCloudAsync(string key, bool quiet = false)
     {
         if (CloudKeyProblem(key) is { } problem) { Notice(T("Clé refusée", "Key rejected"), problem); return; }
-        HidePopup();
+        if (!quiet) HidePopup();
         await CloudRunAsync(async () =>
         {
             var (sealedFile, _) = await SealProfileAsync(key);
             await Cloud.UploadAsync(_cloud!.Cookie, sealedFile, Environment.MachineName);
+            if (_cloud is { } session) { _cloud = session with { LastBackup = DateTimeOffset.UtcNow }; SaveCloud(); }
             await RefreshCloudAsync();
             _cloudNotice = "saved";
         });
-        if (_cloudNotice == "saved") Notice(T("Sauvegarde envoyée", "Backup sent"), T("Réglages, onglets, favoris, historique, notes et mots de passe, chiffrés sur cet appareil avec votre clé.", "Settings, tabs, bookmarks, history, notes and passwords, encrypted on this device with your key."));
+        if (quiet) { if (_cloudError is "signed-out") Notice(T("Sauvegarde automatique arrêtée", "Automatic backup stopped"), CloudErrorText("signed-out")); return; }
+        if (_cloudNotice == "saved") Notice(T("Sauvegarde envoyée", "Backup sent"), T("Réglages, onglets, favoris, historique, notes, mots de passe et extensions, chiffrés sur cet appareil avec votre clé.", "Settings, tabs, bookmarks, history, notes, passwords and extensions, encrypted on this device with your key."));
         else if (_cloudError is { } error) Notice(T("Sauvegarde impossible", "Backup failed"), CloudErrorText(error));
     }
 
@@ -158,10 +168,9 @@ public sealed partial class BrowserController
         _db.BackupTo(copy);
         return await Task.Run(() =>
         {
-            var files = new Dictionary<string, byte[]> { ["browser.db"] = File.ReadAllBytes(copy) };
+            var files = Backup.Collect(AppPaths.DataDir);
+            files["browser.db"] = File.ReadAllBytes(copy);
             File.Delete(copy);
-            foreach (var name in Backup.ProfileFiles)
-                if (name != "browser.db" && File.Exists(Path.Combine(AppPaths.DataDir, name))) files[name] = File.ReadAllBytes(Path.Combine(AppPaths.DataDir, name));
             var logins = PasswordImport.Read(EngineData, Path.Combine(EngineData, "Default"), temp).Logins;
             files[Backup.Passwords] = JsonSerializer.SerializeToUtf8Bytes(logins);
             return (Backup.Seal(files, key), logins.Count);

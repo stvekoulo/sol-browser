@@ -78,6 +78,17 @@
     }
     return null;
   };
+  /* La plus grande version connue d'une image : srcset, sources d'un <picture>, attributs haute définition des
+     galeries, ou un lien qui pointe vers le fichier lui-même. Les descripteurs « x » se comparent en pixels réels. */
+  const bestImage = img => {
+    const shown = img.currentSrc || img.src, base = img.naturalWidth || img.width || 1, found = [[shown, base]];
+    const add = (url, size) => { try { const u = new URL(url, document.baseURI).href; if (web(u)) found.push([u, size]); } catch {} };
+    const sets = [img.getAttribute('srcset'), img.getAttribute('data-srcset'), ...[...(img.closest('picture')?.querySelectorAll('source') || [])].map(s => s.getAttribute('srcset'))];
+    for (const set of sets) for (const [url, size = ''] of (set || '').split(/\s*,\s+|(?<=\s[\d.]+[wx]),\s*/).map(p => p.trim().split(/\s+/)).filter(p => p[0])) add(url, size.endsWith('w') ? parseFloat(size) : (parseFloat(size) || 1) * base);
+    for (const name of ['data-hires', 'data-full', 'data-full-src', 'data-large', 'data-original', 'data-zoom-image', 'data-large_image', 'data-src']) { const v = img.getAttribute(name); if (v) add(v, name === 'data-src' ? base : 1e6); }
+    const link = img.closest('a')?.href; if (/\.(jpe?g|png|webp|avif|gif|bmp)([?#]|$)/i.test(link || '')) add(link, 1e6 + 1);
+    return found.sort((a, b) => b[1] - a[1])[0][0];
+  };
   const primaryActionsFor = ({ el, kind, text }) => kind === 'selection'
     /* la sélection : copier, Sol AI, et « Plus » qui ouvre le menu du clic droit pour tout le reste */
     ? [['copy', T('Copier', 'Copy'), text], ['sol', T('Sol AI', 'Sol AI'), text], ['more', T('Plus d’actions…', 'More actions…'), text]]
@@ -86,10 +97,10 @@
     : kind === 'video'
       ? [['download', T('Télécharger la vidéo…', 'Download video…'), web(el.currentSrc || el.src) ? el.currentSrc || el.src : location.href], ['link', T('Copier le lien vidéo', 'Copy video link'), web(el.currentSrc || el.src) ? el.currentSrc || el.src : location.href], ['more', T('Plus d’actions…', 'More actions…'), web(el.currentSrc || el.src) ? el.currentSrc || el.src : location.href]]
     : kind === 'image'
-      ? [['tab', T("Ouvrir l'image", 'Open image'), el.currentSrc || el.src], ['link', T("Copier le lien de l'image", 'Copy image link'), el.currentSrc || el.src], ['note', T('Ajouter à une note', 'Add to a note'), el.currentSrc || el.src]]
+      ? [['download', T("Télécharger l'image en haute qualité", 'Download full-quality image'), bestImage(el)], ['copy', T("Copier l'image", 'Copy image'), bestImage(el)], ['tab', T("Ouvrir l'image", 'Open image'), bestImage(el)]]
       : [['copy', T('Copier le code', 'Copy code'), el.innerText], ['explain', T('Expliquer avec Sol AI', 'Explain with Sol AI'), el.innerText], ['note', T('Ajouter à une note', 'Add to a note'), el.innerText]];
 
-  const actionsFor = target => {const actions=primaryActionsFor(target);return actions.some(a=>a[0]==='more')?actions:[...actions,['more',T('Plus d’actions…','More actions…'),target.kind==='code'?target.el.innerText:target.kind==='link'?target.el.href:target.el.currentSrc||target.el.src]]};
+  const actionsFor = target => {const actions=primaryActionsFor(target);return actions.some(a=>a[0]==='more')?actions:[...actions,['more',T('Plus d’actions…','More actions…'),target.kind==='code'?target.el.innerText:target.kind==='link'?target.el.href:target.kind==='image'?bestImage(target.el):target.el.currentSrc||target.el.src]]};
   /* ── la vue : un hôte fixe, une racine fermée ── */
   // Fermer la racine et enregistrer les gestionnaires avant les scripts du site.
   const create = document.createElement.bind(document), createSvg = document.createElementNS.bind(document);

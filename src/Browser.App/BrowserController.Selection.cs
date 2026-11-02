@@ -17,7 +17,16 @@ public sealed partial class BrowserController
         {
             case "preview" when kind=="link"&&IsWeb(text): _=ShowLinkPreviewAsync(tabId,text);break;
             case "more" when kind == "code": ShowSelectionMenu(tabId,value,x,y); break;
-            case "more" when kind is "link" or "image" && IsWeb(text):
+            case "download" when kind == "image": _ = DownloadImageAsync(tabId, text); break;
+            case "copy" when kind == "image": _ = CopyImageAsync(tabId, text); break;
+            case "more" when kind == "image" && IsWeb(text):
+                ShowMenu(x, y, [
+                    (T("Télécharger l'image en haute qualité", "Download full-quality image"), () => _ = DownloadImageAsync(tabId, text)),
+                    (T("Copier l'image", "Copy image"), () => _ = CopyImageAsync(tabId, text)),
+                    (T("Copier le lien de l'image", "Copy image link"), () => Copy(text)),
+                    (T("Ouvrir dans un nouvel onglet", "Open in a new tab"), () => { Open(text, activate: false); Refresh(); }),
+                    (T("Ajouter à une note…", "Add to a note…"), () => _afterMenu = () => AskNoteForSelection(tabId, $"![]({text})", x, y))]); break;
+            case "more" when kind is "link" && IsWeb(text):
                 ShowMenu(x,y,[
                     (T("Aperçu du lien","Preview link"),()=>_afterMenu=()=>_=ShowLinkPreviewAsync(tabId,text)),
                     (T("Ouvrir dans un nouvel onglet","Open in a new tab"),()=>{Open(text,activate:false);Refresh();}),

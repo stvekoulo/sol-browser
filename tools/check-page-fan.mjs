@@ -1,16 +1,25 @@
 import assert from 'node:assert/strict';
-import {access,readFile,writeFile} from 'node:fs/promises';
+import {access,readdir,readFile,writeFile} from 'node:fs/promises';
+import {execFileSync} from 'node:child_process';
+import {deflateSync} from 'node:zlib';
 import {resolve} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {sidebarHost} from './sidebar-check-host.mjs';
 
 const baseline=process.argv.includes('--baseline');
 const fixtureCSS='body{margin:0;font:16px system-ui;background:#eff1e7;color:#18181b}main{padding:72px 64px;display:grid;gap:64px;justify-items:start}a.card{display:block;width:220px;height:90px;border-radius:16px;background:#cfdbc9;color:inherit;padding:16px;box-sizing:border-box}pre{width:240px;min-height:80px;margin:0;background:#d8dfec;padding:12px;box-sizing:border-box}#selection{max-width:400px}input{width:180px}#end{height:900px}';
-const host=await sidebarHost('src/Browser.App/bin/x64/Release/net10.0-windows10.0.19041.0/win-x64/Sol.exe',{serve:(req,res)=>{
+// PNG uni de 480 × 280 : la version « haute qualité » que l'éventail doit préférer à l'aperçu SVG.
+const crc=b=>{let c=~0;for(const x of b){c^=x;for(let k=0;k<8;k++)c=c>>>1^(0xedb88320&-(c&1));}return ~c>>>0;};
+const chunk=(t,d)=>{const h=Buffer.alloc(8);h.writeUInt32BE(d.length);h.write(t,4);const c=Buffer.alloc(4);c.writeUInt32BE(crc(Buffer.concat([h.subarray(4),d])));return Buffer.concat([h,d,c]);};
+const ihdr=Buffer.alloc(13);ihdr.writeUInt32BE(480);ihdr.writeUInt32BE(280,4);ihdr[8]=8;ihdr[9]=2;
+const hd=Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk('IHDR',ihdr),chunk('IDAT',deflateSync(Buffer.concat(Array.from({length:280},()=>Buffer.concat([Buffer.from([0]),Buffer.alloc(480*3,0x7a)]))))),chunk('IEND',Buffer.alloc(0))]);
+const host=await sidebarHost('src/Browser.App/bin/x64/Release/net10.0-windows10.0.19041.0/win-x64/Sol.exe',{downloads:true,serve:(req,res)=>{
+  // La version HD n'est servie qu'avec le cookie du site : Sol doit la demander avec la session de l'onglet.
+  if(req.url==='/image-hd.png'){if(!/sol-session=ok/.test(req.headers.cookie??'')){res.writeHead(403);res.end();return true;}res.writeHead(200,{'Content-Type':'image/png'});res.end(hd);return true;}
   if(req.url==='/image.svg'){res.writeHead(200,{'Content-Type':'image/svg+xml'});res.end('<svg xmlns="http://www.w3.org/2000/svg" width="240" height="140"><rect width="240" height="140" fill="#83a87c"/></svg>');return true;}
   if(req.url==='/fixture.css'){res.writeHead(200,{'Content-Type':'text/css'});res.end(fixtureCSS);return true;}
-  res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':"default-src 'self'; style-src 'self'; script-src 'none'; require-trusted-types-for 'script'"});
-  res.end(`<!doctype html><html lang="fr"><title>Éventail de test</title><link rel="stylesheet" href="/fixture.css"><main><a class="card" id="first" href="/card-a">Première carte</a><a class="card" id="second" href="/card-b">Deuxième carte</a><img id="image" src="/image.svg" alt="Image de test"><pre id="code" tabindex="0">const answer = 42;\nconsole.log(answer);</pre><p id="selection" tabindex="0">Un passage de texte à sélectionner dans la page.</p><input id="input" value="Texte du formulaire"><div id="end"></div></main></html>`);return true;
+  res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Set-Cookie':'sol-session=ok; Path=/; HttpOnly','Content-Security-Policy':"default-src 'self'; style-src 'self'; script-src 'none'; require-trusted-types-for 'script'"});
+  res.end(`<!doctype html><html lang="fr"><title>Éventail de test</title><link rel="stylesheet" href="/fixture.css"><main><a class="card" id="first" href="/card-a">Première carte</a><a class="card" id="second" href="/card-b">Deuxième carte</a><img id="image" src="/image.svg" srcset="/image.svg 1x, /image-hd.png 2x" alt="Image de test"><pre id="code" tabindex="0">const answer = 42;\nconsole.log(answer);</pre><p id="selection" tabindex="0">Un passage de texte à sélectionner dans la page.</p><input id="input" value="Texte du formulaire"><div id="end"></div></main></html>`);return true;
 }});
 let ui,page,stage='native';
 const stats=()=>page.evaluate('({...__fanStats})');
@@ -65,6 +74,16 @@ try {
     const button=(await visible())[1],point={x:button.x+button.width/2,y:button.y+button.height/2};
     for(const type of ['mouseMoved','mousePressed','mouseReleased'])await page.call('Input.dispatchMouseEvent',{type,...point,...(type==='mouseMoved'?{}:{button:'left',clickCount:1})});
     await host.wait(()=>ui.evaluate(`window.__sidebarState.tabs.length===${before+1}&&window.__sidebarState.tabs.some(t=>t.url===${JSON.stringify(host.origin+'/card-a')})`),'native tab opening');
+    // Image : la version HD (srcset 2x) est téléchargée avec le cookie de l'onglet, puis copiée comme image.
+    const press=async index=>{const b=(await visible())[index],p={x:b.x+b.width/2,y:b.y+b.height/2};for(const type of ['mouseMoved','mousePressed','mouseReleased'])await page.call('Input.dispatchMouseEvent',{type,...p,...(type==='mouseMoved'?{}:{button:'left',clickCount:1})});};
+    const downloads=resolve(host.base,'downloads');
+    await hover('#image');await press(0);
+    await host.wait(async()=>(await readdir(downloads)).includes('image-hd.png'),'full-quality image downloaded',15000);
+    assert.deepEqual(await readFile(resolve(downloads,'image-hd.png')),hd,'the HD file is saved byte for byte');
+    await hover('#image');await press(1);
+    const clip=()=>execFileSync('powershell',['-NoProfile','-STA','-Command','Add-Type -AssemblyName System.Windows.Forms;$i=[Windows.Forms.Clipboard]::GetImage();if($i){"$($i.Width)x$($i.Height)"}'],{encoding:'utf8'}).trim();
+    await host.wait(()=>clip()==='480x280','HD image copied to the clipboard',15000);
+    execFileSync('powershell',['-NoProfile','-STA','-Command','Add-Type -AssemblyName System.Windows.Forms;[Windows.Forms.Clipboard]::Clear()']);
     // Les 15 charges utiles sont exercées dans un WebView UI distinct, avec le script de production inchangé.
     // Le canal est remplacé AVANT son chargement pour préserver le presse-papiers et éviter toute requête IA.
     await ui.evaluate(`chrome.webview.postMessage('{"type":"chat.toggle"}')`);
@@ -79,7 +98,7 @@ try {
     await host.wait(()=>page.evaluate('document.querySelector("#image").complete'),'fixture image loaded');
     for(const [selector,kind,actions,value] of [
       ['#second','link',['preview','tab','split','more'],host.origin+'/card-b'],
-      ['#image','image',['tab','link','note','more'],host.origin+'/image.svg'],
+      ['#image','image',['download','copy','tab','more'],host.origin+'/image-hd.png'],
       ['#code','code',['copy','explain','note','more'],'const answer = 42;\nconsole.log(answer);'],
       ['#selection','selection',['copy','sol','more'],'Un passage de texte à sélectionner dans la page.'],
     ])for(let i=0;i<actions.length;i++){
@@ -108,7 +127,7 @@ try {
     await page.evaluate(`document.querySelector('#code').remove();dispatchEvent(new Event('scroll'))`);
     await host.wait(async()=>(await visible()).every(b=>b.hidden),'removed target hides safely');
     await escape();
-    console.log('PASS strict CSP/Trusted Types, four target types, 15 action payloads, trusted native tab opening, keyboard, Escape, fields excluded, viewport bounds, coalesced scroll and no idle animation');
+    console.log('PASS strict CSP/Trusted Types, HD image download with site cookie, image copy, four target types, 15 action payloads, trusted native tab opening, keyboard, Escape, fields excluded, viewport bounds, coalesced scroll and no idle animation');
   }
   await writeFile(resolve(host.base,'page-fan.json'),JSON.stringify(report,null,2));
   await host.close(ui);

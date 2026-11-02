@@ -13,7 +13,35 @@ namespace Browser.Core;
 public static class Backup
 {
     /// <summary>Les fichiers d'un profil qu'une sauvegarde contient et qu'une restauration a le droit de remplacer.</summary>
-    public static readonly string[] ProfileFiles = ["settings.json", "session.json", "permissions.json", "browser.db", "notes.json", "notes-assets.json"];
+    public static readonly string[] ProfileFiles = ["settings.json", "session.json", "permissions.json", "browser.db", "notes.json", "notes-assets.json",
+        "tab-sessions.json", "tab-sessions.json.sites.json", "workspaces.json", "downloads.json", "extension-state.json", "ai-categories.json", "wallpaper.jpg"];
+    /// <summary>Dossiers repris en entier : les extensions installées et les autorisations propres à chaque session d'onglets.</summary>
+    public static readonly string[] ProfileFolders = ["extensions", "session-permissions"];
+
+    /// <summary>Un nom de la sauvegarde qu'une restauration a le droit d'écrire : un fichier connu, ou un chemin simple dans un dossier connu.</summary>
+    public static bool Allowed(string name)
+    {
+        if (ProfileFiles.Contains(name) || name == Passwords) return true;
+        var parts = name.Split('/');
+        return parts.Length > 1 && ProfileFolders.Contains(parts[0])
+            && parts.All(p => p.Length > 0 && p is not ("." or "..") && p.IndexOfAny(Path.GetInvalidFileNameChars()) < 0);
+    }
+
+    /// <summary>Les fichiers du profil à sauvegarder, sauf la base (copiée à part pendant qu'elle est ouverte) et les mots de passe.</summary>
+    public static Dictionary<string, byte[]> Collect(string dataDir)
+    {
+        var files = new Dictionary<string, byte[]>();
+        foreach (var name in ProfileFiles)
+            if (name != "browser.db" && File.Exists(Path.Combine(dataDir, name))) files[name] = File.ReadAllBytes(Path.Combine(dataDir, name));
+        foreach (var folder in ProfileFolders)
+        {
+            var root = Path.Combine(dataDir, folder);
+            if (!Directory.Exists(root)) continue;
+            foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+                files[folder + "/" + Path.GetRelativePath(root, file).Replace('\\', '/')] = File.ReadAllBytes(file);
+        }
+        return files;
+    }
     public const string Passwords = "passwords.json";
     public const int MinKeyLength = 8;
 
@@ -77,8 +105,13 @@ public static class Backup
         if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
         Directory.CreateDirectory(dir);
         // Seuls les noms connus sont écrits : le contenu d'une sauvegarde ne choisit pas où il va.
-        foreach (var name in ProfileFiles)
-            if (files.TryGetValue(name, out var bytes)) File.WriteAllBytes(Path.Combine(dir, name), bytes);
+        foreach (var (name, bytes) in files)
+        {
+            if (name == Passwords || !Allowed(name)) continue;
+            var target = Path.Combine(dir, name.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.WriteAllBytes(target, bytes);
+        }
     }
 
     /// <summary>Applique une restauration mise de côté. À appeler au démarrage, avant d'ouvrir le moindre fichier du profil.</summary>
@@ -92,6 +125,15 @@ public static class Backup
                 if (File.Exists(Path.Combine(dir, name))) File.Move(Path.Combine(dir, name), Path.Combine(dataDir, name), overwrite: true);
             // Journaux de l'ancienne base : ils ne vont pas avec la base restaurée.
             foreach (var journal in new[] { "browser.db-wal", "browser.db-shm" }) File.Delete(Path.Combine(dataDir, journal));
+            // Un dossier sauvegardé remplace le dossier en place ; absent de la sauvegarde, celui du profil reste.
+            foreach (var folder in ProfileFolders)
+            {
+                var staged = Path.Combine(dir, folder);
+                if (!Directory.Exists(staged)) continue;
+                var live = Path.Combine(dataDir, folder);
+                if (Directory.Exists(live)) Directory.Delete(live, recursive: true);
+                Directory.Move(staged, live);
+            }
             Directory.Delete(dir, recursive: true);
             return true;
         }

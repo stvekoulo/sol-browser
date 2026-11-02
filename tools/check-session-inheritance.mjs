@@ -45,11 +45,13 @@ const extView=async()=>{
 try{
   ui=await host.launch();
   console.log('Evidence:',host.base);
-  const a=(await state()).activeId,sessionA=await create('Account A',a);
-  let page=await nav('/set?account=A');assert.equal(await cookie(page),'A');
-  // Sans choix explicite, une session d'onglet ne fait pas tourner les extensions ; elles y restent installées, à l'arrêt.
-  assert.equal(await page.evaluate('document.documentElement.dataset.solExtension'),undefined,'extensions stay out of tab sessions by default');
-  await command({type:'settings.set',id:'extensionsInSessions',index:1});
+  // Une session neuve part avec les connexions de son onglet, puis garde les siennes.
+  const a=(await state()).activeId;let page=await nav('/set?account=main');
+  const sessionA=await create('Account A',a);
+  page=await nav('/seeded');assert.equal(await cookie(page),'main','a new session starts signed in like its tab');
+  page=await nav('/set?account=A');assert.equal(await cookie(page),'A');
+  // Installée une fois, une extension tourne aussi dans les sessions d'onglets, sans réglage.
+  await host.wait(()=>page.evaluate('document.documentElement.dataset.solExtension').then(v=>v===extension.id),'extensions run in tab sessions by default');
   const inherited=await open();assert.equal((await tabState(inherited)).sessionId,sessionA,'new tab inherits active session');
   page=await nav('/inherited');assert.equal(await cookie(page),'A','first navigation keeps inherited cookies');
   const b=await open(host.origin+'/new-b');assert.equal((await tabState(b)).sessionId,sessionA);
@@ -88,7 +90,7 @@ try{
   assert.equal((await tabState(b)).sessionId,sessionB);page=await nav('/returned-b');assert.equal(await cookie(page),'B');
   await activate(inherited);await command({type:'session.set',id:inherited,query:''});
   await host.wait(async()=>(await tabState(inherited)).sessionId==='','explicit primary session');
-  page=await nav('/primary');assert.equal(await cookie(page),undefined,'primary cookies isolated');
+  page=await nav('/primary');assert.equal(await cookie(page),'main','the main session keeps its own account');
   assert.equal((await tabState(a)).sessionId,sessionA);assert.equal((await tabState(b)).sessionId,sessionB);
   await activate(a);await command({type:'extension.toggle',id:extension.id});
   await host.wait(async()=>JSON.parse(await readFile(resolve(host.profile,'extension-state.json'),'utf8'))[extension.id]===false,'disabled globally');

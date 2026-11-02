@@ -101,6 +101,7 @@ public sealed partial class BrowserController
         _pages.RuntimeChanged += Refresh;
         _pages.EngineLost += RestartAfterEngineLoss;
         LoadDownloadHistory();
+        StartCloudAuto();
         // Sessions proposées par d'anciennes versions et jamais ouvertes : aucune donnée à garder, elles disparaissent.
         foreach (var unused in _sessions.Unassigned.Where(s => !Directory.Exists(Path.Combine(EngineData, "WV2Profile_sol-" + s.Id))).ToList())
             if (_tabs.Tabs.All(t => t.SessionId != unused.Id)) _sessions.Delete(unused.Id);

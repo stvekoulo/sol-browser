@@ -3,7 +3,7 @@ import {RadioGroup,RadioGroupItem} from '@/components/motion/radio';
 import {Button} from '@/components/motion/button';
 import {t} from './i18n';
 
-const families=['Inter Variable','Segoe UI','Inter Variable','Inter Variable','Segoe UI','Segoe UI','Geist Variable','Manrope Variable','DM Sans Variable','Plus Jakarta Sans Variable','Outfit Variable','Figtree Variable','Nunito Variable','Lora Variable'];
+export const families=['Inter Variable','Segoe UI','Inter Variable','Inter Variable','Segoe UI','Segoe UI','Geist Variable','Manrope Variable','DM Sans Variable','Plus Jakarta Sans Variable','Outfit Variable','Figtree Variable','Nunito Variable','Lora Variable'];
 
 export function WelcomeFonts({options,value,onPick}:{options:string[];value:number;onPick:(index:number)=>void}) {
   const [expanded,setExpanded]=useState(value>5);

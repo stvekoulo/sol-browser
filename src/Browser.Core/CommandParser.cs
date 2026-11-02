@@ -88,7 +88,7 @@ public static class CommandParser
         ["capture.size"] = ["height"], ["capture.close"] = [], ["capture.visibility"] = ["index"],
         ["capture.run"] = ["query"], ["capture.region"] = ["x", "y", "width", "height"],
         ["capture.selection"] = ["index"], ["capture.save"] = [],
-        ["cloud.sign"] = ["id", "query", "input"], ["cloud.signout"] = [], ["cloud.refresh"] = [], ["cloud.backup"] = [], ["cloud.restore"] = ["id"], ["cloud.delete"] = ["id"], ["extension.session"] = ["id"],
+        ["cloud.sign"] = ["id", "query", "input"], ["cloud.signout"] = [], ["cloud.refresh"] = [], ["cloud.backup"] = [], ["cloud.restore"] = ["id"], ["cloud.delete"] = ["id"], ["cloud.auto"] = ["index"], ["cloud.auto.key"] = ["title"], ["cloud.restore.key"] = ["id", "title"], ["extension.session"] = ["id"],
         ["backup.export"] = [], ["backup.export.key"] = ["title"], ["backup.import"] = [], ["backup.restore"] = ["title"],
         ["ui.ready"] = [], ["ui.tooltip"] = [], ["ui.layout"] = ["x","y","width","height"],
     };

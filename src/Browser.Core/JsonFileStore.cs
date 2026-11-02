@@ -92,10 +92,6 @@ public sealed class Settings
     public int Spelling { get; set; } = 3; // 0 : désactivée, 1 : français, 2 : anglais, 3 : les deux
     /// <summary>Grammaire et orthographe complètes par LanguageTool (gratuit, en ligne) ; jamais en privé ni sur une page de connexion.</summary>
     public bool SpellingOnline { get; set; } = true;
-    /// <summary>Charger aussi les extensions dans les sessions d'onglets : le moteur lance alors une copie de chacune par session.</summary>
-    public bool ExtensionsInSessions { get; set; }
-    /// <summary>Extensions choisies une à une pour tourner aussi dans les sessions d'onglets (un bloqueur de publicités, par exemple).</summary>
-    public List<string> SessionExtensions { get; set; } = [];
     /// <summary>L'accueil de première ouverture (nom, import, apparence) a été vu.</summary>
     public bool Onboarded { get; set; }
     /// <summary>Nom que l'utilisateur donne au profil par défaut ; vide : « Défaut ».</summary>

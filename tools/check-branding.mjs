@@ -22,6 +22,11 @@ try {
   const ui=await host.launch(820,1320);
   const command=c=>ui.evaluate(`chrome.webview.postMessage(${JSON.stringify(JSON.stringify(c))})`);
   const welcome=await host.connect('#welcome');
+  // Écran d'ouverture d'abord : une seule flèche mène aux étapes.
+  await host.wait(()=>welcome.evaluate('!!document.querySelector(".welcome-intro-go")'),'opening screen');
+  await host.wait(()=>welcome.evaluate('[...document.images].every(i=>i.complete&&i.naturalWidth>0)'),'opening logo loaded');
+  await writeFile(resolve(output,'00-ouverture.png'),Buffer.from((await welcome.call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+  await welcome.evaluate('document.querySelector(".welcome-intro-go").click()');
   await host.wait(()=>welcome.evaluate('!!document.querySelector(".welcome-next")'),'native first setup');
   await host.wait(()=>welcome.evaluate('[...document.images].every(i=>i.complete&&i.naturalWidth>0)'),'new logo loaded');
   assert.equal(await welcome.evaluate('document.querySelectorAll(".preview-shot,canvas").length'),0);
@@ -31,6 +36,9 @@ try {
   const next=()=>welcome.evaluate('document.querySelector(".welcome-next").click()');
   await next();
   await host.wait(async()=>(await saved()).ProfileName==='Camille','name persisted');
+  await host.wait(()=>welcome.evaluate('!!document.querySelector(".welcome-cloud")'),'account step');
+  await save(welcome,'02-compte.png');
+  await next();
   await save(welcome,'02-import.png');
   await next();
   await host.wait(()=>welcome.evaluate('!!document.querySelector("[aria-label=Thème]")'),'appearance');

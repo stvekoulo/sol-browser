@@ -3,12 +3,13 @@ import { Cloud, LockKeyhole } from 'lucide-react';
 import { Button } from '@/components/motion/button/base';
 import { Card } from '@/components/motion/card';
 import { Input } from '@/components/motion/input';
+import { Switch } from '@/components/motion/switch';
 import { send } from './bridge';
 import { t } from './i18n';
 import SolTabs from './SolTabs';
 import './settings-cloud.css';
 
-export type CloudState = { email: string | null; busy: boolean; error: string | null; notice: string | null; backups: { id: string; device: string; bytes: number; date: string }[] };
+export type CloudState = { email: string | null; busy: boolean; error: string | null; notice: string | null; auto?: boolean; last?: string | null; backups: { id: string; device: string; bytes: number; date: string }[] };
 
 const errorText = (code: string) => ({
   credentials: t('Adresse ou mot de passe incorrect', 'Wrong email or password'),
@@ -40,6 +41,13 @@ export default function SettingsCloud({ cloud, hidden }: { cloud: CloudState; hi
     {cloud.email
       ? <>
         <Button variant="ghost" size="sm" pressScale={0.97} className="pill-action primary sol-cloud-main" disabled={cloud.busy} onClick={() => send({ type: 'cloud.backup' })}>{cloud.busy ? t('En cours…', 'Working…') : t('Sauvegarder maintenant', 'Back up now')}</Button>
+        <div className="sol-cloud-auto">
+          <span className="setting-text">
+            <span className="row-title">{t('Sauvegarde automatique', 'Automatic backup')}</span>
+            <span className="row-sub">{cloud.auto ? (cloud.last ? t(`Toutes les 24 h · dernière le ${cloud.last}`, `Every 24 h · last on ${cloud.last}`) : t('Toutes les 24 h', 'Every 24 h')) : t('Désactivée', 'Off')}</span>
+          </span>
+          <Switch checked={!!cloud.auto} ariaLabel={t('Sauvegarde automatique', 'Automatic backup')} onCheckedChange={on => send({ type: 'cloud.auto', index: on ? 1 : 0 })} />
+        </div>
         {!cloud.backups.length && !cloud.busy && <p className="row-hint">{t('Aucune sauvegarde pour l’instant', 'No backup yet')}</p>}
         {!!cloud.backups.length && <ul className="sol-cloud-list" aria-label={t('Sauvegardes', 'Backups')}>
           {cloud.backups.map(b => <li key={b.id}>
