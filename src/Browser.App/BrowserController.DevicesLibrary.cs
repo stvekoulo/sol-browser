@@ -221,7 +221,7 @@ public sealed partial class BrowserController
         _restoringSession = true;
         try
         {
-        var session = saved ?? JsonFileStore.Load<Session>(AppPaths.Session);
+        var session = saved ?? App.StartupSession;
         var tabs = session.Urls.Select((url, i) => Open(url, activate: false, pinned: i < session.PinnedCount, asleep: true,
             sessionId: i < session.SessionIds.Count ? session.SessionIds[i] : "")).ToList();
         if (tabs.Count == 0) { Open(_settings.HomePage); return; }

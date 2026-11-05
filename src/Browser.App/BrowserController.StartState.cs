@@ -9,9 +9,10 @@ namespace Browser.App;
 public sealed partial class BrowserController
 {
 
+    private bool _sessionReady;
     private void SaveSession()
     {
-        if (AppPaths.Private) return; // navigation privée : la fenêtre ne laisse pas d'onglets derrière elle
+        if (AppPaths.Private || !_sessionReady || _restoringSession) return;
         JsonFileStore.Save(AppPaths.Session, CaptureWorkspace());
     }
 
@@ -120,7 +121,7 @@ public sealed partial class BrowserController
         var starts = _tabs.Tabs.Where(t => t.Url == Settings.DefaultHomePage && !_pages.IsAsleep(t.Id)).ToList();
         if (starts.Count > 0) PostStartPages(starts);
         // Regrouper les changements ; un crash ne perd plus toute la session depuis le démarrage.
-        if (!AppPaths.Private) { _sessionSave.Stop(); _sessionSave.Start(); }
+        if (!AppPaths.Private && _sessionReady) { _sessionSave.Stop(); _sessionSave.Start(); }
         if (_tabs.ActiveId is { } recent && _recentTabs.LastOrDefault() != recent)
         {
             _recentTabs.Remove(recent);

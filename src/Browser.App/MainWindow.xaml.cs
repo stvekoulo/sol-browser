@@ -15,7 +15,7 @@ public sealed partial class MainWindow : Window
     private BrowserController? _controller;
     private UiBridge? _bridge;
     private SidebarHost? _sidebar;
-    private readonly Settings _settings = JsonFileStore.Load<Settings>(AppPaths.Settings);
+    private readonly Settings _settings = App.StartupSettings;
 
     public MainWindow()
     {

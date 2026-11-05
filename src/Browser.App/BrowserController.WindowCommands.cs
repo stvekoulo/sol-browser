@@ -50,6 +50,7 @@ public sealed partial class BrowserController
                 if (_tabs.Tabs.Count == 0)
                 {
                     RestoreSession();
+                    _sessionReady = true;
                     foreach (var shortcut in _settings.Shortcuts.Where(s => s.Icon is null)) _ = FetchShortcutIconAsync(shortcut);
                     // Première ouverture de ce profil : l'accueil (pas dans une fenêtre privée, qui ne garde rien).
                     if (!_settings.Onboarded && !AppPaths.Private) _ = _welcome.ShowAsync();

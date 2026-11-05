@@ -194,19 +194,31 @@ public sealed class SessionGroup
 public static class JsonFileStore
 {
     private static readonly JsonSerializerOptions Options = new() { RespectNullableAnnotations = true };
-    public static T Load<T>(string path, bool recoverBackup = true) where T : new()
+    public static T Load<T>(string path, bool recoverBackup = true, bool requireReadable = false) where T : new()
     {
+        JsonException? invalid = null;
         foreach (var candidate in recoverBackup ? new[] { path, path + ".bak" } : new[] { path })
         {
-            if (!File.Exists(candidate)) continue;
+            if (!requireReadable && !File.Exists(candidate)) continue;
             try { return JsonSerializer.Deserialize<T>(File.ReadAllText(candidate), Options) ?? throw new JsonException("Empty JSON document"); }
-            catch (JsonException)
+            catch (FileNotFoundException) { }
+            catch (DirectoryNotFoundException) { }
+            catch (JsonException error)
             {
+                invalid = error;
+                if (requireReadable) continue; // preserve the originals for recovery, including an invalid backup
                 try { File.Move(candidate, candidate + ".corrupt", overwrite: true); }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException) { System.Diagnostics.Trace.WriteLine(e); }
             }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { System.Diagnostics.Trace.WriteLine(e); }
+            // Critical profile reads must not turn an inaccessible primary into defaults or a stale backup.
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                if (requireReadable) throw new IOException($"Could not read {Path.GetFileName(candidate)}. Existing data was preserved.", e);
+                System.Diagnostics.Trace.WriteLine(e);
+            }
         }
+        if (requireReadable && (invalid is not null || File.Exists(path + ".corrupt") || File.Exists(path + ".bak.corrupt")))
+            throw new InvalidDataException($"Could not recover {Path.GetFileName(path)}. Existing data was preserved.", invalid);
         return new T();
     }
 

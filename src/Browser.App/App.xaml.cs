@@ -9,6 +9,8 @@ public partial class App : Application
 
     /// <summary>Environnement tel que reçu au lancement, avant nos réglages : celui qu'on transmet à une autre fenêtre.</summary>
     public static IReadOnlyDictionary<string, string?> LaunchEnvironment { get; private set; } = new Dictionary<string, string?>();
+    public static Settings StartupSettings { get; private set; } = null!;
+    public static Session StartupSession { get; private set; } = null!;
 
     private static Mutex? s_profileLock;
     private Window? _window;
@@ -89,11 +91,28 @@ public partial class App : Application
             }
         }
 
+        // Read both files before constructing any component that can save defaults or an empty workspace.
+        try
+        {
+            StartupSettings = JsonFileStore.Load<Settings>(AppPaths.Settings, requireReadable: true);
+            StartupSession = AppPaths.Private ? new() : JsonFileStore.Load<Session>(AppPaths.Session, requireReadable: true);
+        }
+        catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        {
+            SessionStartupDiagnostics.Record("profile.read", error);
+            var english = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "en";
+            RestoreError(0, english
+                ? "Sol could not read your saved tabs or settings. Your files have been preserved. Close Sol and try again."
+                : "Sol ne peut pas lire vos onglets ou réglages enregistrés. Vos fichiers ont été conservés. Fermez Sol et réessayez.",
+                english ? "Sol — profile unavailable" : "Sol — profil indisponible", 0x10);
+            Environment.Exit(1);
+        }
+
         // Options du moteur, ajoutées à celles déjà demandées par l'environnement :
         // - barres de défilement fines qui n'apparaissent qu'au défilement (quand le réglage les affiche) ;
         // - retour et avance par balayage horizontal à deux doigts sur le pavé tactile.
         // - langue : celle de l'interface, que les sites reçoivent aussi comme langue préférée.
-        Language.Current = Language.Resolve(JsonFileStore.Load<Settings>(AppPaths.Settings).Language, System.Globalization.CultureInfo.CurrentUICulture.Name);
+        Language.Current = Language.Resolve(StartupSettings.Language, System.Globalization.CultureInfo.CurrentUICulture.Name);
         // - un seul processus de rendu par site : les vues de l'interface (barre, carte, menus) en partagent un au lieu
         //   d'en occuper un chacune, et les onglets d'un même site aussi. L'isolation entre sites différents reste entière.
         const string features = "--process-per-site " + "--enable-features=OverlayScrollbar,msOverlayScrollbarWinStyle,msOverlayScrollbarWinStyleAnimation,OverscrollHistoryNavigation";
