@@ -13,6 +13,7 @@ public sealed partial class BrowserDb : IDisposable
     {
         _db = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = dataSource, Pooling = false }.ToString());
         _db.Open();
+        _db.CreateFunction<string, string>("site_icon_domain", SiteShortcut.DomainOf, isDeterministic: true);
         Exec("""
             PRAGMA journal_mode=WAL;
             PRAGMA synchronous=NORMAL;

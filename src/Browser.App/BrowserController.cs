@@ -92,11 +92,15 @@ public sealed partial class BrowserController
 
         _pages.PageChanged += (id, url, title) =>
         {
+            var previous = url is null ? null : _tabs.Tabs.FirstOrDefault(t => t.Id == id);
             if (url is not null && _reading.Remove(id)) _ = EndReaderOnNavigationAsync(id);
             if (url is not null && _designTabs.Remove(id)) _ = EndDesignOnNavigationAsync(id);
             if (url is not null && !PageTranslation.IsGooglePage(url) && _translationOriginals.GetValueOrDefault(id) != url)
                 _translationOriginals.Remove(id);
-            _tabs.Update(id, url, title); Refresh();
+            _tabs.Update(id, url, title);
+            if (url is not null && previous is not null && SiteShortcut.DomainOf(previous.Url) != SiteShortcut.DomainOf(url))
+                SetTabFavicon(id, previous.Private ? null : KnownSiteIcon(url));
+            Refresh();
         };
         _pages.RuntimeChanged += Refresh;
         _pages.EngineLost += RestartAfterEngineLoss;
@@ -165,12 +169,7 @@ public sealed partial class BrowserController
             if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { Private: false } tab && IsWeb(tab.Url) && tab.Url is not (Settings.DefaultHomePage or QuickNotes.PageUrl)) FetchStartIcon(tab.Url);
             Refresh();
         };
-        _pages.FaviconChanged += (id, data) =>
-        {
-            if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { } tab)
-                data = _startIcons.GetValueOrDefault(SiteShortcut.DomainOf(tab.Url)) ?? data;
-            _favicons[id] = data; PostFavicon(id); LearnShortcutIcon(id, data);
-        };
+        _pages.FaviconChanged += LearnPageFavicon;
         _pages.ContextMenuRequested += OpenContextMenu;
         _pages.DeviceAreaMenuRequested += (tabId, x, y) => ShowMenu(x, y, DeviceEntries(tabId, x, y));
         _pages.StatusChanged += (id, text) =>

@@ -33,38 +33,33 @@ try {
         Save-ResizedImage $cover (Join-Path $uiAssets 'logo-welcome.jpg') 256 256 $jpeg $quality
     } finally { $cover.Dispose() }
 } finally { $quality.Dispose() }
-function Save-Icon($Source, $Path, [switch]$Plate, [switch]$Opaque) {
+function Save-Icon($Source, $Path, [switch]$ExportBadge) {
     $entries = @()
-    $sizes = if ($Path) { 16, 24, 32, 48, 64, 128, 256 } else { 256 }
-    foreach ($size in $sizes) {
+    foreach ($size in 16, 24, 32, 48, 64, 72, 96, 128, 256) {
         $bitmap = [Drawing.Bitmap]::new($size, $size)
         $graphics = [Drawing.Graphics]::FromImage($bitmap)
         $stream = [IO.MemoryStream]::new()
         $badge = [Drawing.Drawing2D.GraphicsPath]::new()
         $fill = [Drawing.SolidBrush]::new([Drawing.Color]::FromArgb(232, 232, 235))
         try {
-            if ($Opaque) { $graphics.Clear($Source.GetPixel(0, 0)) }
-            if ($Plate) {
-                $diameter = [int]($size * 0.46)
-                $edge = $size - $diameter - 1
-                $badge.AddArc(1, 1, $diameter, $diameter, 180, 90)
-                $badge.AddArc($edge, 1, $diameter, $diameter, 270, 90)
-                $badge.AddArc($edge, $edge, $diameter, $diameter, 0, 90)
-                $badge.AddArc(1, $edge, $diameter, $diameter, 90, 90)
-                $badge.CloseFigure()
-                $graphics.SmoothingMode = [Drawing.Drawing2D.SmoothingMode]::AntiAlias
-                $graphics.FillPath($fill, $badge)
-            }
+            $diameter = [int]($size * 0.46)
+            $edge = $size - $diameter - 1
+            $badge.AddArc(1, 1, $diameter, $diameter, 180, 90)
+            $badge.AddArc($edge, 1, $diameter, $diameter, 270, 90)
+            $badge.AddArc($edge, $edge, $diameter, $diameter, 0, 90)
+            $badge.AddArc(1, $edge, $diameter, $diameter, 90, 90)
+            $badge.CloseFigure()
+            $graphics.SmoothingMode = [Drawing.Drawing2D.SmoothingMode]::AntiAlias
+            $graphics.FillPath($fill, $badge)
             $graphics.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
             $graphics.DrawImage($source, 0, 0, $size, $size)
             $bitmap.Save($stream, [Drawing.Imaging.ImageFormat]::Png)
             $entries += @{ Size = $size; Bytes = $stream.ToArray() }
-            if ($Plate -and $size -eq 256) {
+            if ($ExportBadge -and $size -eq 256) {
                 [IO.File]::WriteAllBytes((Join-Path $root 'brand\logo-windows.png'), $entries[-1].Bytes)
             }
         } finally { $fill.Dispose(); $badge.Dispose(); $stream.Dispose(); $graphics.Dispose(); $bitmap.Dispose() }
     }
-    if (-not $Path) { return }
     $output = [IO.MemoryStream]::new()
     $writer = [IO.BinaryWriter]::new($output)
     try {
@@ -84,19 +79,14 @@ function Save-Icon($Source, $Path, [switch]$Plate, [switch]$Opaque) {
 }
 
 $appAssets = Join-Path $root 'src\Browser.App\Assets'
-$cover = [Drawing.Bitmap]::new((Join-Path $root 'brand\logo-original.png'))
-try {
-    Save-Icon $cover (Join-Path $appAssets 'SolFile.ico') -Opaque
-} finally { $cover.Dispose() }
-
+$appIcon = Join-Path $appAssets 'Sol.ico'
 $source = [Drawing.Image]::FromFile($logo)
 try {
-    Save-Icon $source (Join-Path $appAssets 'Sol.ico')
+    Save-Icon $source $appIcon -ExportBadge
+    Copy-Item -LiteralPath $appIcon -Destination (Join-Path $appAssets 'SolFile.ico') -Force
     if ($LandingDirectory) {
         $landing = (Resolve-Path -LiteralPath $LandingDirectory).Path
-        Save-Icon $source (Join-Path $landing 'public\favicon.ico') -Plate
-    } elseif (-not $BrowserOnly) {
-        Save-Icon $source $null -Plate
+        Save-Icon $source (Join-Path $landing 'public\favicon.ico')
     }
     $splash = [Drawing.Bitmap]::new(256, 256)
     $g = [Drawing.Graphics]::FromImage($splash)

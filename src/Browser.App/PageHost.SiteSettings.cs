@@ -101,12 +101,25 @@ public sealed partial class PageHost
         }
     }
 
+    private async Task PublishFaviconAsync(string id, CoreWebView2 core)
+    {
+        try
+        {
+            var source = core.Source;
+            var uri = core.FaviconUri;
+            if (string.IsNullOrEmpty(uri) || _errorUrl.ContainsKey(id)) return;
+            var icon = await ReadFaviconAsync(core);
+            if (icon is not null && Core(id) == core && core.Source == source && core.FaviconUri == uri && !_errorUrl.ContainsKey(id))
+                FaviconChanged?.Invoke(id, icon);
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { }
+    }
+
     // L'icône est lue par l'hôte et transmise en data: à l'interface, qui ne fait ainsi aucune requête réseau.
     private static async Task<string?> ReadFaviconAsync(CoreWebView2 core)
     {
         try
         {
-            if (string.IsNullOrEmpty(core.FaviconUri)) return null;
             using var stream = (await core.GetFaviconAsync(CoreWebView2FaviconImageFormat.Png)).AsStreamForRead();
             using var bytes = new MemoryStream();
             await stream.CopyToAsync(bytes);

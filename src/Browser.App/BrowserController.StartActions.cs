@@ -25,6 +25,14 @@ public sealed partial class BrowserController
                 if (IsWeb(url)) Copy(url);
                 return true;
             case "start.topic": OpenTopicGroup(command.Title ?? ""); return true;
+            case "start.topic.icons":
+                if (!_pages.IsPrivate(tabId) && CategoryViews().FirstOrDefault(c => c.Name == command.Title) is { } topic)
+                {
+                    foreach (var site in topic.Links.Select(link => link.Url).Where(IsWeb).DistinctBy(SiteShortcut.DomainOf))
+                        FetchStartIcon(site);
+                    PublishStartIcons();
+                }
+                return true;
             case "start.groupedit": Execute(new Command("group.edit", Id: command.Id)); return true;
             default: return false;
         }

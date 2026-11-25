@@ -251,8 +251,7 @@ html.painted .sidebar-body:not(.floating) { transition: background-color 220ms v
 /* Onglet déchargé : il garde sa place et se recharge au clic. Seule son icône pâlit, son titre reste lisible ;
    après un redémarrage, presque tous les onglets dorment et la liste ne doit pas sembler désactivée. */
 .sidebar-tab.asleep .sidebar-tab-title { color: var(--text-dim); }
-:is(.sidebar-tab, .pinned-pill).asleep .favicon { opacity: 0.5; filter: grayscale(0.7); transition: opacity var(--fast) var(--ease-out), filter var(--fast) var(--ease-out); }
-:is(.sidebar-tab, .pinned-pill).asleep:hover .favicon { opacity: 0.9; filter: none; }
+.pinned-pill.asleep > span:not(.favicon) { color: var(--text-dim); }
 
 /* En-tête et actions du profil : la liste conserve son propre défilement. */
 .sidebar-heading { display:flex; align-items:center; justify-content:space-between; gap:10px; flex:none; margin:0 2px 13px; }

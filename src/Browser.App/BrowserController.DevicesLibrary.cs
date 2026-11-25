@@ -238,8 +238,13 @@ public sealed partial class BrowserController
                 if (tabs[i].Pinned && session.ShortcutOf[i] is { } rank && rank >= 0 && rank < _settings.Shortcuts.Count)
                     _shortcutTabs.TryAdd(_settings.Shortcuts[rank], tabs[i].Id);
             // Icônes des sites : affichées tout de suite, sans attendre que chaque onglet soit rechargé.
-            for (var i = 0; i < tabs.Count && i < session.Icons.Count; i++)
-                if (session.Icons[i].StartsWith("data:image/", StringComparison.Ordinal)) _favicons[tabs[i].Id] = session.Icons[i];
+            for (var i = 0; i < tabs.Count; i++)
+            {
+                if (tabs[i].Private) continue;
+                var icon = i < session.Icons.Count && session.Icons[i] is { } savedIcon && savedIcon.StartsWith("data:image/", StringComparison.Ordinal)
+                    ? savedIcon : KnownSiteIcon(tabs[i].Url);
+                if (icon is not null) _favicons[tabs[i].Id] = icon;
+            }
             // Appareil simulé : repris quand l'onglet se réveille.
             for (var i = 0; i < tabs.Count && i < session.Devices.Count; i++)
                 if (session.Devices[i].Split('|') is [{ Length: > 0 } device, .. var rest]) _pages.WantDevice(tabs[i].Id, device, rest.Contains("L"));

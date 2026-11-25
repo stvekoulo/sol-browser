@@ -12,26 +12,52 @@ try {
     foreach ($size in 16,20,24,30,32,36,40,48,60,64,72,80,96,256) {
         foreach ($form in '', '_altform-unplated', '_altform-lightunplated') {
             $asset = "StoreAssets/Square44x44Logo.targetsize-$size$form.png"
-            if ($asset -notin $names) { throw "Icone Windows sans plaque absente : $asset" }
+            if ($asset -notin $names) { throw "Variante d’icône Windows absente : $asset" }
         }
+        $asset = "StoreAssets/FileLogo.targetsize-$size.png"
+        if ($asset -notin $names) { throw "Variante d’icône de fichier absente : $asset" }
     }
-    foreach ($required in 'Sol.exe', 'Microsoft.UI.Xaml.dll', 'AppxManifest.xml', 'Assets/SolFile.ico', 'StoreAssets/FileLogo.png') {
+    foreach ($required in 'Sol.exe', 'Microsoft.UI.Xaml.dll', 'AppxManifest.xml', 'Assets/Sol.ico', 'Assets/SolFile.ico') {
         if ($required -notin $names) { throw "Fichier requis absent : $required" }
     }
     $reader = [IO.StreamReader]::new($archive.GetEntry('AppxManifest.xml').Open())
     try { $manifest = [xml]$reader.ReadToEnd() } finally { $reader.Dispose() }
-    $logo = $manifest.SelectSingleNode("//*[local-name()='FileTypeAssociation' and @Name='solweb']/*[local-name()='Logo']")
-    if ($logo.InnerText -ne 'StoreAssets\FileLogo.png') { throw 'Logo de fichiers absent du manifeste.' }
-    foreach ($asset in @{ 'Square44x44Logo.targetsize-32_altform-unplated.png' = 0; 'FileLogo.png' = 255 }.GetEnumerator()) {
+    $ns = [Xml.XmlNamespaceManager]::new($manifest.NameTable)
+    foreach ($prefix in 'uap', 'uap3', 'desktop7') {
+        $ns.AddNamespace($prefix, $manifest.DocumentElement.GetNamespaceOfPrefix($prefix))
+    }
+    $association = $manifest.SelectSingleNode("//uap3:FileTypeAssociation[@Name='solweb']", $ns)
+    if ($association.SelectSingleNode('uap:Logo', $ns).InnerText -ne 'StoreAssets\FileLogo.png' -or
+        $association.SelectSingleNode('desktop7:Logo', $ns).InnerText -ne 'Assets\SolFile.ico') {
+        throw 'Icône multirésolution ou PNG de fichiers absent du manifeste.'
+    }
+    foreach ($asset in 'StoreLogo.png', 'Square44x44Logo.png', 'Square150x150Logo.png', 'Square44x44Logo.targetsize-32_altform-unplated.png', 'FileLogo.png', 'FileLogo.targetsize-256.png') {
+        $resource = $archive.GetEntry("StoreAssets/$asset")
+        if (-not $resource) { throw "Icône requise absente : $asset" }
         $stream = [IO.MemoryStream]::new()
-        $entry = $archive.GetEntry("StoreAssets/$($asset.Key)").Open()
+        $entry = $resource.Open()
         try {
             $entry.CopyTo($stream)
             $stream.Position = 0
             $image = [Drawing.Bitmap]::new($stream)
             try {
-                if ($image.GetPixel([int]($image.Width / 2), 0).A -ne $asset.Value) {
-                    throw "Fond incorrect pour $($asset.Key)."
+                $top = $image.GetPixel([int]($image.Width / 2), [int]($image.Height / 8))
+                if ($image.GetPixel(0, 0).A -ne 0 -or $top.A -ne 255 -or $top.R -lt 190) {
+                    throw "Le fond argenté arrondi est incorrect pour $asset."
+                }
+                if ($asset -eq 'FileLogo.png') {
+                    $left = $image.Width
+                    $right = -1
+                    for ($y = 0; $y -lt $image.Height; $y++) {
+                        for ($x = 0; $x -lt $image.Width; $x++) {
+                            $pixel = $image.GetPixel($x, $y)
+                            if ($pixel.A -gt 200 -and $pixel.R -lt 120) {
+                                $left = [Math]::Min($left, $x)
+                                $right = [Math]::Max($right, $x)
+                            }
+                        }
+                    }
+                    if ($right - $left + 1 -lt 0.68 * $image.Width) { throw 'Le symbole de fichier est trop petit.' }
                 }
             } finally { $image.Dispose() }
         } finally { $entry.Dispose(); $stream.Dispose() }

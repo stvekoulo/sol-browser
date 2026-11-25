@@ -202,7 +202,11 @@ export default function Start() {
                     </button>
                   ))}
                   {category.total > 8 && (
-                    <button className="start-category-more" onClick={() => setOpenTopic(openTopic === category.name ? '' : category.name)}>
+                    <button className="start-category-more" aria-expanded={openTopic === category.name} onClick={() => {
+                      const expanded = openTopic !== category.name;
+                      if (expanded) send({ type: 'start.topic.icons', title: category.name });
+                      setOpenTopic(expanded ? category.name : '');
+                    }}>
                       {openTopic === category.name
                         ? category.total > category.links.length ? t(`Voir moins · ${category.total - category.links.length} autres dans l’historique`, `Show less · ${category.total - category.links.length} more in history`) : t('Voir moins', 'Show less')
                         : t(`Voir tout (${category.total})`, `Show all (${category.total})`)}

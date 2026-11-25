@@ -100,7 +100,7 @@ public sealed partial class PageHost
             }
             if (e.Source != Settings.DefaultHomePage || core.Source != Settings.DefaultHomePage) return;
             if (CommandParser.Parse(e.TryGetWebMessageAsString()) is { } command && command.Type is "start.ready" or "start.navigate" or "start.group" or "start.favorites"
-                or "start.open" or "start.split" or "start.copy" or "start.topic" or "start.groupedit"
+                or "start.open" or "start.split" or "start.copy" or "start.topic" or "start.topic.icons" or "start.groupedit"
                 or "start.bookmark.remove" or "start.history.remove")
                 StartRequested?.Invoke(tab.Id, command);
         };
@@ -198,7 +198,7 @@ public sealed partial class PageHost
         // Adresse du lien survolé : la bulle du moteur est coupée, le navigateur l'affiche dans son propre design.
         core.Settings.IsStatusBarEnabled = false;
         core.StatusBarTextChanged += (_, _) => StatusChanged?.Invoke(tab.Id, core.StatusBarText);
-        core.FaviconChanged += async (_, _) => FaviconChanged?.Invoke(tab.Id, await ReadFaviconAsync(core));
+        core.FaviconChanged += (_, _) => _ = PublishFaviconAsync(tab.Id, core);
         core.DOMContentLoaded += (_, _) => { if (_mode.ContainsKey(tab.Id)) _ = PageZoom.TabAsync(core, 1); };
         if (!_views.TryGetValue(tab.Id, out initializing) || initializing != view) return null;
         _ready.Add(tab.Id);

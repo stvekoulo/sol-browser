@@ -107,7 +107,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     public event Action<string, CoreWebView2DownloadStartingEventArgs>? DownloadStarting; // onglet d'origine
     public event Action<CoreWebView2, CoreWebView2PermissionRequestedEventArgs>? PermissionRequested;
     public event Action<string, string>? StatusChanged;         // id, adresse du lien survolé (vide = aucun)
-    public event Action<string, string?>? FaviconChanged;        // id, icône en data: (ou null)
+    public event Action<string, string>? FaviconChanged;         // id, icône en data:
     public event Action<bool>? FullScreenChanged;                // une page (vidéo…) entre en plein écran ou en sort
 
     public bool IsLoading(string id) => _loading.Contains(id);

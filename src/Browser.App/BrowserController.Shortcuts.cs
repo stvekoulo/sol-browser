@@ -135,13 +135,13 @@ public sealed partial class BrowserController
     private async Task FetchShortcutIconAsync(SiteShortcut shortcut)
     {
         var url = shortcut.Url;
-        var icon = await FetchSiteIconAsync(url);
+        var icon = KnownSiteIcon(url) ?? (await FetchSiteIconAsync(url))?.Data;
         if (icon is null || shortcut.Icon is not null || !_settings.Shortcuts.Contains(shortcut) || shortcut.Url != url) return;
         shortcut.Icon = icon;
         SaveShortcuts();
     }
 
-    private static async Task<string?> FetchSiteIconAsync(string url)
+    private static async Task<SiteIcon?> FetchSiteIconAsync(string url)
     {
         if (!IsWeb(url) || !Uri.TryCreate(url, UriKind.Absolute, out var site)) return null;
         var candidates = new List<(Uri Url, int Size)>();
@@ -179,7 +179,8 @@ public sealed partial class BrowserController
             if (!response.IsSuccessStatusCode || !type.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
                 || response.Content.Headers.ContentLength is > MaxShortcutIcon) continue;
             var bytes = await response.Content.ReadAsByteArrayAsync();
-            if (bytes.Length is > 0 and <= MaxShortcutIcon) return $"data:{type};base64,{Convert.ToBase64String(bytes)}";
+            if (bytes.Length is > 0 and <= MaxShortcutIcon
+                && await PrepareSiteIconAsync($"data:{type};base64,{Convert.ToBase64String(bytes)}") is { } icon) return icon;
         }
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException) { }
         return null;

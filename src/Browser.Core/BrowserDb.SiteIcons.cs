@@ -10,7 +10,8 @@ public sealed partial class BrowserDb
         if (!reader.Read()) return (false, null);
         var icon = reader.IsDBNull(0) ? null : reader.GetString(0);
         var age = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - reader.GetInt64(1);
-        return age >= 0 && age < TimeSpan.FromDays(icon is null ? 1 : 7).TotalMilliseconds ? (true, icon) : (false, null);
+        // Une icône périmée reste disponible comme dernier visuel connu pendant son actualisation.
+        return (age >= 0 && age < TimeSpan.FromDays(icon is null ? 1 : 7).TotalMilliseconds, icon);
     }
 
     public void CacheSiteIcon(string domain, string? icon)
@@ -19,9 +20,13 @@ public sealed partial class BrowserDb
         using var transaction = _db.BeginTransaction();
         Exec("""
             INSERT INTO site_icons (domain,icon,checked) VALUES ($domain,$icon,$checked)
-            ON CONFLICT(domain) DO UPDATE SET icon=$icon,checked=$checked
+            ON CONFLICT(domain) DO UPDATE SET icon=COALESCE($icon, site_icons.icon),checked=$checked
             """, ("$domain", domain), ("$icon", (object?)icon ?? DBNull.Value), ("$checked", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
-        Exec("DELETE FROM site_icons WHERE domain NOT IN (SELECT domain FROM site_icons ORDER BY checked DESC, domain LIMIT 512)");
+        Exec("""
+            DELETE FROM site_icons
+            WHERE domain NOT IN (SELECT domain FROM site_icons ORDER BY checked DESC, domain LIMIT 512)
+              AND (icon IS NULL OR domain NOT IN (SELECT site_icon_domain(url) FROM bookmarks))
+            """);
         transaction.Commit();
     }
 }

@@ -5,6 +5,7 @@ import { Icon } from './Icons';
 import { focusTab, middleClose, sidebarMenu } from './sidebarActions';
 import { useIconLook } from './useIconLook';
 import { startSlotDrag } from './useSidebarDrag';
+import { TabFavicon } from './TabFavicon';
 
 export function SidebarPinned({
   state,
@@ -70,6 +71,7 @@ export function SidebarPinned({
                   role="tab"
                   tabIndex={tab.id === focusableId ? 0 : -1}
                   aria-selected={tab.id === activeId}
+                  aria-busy={tab.loading || undefined}
                   aria-label={label}
                   className={`pinned-pill ${wide ? 'wide' : 'circle'}${tab.id === activeId ? ' active' : ''}${tab.asleep ? ' asleep' : ''}`}
                   title={`${tab.title || tab.url}\n${t('Glisser pour déplacer ou détacher', 'Drag to reorder or unpin')}`}
@@ -88,12 +90,8 @@ export function SidebarPinned({
                 >
                   {tab.privateMode ? (
                     <Icon name="private" size={16} />
-                  ) : icons[tab.id] ? (
-                    <img className="favicon" src={icons[tab.id]!} alt="" draggable={false} />
                   ) : (
-                    <span className="favicon letter" aria-hidden="true">
-                      {(tab.title || tab.url)[0]?.toUpperCase()}
-                    </span>
+                    <TabFavicon icon={icons[tab.id]} label={tab.title || tab.url} />
                   )}
                   {wide && <span>{tab.title?.split(' - ')[0].split(' · ')[0] || t('Épinglé', 'Pinned')}</span>}
                 </button>

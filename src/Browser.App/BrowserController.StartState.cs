@@ -50,8 +50,11 @@ public sealed partial class BrowserController
 
     private string? _lastActive;
     private readonly Dictionary<string, string?> _startIcons = new();
-    private string? StartIcon(string url) => _startIcons.GetValueOrDefault(SiteShortcut.DomainOf(url)) ?? (_tabs.Tabs.FirstOrDefault(t => SiteShortcut.DomainOf(t.Url) == SiteShortcut.DomainOf(url)) is { } tab
-        && _favicons.GetValueOrDefault(tab.Id) is { } icon ? icon : _settings.Shortcuts.FirstOrDefault(s => SiteShortcut.DomainOf(s.Url) == SiteShortcut.DomainOf(url))?.Icon);
+    private string? StartIcon(string url)
+    {
+        var domain = SiteShortcut.DomainOf(url);
+        return _startIcons.GetValueOrDefault(domain) ?? TabSiteIcon(domain) ?? ShortcutFor(url)?.Icon;
+    }
 
     private const int MaxStartFavorites = 300;
     private readonly Dictionary<string, string> _startPosted = new(); // dernier contenu envoyé à chaque page d'accueil
@@ -77,9 +80,9 @@ public sealed partial class BrowserController
         try
         {
             var urls = _db.Bookmarks(MaxStartFavorites).Select(b => b.Url).Where(IsWeb).DistinctBy(SiteShortcut.DomainOf).ToArray();
-            PrimeStartIcons(urls);
+            var fetches = urls.Select(FetchStartIconAsync).ToArray();
             PostStartPages(_tabs.Tabs.Where(t => t.Url == Settings.DefaultHomePage && !_pages.IsAsleep(t.Id)).ToList());
-            await Task.WhenAll(urls.Select(FetchStartIconAsync));
+            await Task.WhenAll(fetches);
         }
         finally { _fetchingFavoriteIcons = false; }
     }

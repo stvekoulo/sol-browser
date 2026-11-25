@@ -3,6 +3,7 @@ import { t } from './i18n';
 import { Icon } from './Icons';
 import { focusTab, middleClose, sidebarMenu } from './sidebarActions';
 import { startSlotDrag } from './useSidebarDrag';
+import { TabFavicon } from './TabFavicon';
 
 export function SidebarTabRow({
   tab,
@@ -41,6 +42,7 @@ export function SidebarTabRow({
         role="tab"
         tabIndex={focusable ? 0 : -1}
         aria-selected={selected || active}
+        aria-busy={tab.loading || undefined}
         className="sidebar-tab-trigger"
         title={tooltip}
         {...(paired
@@ -61,14 +63,10 @@ export function SidebarTabRow({
         }}
         onPointerDown={e => startSlotDrag(e.currentTarget.closest<HTMLElement>('[data-kind="tab"]'), e)}
       >
-        {tab.loading ? (
+        {tab.loading && !icon ? (
           <span className="spinner" aria-hidden />
-        ) : icon ? (
-          <img className="favicon" src={icon} alt="" draggable={false} />
         ) : (
-          <span className="favicon letter" aria-hidden>
-            {label[0]?.toUpperCase()}
-          </span>
+          <TabFavicon icon={icon} label={label} />
         )}
         <span className="sidebar-tab-title">{label}</span>
         {tab.privateMode && (

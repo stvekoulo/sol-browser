@@ -59,7 +59,7 @@ public static class CommandParser
         ["notes.order"] = ["input"], ["notes.dates"] = ["id", "title", "query"], ["notes.archive-policy"]=["index"],
         ["start.ready"] = [], ["start.navigate"] = ["input"], ["start.group"] = ["id"], ["start.favorites"] = [],
         ["start.bookmark.remove"] = ["input"], ["start.history.remove"] = ["input"],
-        ["start.open"] = ["input"], ["start.split"] = ["input"], ["start.copy"] = ["input"], ["start.topic"] = ["title"], ["start.groupedit"] = ["id"],
+        ["start.open"] = ["input"], ["start.split"] = ["input"], ["start.copy"] = ["input"], ["start.topic"] = ["title"], ["start.topic.icons"] = ["title"], ["start.groupedit"] = ["id"],
         ["popup.size"] = ["height"], ["popup.close"] = [],
         ["download.cancel"] = ["id"], ["download.pause"]=["id"], ["download.resume"]=["id"], ["download.open"] = ["id"], ["download.reveal"] = ["id"],
         ["downloads.open"] = ["x", "y"],
